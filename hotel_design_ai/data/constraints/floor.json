@@ -1,0 +1,65 @@
+[
+  {
+    "type": "floor",
+    "room_type": "lobby",
+    "floor": 0,
+    "weight": 2.0,
+    "description": "Lobby should be on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "entrance",
+    "floor": 0,
+    "weight": 3.0,
+    "description": "Entrance must be on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "restaurant",
+    "floor": 0,
+    "weight": 1.5,
+    "description": "Restaurant preferably on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "guest_room",
+    "floor": 1,
+    "weight": 1.0,
+    "description": "Guest rooms preferably on upper floors (not ground)"
+  },
+  {
+    "type": "floor",
+    "room_type": "kitchen",
+    "floor": 0,
+    "weight": 2.0,
+    "description": "Kitchen should be on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "ballroom",
+    "floor": 0,
+    "weight": 1.5,
+    "description": "Ballroom preferably on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "meeting_room",
+    "floor": 0,
+    "weight": 1.0,
+    "description": "Meeting rooms preferably on ground floor"
+  },
+  {
+    "type": "floor",
+    "room_type": "pre_function",
+    "floor": 0,
+    "weight": 1.5,
+    "description": "Pre-function spaces should be on same floor as ballroom/meeting rooms"
+  },
+  {
+    "type": "floor",
+    "room_type": "parking",
+    "floor": -1,
+    "weight": 3.0,
+    "description": "Parking must be in basement"
+  }
+]

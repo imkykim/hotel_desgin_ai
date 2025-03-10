@@ -1,0 +1,45 @@
+{
+  "weights": {
+    "space_efficiency": 1.0,
+    "adjacency_satisfaction": 1.5,
+    "circulation_quality": 1.2,
+    "natural_light": 0.8,
+    "structural_alignment": 1.0,
+    "department_clustering": 0.7,
+    "vertical_stacking": 0.6
+  },
+  "training": {
+    "learning_rate": 0.001,
+    "exploration_rate": 0.7,
+    "exploration_min": 0.01,
+    "exploration_decay": 0.995,
+    "discount_factor": 0.99,
+    "batch_size": 32,
+    "max_iterations": 100,
+    "early_stopping_patience": 10
+  },
+  "architecture": {
+    "hidden_layers": [256, 256],
+    "activation": "relu",
+    "optimizer": "adam"
+  },
+  "experience_replay": {
+    "buffer_size": 10000,
+    "sample_size": 64,
+    "priority_alpha": 0.6,
+    "priority_beta": 0.4,
+    "priority_epsilon": 0.01
+  },
+  "simulation": {
+    "seed": 42,
+    "min_rating": 3.0,
+    "max_rating": 9.5,
+    "noise_std": 0.5
+  },
+  "advanced": {
+    "use_gpu": false,
+    "save_checkpoints": true,
+    "checkpoint_interval": 10,
+    "log_metrics": true
+  }
+}

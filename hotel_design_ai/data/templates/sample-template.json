@@ -1,0 +1,104 @@
+{
+  "name": "Standard Guest Room Floor",
+  "floor": 1,
+  "description": "Typical floor layout with guest rooms and circulation",
+  "metadata": {
+    "author": "Hotel Design AI",
+    "version": "1.0",
+    "tags": ["guest_room", "typical", "double-loaded"]
+  },
+  "parameters": {
+    "corridor_width": 1.8,
+    "room_depth": 8.0,
+    "room_width": 4.0,
+    "floor_height": 4.0,
+    "room_types": ["standard", "king", "double_queen", "suite", "accessible"]
+  },
+  "fixed_elements": [
+    {
+      "type": "vertical_circulation",
+      "position_type": "absolute",
+      "position": [30.0, 30.0, 4.0],
+      "dimensions": [8.0, 8.0, 4.0],
+      "name": "Main Core",
+      "required": true
+    },
+    {
+      "type": "vertical_circulation",
+      "position_type": "absolute",
+      "position": [50.0, 10.0, 4.0],
+      "dimensions": [6.0, 6.0, 4.0],
+      "name": "Emergency Stairs",
+      "required": true
+    },
+    {
+      "type": "circulation",
+      "position_type": "derived",
+      "reference_element": "Main Core",
+      "offset": [8.0, 0.0, 0.0],
+      "dimensions": [30.0, 1.8, 4.0],
+      "name": "Main Corridor",
+      "required": true
+    }
+  ],
+  "room_arrangements": [
+    {
+      "type": "double_loaded_corridor",
+      "reference_element": "Main Corridor",
+      "room_type": "guest_room",
+      "room_count": 10,
+      "room_dimensions": [4.0, 8.0, 3.0],
+      "spacing": 0.0,
+      "orientation": "perpendicular"
+    },
+    {
+      "type": "single_element",
+      "room_type": "housekeeping",
+      "position_type": "derived",
+      "reference_element": "Main Core",
+      "offset": [0.0, 8.0, 0.0],
+      "dimensions": [4.0, 4.0, 4.0],
+      "required": true
+    },
+    {
+      "type": "corner_suite",
+      "position_type": "derived",
+      "reference_element": "Main Corridor",
+      "offset": [30.0, 0.0, 0.0],
+      "room_type": "guest_room",
+      "variant": "suite",
+      "dimensions": [6.0, 12.0, 3.0],
+      "required": false
+    }
+  ],
+  "constraints": [
+    {
+      "type": "minimum_distance",
+      "element1": "vertical_circulation",
+      "element2": "vertical_circulation",
+      "distance": 30.0,
+      "description": "Minimum distance between vertical circulation elements"
+    },
+    {
+      "type": "maximum_distance",
+      "from_any": "guest_room",
+      "to_type": "vertical_circulation",
+      "distance": 45.0,
+      "description": "Maximum travel distance from any guest room to exit"
+    }
+  ],
+  "variations": [
+    {
+      "name": "L-Shaped Floor",
+      "description": "L-shaped variation with rooms along two wings",
+      "corridor_shape": "L",
+      "room_count": 15
+    },
+    {
+      "name": "Compact Floor",
+      "description": "Compact variation with central core",
+      "corridor_shape": "loop",
+      "room_count": 12
+    }
+  ]
+}

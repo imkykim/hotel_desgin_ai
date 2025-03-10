@@ -1,0 +1,58 @@
+{
+  "zoning": {
+    "public_areas": {
+      "preferred_floors": [0, 1],
+      "description": "Public areas should be on ground and first floors"
+    },
+    "back_of_house": {
+      "preferred_floors": [2, 3, -1],
+      "description": "Back of house areas can be on upper floors or basement"
+    },
+    "parking": {
+      "preferred_floors": [-1],
+      "description": "Parking should be in basement"
+    }
+  },
+  "circulation": {
+    "public_corridor_width": 2.4,
+    "service_corridor_width": 1.8,
+    "min_exit_distance": 30.0,
+    "max_travel_distance": 45.0,
+    "description": "Circulation requirements based on building codes"
+  },
+  "structural": {
+    "column_free_spaces": ["ballroom", "pool"],
+    "large_span_adjustment": 1.2,
+    "description": "Structural requirements for special spaces"
+  },
+  "access": {
+    "guest_entry": {
+      "preferred_sides": ["front"],
+      "description": "Guest entry should be on front of building"
+    },
+    "service_entry": {
+      "preferred_sides": ["back", "side"],
+      "description": "Service entry should be on back or side of building"
+    },
+    "parking_entry": {
+      "preferred_sides": ["side"],
+      "description": "Parking entry should be on side of building"
+    }
+  },
+  "floor_heights": {
+    "public_spaces": 5.0,
+    "back_of_house": 3.5,
+    "parking": 3.0,
+    "description": "Typical floor heights for different spaces (meters)"
+  },
+  "sustainability": {
+    "natural_light_priority": ["guest_room", "office", "restaurant", "lobby"],
+    "energy_efficiency_measures": ["minimize exterior envelope", "compact core"],
+    "description": "Sustainability considerations for layout"
+  },
+  "accessibility": {
+    "max_corridor_slope": 0.02,
+    "min_door_width": 0.9,
+    "description": "Accessibility requirements"
+  }
+}

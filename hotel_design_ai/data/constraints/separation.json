@@ -1,0 +1,51 @@
+[
+  {
+    "type": "separation",
+    "room_type1": "meeting_room",
+    "room_type2": "mechanical",
+    "weight": 1.5,
+    "description": "Mechanical spaces should be separated from meeting rooms"
+  },
+  {
+    "type": "separation",
+    "room_type1": "guest_room",
+    "room_type2": "back_of_house",
+    "weight": 1.0,
+    "description": "Guest rooms should be separated from back of house areas"
+  },
+  {
+    "type": "separation",
+    "room_type1": "restaurant",
+    "room_type2": "mechanical",
+    "weight": 2.0,
+    "description": "Mechanical spaces should not be adjacent to restaurant"
+  },
+  {
+    "type": "separation",
+    "room_type1": "back_of_house",
+    "room_type2": "lobby",
+    "weight": 1.8,
+    "description": "Back of house areas should be separated from main lobby"
+  },
+  {
+    "type": "separation",
+    "room_type1": "kitchen",
+    "room_type2": "pool",
+    "weight": 1.5,
+    "description": "Kitchen should be separated from pool"
+  },
+  {
+    "type": "separation",
+    "room_type1": "entertainment",
+    "room_type2": "meeting_room",
+    "weight": 1.5,
+    "description": "Entertainment areas should be separated from meeting rooms"
+  },
+  {
+    "type": "separation",
+    "room_type1": "service_area",
+    "room_type2": "ballroom",
+    "weight": 1.2,
+    "description": "Service areas should not be adjacent to ballroom"
+  }
+]

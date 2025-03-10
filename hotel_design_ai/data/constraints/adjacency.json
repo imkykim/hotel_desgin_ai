@@ -1,0 +1,65 @@
+[
+  {
+    "type": "adjacency",
+    "room_type1": "lobby",
+    "room_type2": "entrance",
+    "weight": 2.0,
+    "description": "Main entrance should be adjacent to lobby"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "lobby",
+    "room_type2": "vertical_circulation",
+    "weight": 2.0,
+    "description": "Vertical circulation should be accessible from lobby"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "restaurant",
+    "room_type2": "kitchen",
+    "weight": 2.5,
+    "description": "Kitchen must be adjacent to restaurant"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "ballroom",
+    "room_type2": "pre_function",
+    "weight": 2.0,
+    "description": "Ballroom should have pre-function space adjacent"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "vertical_circulation",
+    "room_type2": "guest_room",
+    "weight": 1.5,
+    "description": "Guest rooms should have nearby access to vertical circulation"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "lobby",
+    "room_type2": "restaurant",
+    "weight": 1.5,
+    "description": "Restaurant should be accessible from lobby"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "meeting_room",
+    "room_type2": "pre_function",
+    "weight": 1.5,
+    "description": "Meeting rooms should be adjacent to pre-function spaces"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "pool",
+    "room_type2": "fitness",
+    "weight": 1.2,
+    "description": "Fitness facilities should be near pool"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "office",
+    "room_type2": "staff_area",
+    "weight": 1.0,
+    "description": "Offices should be near staff areas"
+  }
+]

@@ -1,0 +1,145 @@
+{
+  "name": "Standard Guest Room",
+  "type": "guest_room",
+  "dimensions": {
+    "width": 4.0,
+    "length": 8.0,
+    "height": 3.0
+  },
+  "requirements": {
+    "natural_light": true,
+    "exterior_access": true,
+    "min_area": 32.0,
+    "preferred_adjacencies": ["vertical_circulation"],
+    "avoid_adjacencies": ["service_area", "back_of_house", "mechanical"]
+  },
+  "variants": [
+    {
+      "name": "King Room",
+      "dimensions": {
+        "width": 4.5,
+        "length": 9.0,
+        "height": 3.0
+      },
+      "min_area": 40.0
+    },
+    {
+      "name": "Double Queen Room",
+      "dimensions": {
+        "width": 5.0,
+        "length": 9.0,
+        "height": 3.0
+      },
+      "min_area": 45.0
+    },
+    {
+      "name": "Suite",
+      "dimensions": {
+        "width": 6.0,
+        "length": 12.0,
+        "height": 3.0
+      },
+      "min_area": 72.0
+    },
+    {
+      "name": "ADA Accessible Room",
+      "dimensions": {
+        "width": 5.5,
+        "length": 9.0,
+        "height": 3.0
+      },
+      "min_area": 49.5
+    }
+  ],
+  "typical_layout": {
+    "zones": [
+      {
+        "name": "Entry",
+        "area_percentage": 10,
+        "adjacencies": ["Bathroom"]
+      },
+      {
+        "name": "Bathroom",
+        "area_percentage": 15,
+        "adjacencies": ["Entry", "Sleeping"]
+      },
+      {
+        "name": "Sleeping",
+        "area_percentage": 55,
+        "adjacencies": ["Bathroom", "Window Wall"],
+        "requires_natural_light": true
+      },
+      {
+        "name": "Seating",
+        "area_percentage": 20,
+        "adjacencies": ["Sleeping", "Window Wall"],
+        "requires_natural_light": true
+      },
+      {
+        "name": "Window Wall",
+        "area_percentage": 0,
+        "is_exterior": true,
+        "adjacencies": ["Sleeping", "Seating"]
+      }
+    ]
+  },
+  "furniture": [
+    {
+      "name": "Bed",
+      "count": 1,
+      "dimensions": {
+        "width": 2.0,
+        "length": 2.2,
+        "height": 0.6
+      },
+      "zone": "Sleeping",
+      "clearance": 0.9
+    },
+    {
+      "name": "Desk",
+      "count": 1,
+      "dimensions": {
+        "width": 1.2,
+        "length": 0.6,
+        "height": 0.75
+      },
+      "zone": "Seating",
+      "clearance": 0.9
+    },
+    {
+      "name": "Chair",
+      "count": 1,
+      "dimensions": {
+        "width": 0.6,
+        "length": 0.6,
+        "height": 0.9
+      },
+      "zone": "Seating",
+      "clearance": 0.5
+    },
+    {
+      "name": "Wardrobe",
+      "count": 1,
+      "dimensions": {
+        "width": 0.6,
+        "length": 1.2,
+        "height": 2.1
+      },
+      "zone": "Entry",
+      "clearance": 0.6
+    }
+  ],
+  "attributes": {
+    "occupancy": 2,
+    "noise_sensitivity": "high",
+    "privacy_required": "high",
+    "typical_stay_duration": "days",
+    "services_required": ["housekeeping", "room_service"]
+  },
+  "codes": {
+    "minimum_ceiling_height": 2.4,
+    "minimum_door_width": 0.9,
+    "minimum_window_area": 0.1,
+    "emergency_egress_required": true
+  }
+}

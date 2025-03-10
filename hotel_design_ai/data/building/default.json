@@ -1,0 +1,14 @@
+{
+  "width": 60.0,
+  "length": 80.0,
+  "height": 20.0,
+  "num_floors": 4,
+  "floor_height": 5.0,
+  "structural_grid_x": 8.4,
+  "structural_grid_y": 8.4,
+  "grid_size": 1.0,
+  "main_entry": "flexible",
+  "description": "Standard hotel building envelope",
+  "units": "meters",
+  "notes": "Based on typical hotel dimensions with standard column grid"
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "type": "exterior",
+    "room_type": "guest_room",
+    "weight": 1.5,
+    "description": "Guest rooms should have exterior access"
+  },
+  {
+    "type": "exterior",
+    "room_type": "restaurant",
+    "weight": 1.0,
+    "description": "Restaurant preferably has exterior access"
+  },
+  {
+    "type": "exterior",
+    "room_type": "meeting_room",
+    "weight": 1.0,
+    "description": "Meeting rooms preferably have natural light"
+  },
+  {
+    "type": "exterior",
+    "room_type": "lobby",
+    "weight": 1.0,
+    "description": "Lobby preferably has exterior access"
+  },
+  {
+    "type": "exterior",
+    "room_type": "pool",
+    "weight": 1.2,
+    "description": "Pool area preferably has natural light"
+  },
+  {
+    "type": "exterior",
+    "room_type": "fitness",
+    "weight": 0.8,
+    "description": "Fitness area preferably has natural light"
+  },
+  {
+    "type": "exterior",
+    "room_type": "office",
+    "weight": 1.0,
+    "description": "Office spaces preferably have natural light"
+  },
+  {
+    "type": "exterior",
+    "room_type": "entrance",
+    "weight": 3.0,
+    "description": "Main entrance must have exterior access"
+  }
+]
