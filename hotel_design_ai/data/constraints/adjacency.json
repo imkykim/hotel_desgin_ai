@@ -61,5 +61,47 @@
     "room_type2": "staff_area",
     "weight": 1.0,
     "description": "Offices should be near staff areas"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "retail",
+    "room_type2": "lobby",
+    "weight": 1.8,
+    "description": "Retail spaces should be accessible from lobby"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "service",
+    "room_type2": "lobby",
+    "weight": 1.5,
+    "description": "Service areas should be accessible from lobby"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "mechanical",
+    "room_type2": "maintenance",
+    "weight": 1.8,
+    "description": "Mechanical rooms should be near maintenance areas"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "parking",
+    "room_type2": "vertical_circulation",
+    "weight": 2.0,
+    "description": "Parking should have access to vertical circulation"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "pool",
+    "room_type2": "pool_equipment_room",
+    "weight": 2.5,
+    "description": "Pool should be near its equipment room"
+  },
+  {
+    "type": "adjacency",
+    "room_type1": "pool_equipment_room",
+    "room_type2": "mechanical",
+    "weight": 1.5,
+    "description": "Pool equipment should be near mechanical areas"
   }
 ]

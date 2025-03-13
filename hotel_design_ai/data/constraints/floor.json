@@ -61,5 +61,61 @@
     "floor": -1,
     "weight": 3.0,
     "description": "Parking must be in basement"
+  },
+  {
+    "type": "floor",
+    "room_type": "service",
+    "floor": 0,
+    "weight": 1.5,
+    "description": "Service areas should be on ground floor for accessibility"
+  },
+  {
+    "type": "floor",
+    "room_type": "retail",
+    "floor": 0,
+    "weight": 2.0,
+    "description": "Retail spaces should be on ground floor for visibility"
+  },
+  {
+    "type": "floor",
+    "room_type": "office",
+    "floor": 1,
+    "weight": 1.5,
+    "description": "Offices preferably on upper floors for privacy"
+  },
+  {
+    "type": "floor",
+    "room_type": "staff_area",
+    "floor": 1,
+    "weight": 1.5,
+    "description": "Staff areas preferably on upper floors"
+  },
+  {
+    "type": "floor",
+    "room_type": "mechanical",
+    "floor": -1,
+    "weight": 2.0,
+    "description": "Mechanical spaces preferably in basement"
+  },
+  {
+    "type": "floor",
+    "room_type": "maintenance",
+    "floor": -1,
+    "weight": 1.5,
+    "description": "Maintenance spaces preferably in basement"
+  },
+  {
+    "type": "floor",
+    "room_type": "back_of_house",
+    "floor": -1,
+    "weight": 1.5,
+    "description": "Back of house preferably in basement"
+  },
+  {
+    "type": "floor",
+    "room_type": "pool",
+    "floor": 0,
+    "weight": 2.5,
+    "description": "Pool should be on ground floor for structural reasons"
   }
 ]

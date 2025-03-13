@@ -1,0 +1,91 @@
+{
+  "name": "Assembly Space",
+  "type": "assembly",
+  "dimensions": {
+    "width": 15.0,
+    "length": 20.0,
+    "height": 6.0
+  },
+  "requirements": {
+    "natural_light": false,
+    "exterior_access": false,
+    "min_area": 300.0,
+    "column_free": true,
+    "can_be_divided": true,
+    "preferred_adjacencies": ["pre_function", "back_of_house", "circulation"],
+    "avoid_adjacencies": ["guest_room", "kitchen", "mechanical"]
+  },
+  "variants": [
+    {
+      "name": "Ballroom",
+      "dimensions": {
+        "width": 18.0,
+        "length": 24.0,
+        "height": 7.0
+      },
+      "min_area": 432.0,
+      "requires_acoustic_treatment": true
+    },
+    {
+      "name": "Conference Hall",
+      "dimensions": {
+        "width": 15.0,
+        "length": 18.0,
+        "height": 5.0
+      },
+      "min_area": 270.0
+    },
+    {
+      "name": "Divisible Meeting Space",
+      "dimensions": {
+        "width": 12.0,
+        "length": 24.0,
+        "height": 4.5
+      },
+      "min_area": 288.0,
+      "can_be_divided": true
+    }
+  ],
+  "typical_layout": {
+    "zones": [
+      {
+        "name": "Main Floor",
+        "area_percentage": 75,
+        "adjacencies": ["Stage", "Entry"]
+      },
+      {
+        "name": "Stage",
+        "area_percentage": 15,
+        "adjacencies": ["Main Floor", "Backstage"]
+      },
+      {
+        "name": "Backstage",
+        "area_percentage": 5,
+        "adjacencies": ["Stage"]
+      },
+      {
+        "name": "Entry",
+        "area_percentage": 5,
+        "adjacencies": ["Main Floor", "Pre-function"]
+      }
+    ]
+  },
+  "attributes": {
+    "occupancy": {
+      "theater": 1.0,  // m² per person
+      "banquet": 1.5,
+      "classroom": 2.0,
+      "reception": 0.8
+    },
+    "acoustic_rating": "high",
+    "lighting_requirements": "flexible",
+    "ceiling_requirements": "technical_grid"
+  },
+  "codes": {
+    "minimum_ceiling_height": 4.5,
+    "minimum_door_width": 1.8,
+    "emergency_exits_required": 2,
+    "fire_rating": "2 hour",
+    "sprinkler_required": true
+  }
+}

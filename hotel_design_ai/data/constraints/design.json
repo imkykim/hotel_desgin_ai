@@ -2,15 +2,23 @@
   "zoning": {
     "public_areas": {
       "preferred_floors": [0, 1],
+      "room_types": ["lobby", "retail", "service", "entrance"],
       "description": "Public areas should be on ground and first floors"
     },
     "back_of_house": {
       "preferred_floors": [2, 3, -1],
+      "room_types": ["back_of_house", "maintenance", "mechanical"],
       "description": "Back of house areas can be on upper floors or basement"
     },
     "parking": {
       "preferred_floors": [-1],
+      "room_types": ["parking"],
       "description": "Parking should be in basement"
+    },
+    "mechanical": {
+      "preferred_floors": [-1],
+      "room_types": ["mechanical", "maintenance"],
+      "description": "Mechanical and maintenance areas should be in basement"
     }
   },
   "circulation": {
@@ -23,19 +31,23 @@
   "structural": {
     "column_free_spaces": ["ballroom", "pool"],
     "large_span_adjustment": 1.2,
+    "column_spacing_spaces": ["parking"],
     "description": "Structural requirements for special spaces"
   },
   "access": {
     "guest_entry": {
       "preferred_sides": ["front"],
+      "room_types": ["entrance", "lobby"],
       "description": "Guest entry should be on front of building"
     },
     "service_entry": {
       "preferred_sides": ["back", "side"],
+      "room_types": ["back_of_house", "kitchen", "service_area"],
       "description": "Service entry should be on back or side of building"
     },
     "parking_entry": {
       "preferred_sides": ["side"],
+      "room_types": ["parking"],
       "description": "Parking entry should be on side of building"
     }
   },
@@ -43,16 +55,53 @@
     "public_spaces": 5.0,
     "back_of_house": 3.5,
     "parking": 3.0,
-    "description": "Typical floor heights for different spaces (meters)"
+    "description": "Typical floor heights for different spaces (meters)",
+    "mapping": {
+      "public_spaces": [
+        "lobby",
+        "retail",
+        "restaurant",
+        "ballroom",
+        "meeting_room",
+        "pool"
+      ],
+      "back_of_house": [
+        "back_of_house",
+        "kitchen",
+        "service",
+        "mechanical",
+        "maintenance"
+      ],
+      "parking": ["parking"]
+    }
   },
   "sustainability": {
-    "natural_light_priority": ["guest_room", "office", "restaurant", "lobby"],
-    "energy_efficiency_measures": ["minimize exterior envelope", "compact core"],
+    "natural_light_priority": [
+      "guest_room",
+      "office",
+      "restaurant",
+      "lobby",
+      "retail"
+    ],
+    "energy_efficiency_measures": [
+      "minimize exterior envelope",
+      "compact core"
+    ],
     "description": "Sustainability considerations for layout"
   },
   "accessibility": {
     "max_corridor_slope": 0.02,
     "min_door_width": 0.9,
-    "description": "Accessibility requirements"
+    "description": "Accessibility requirements",
+    "accessible_rooms": ["lobby", "service", "retail"]
+  },
+  "department_clusters": {
+    "public": ["lobby", "retail", "service", "entrance"],
+    "dining": ["restaurant", "kitchen", "food_service"],
+    "meeting": ["ballroom", "meeting_room", "pre_function", "lounge"],
+    "recreational": ["pool", "fitness", "recreation", "entertainment"],
+    "administrative": ["office", "staff_area", "service_area"],
+    "engineering": ["maintenance", "mechanical"],
+    "description": "Preferred department clustering for efficient operations"
   }
 }

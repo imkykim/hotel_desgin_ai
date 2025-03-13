@@ -46,5 +46,23 @@
     "room_type": "entrance",
     "weight": 3.0,
     "description": "Main entrance must have exterior access"
+  },
+  {
+    "type": "exterior",
+    "room_type": "retail",
+    "weight": 1.2,
+    "description": "Retail spaces preferably have exterior visibility"
+  },
+  {
+    "type": "exterior",
+    "room_type": "service",
+    "weight": 0.5,
+    "description": "Service spaces may have exterior access but not required"
+  },
+  {
+    "type": "exterior",
+    "room_type": "mechanical",
+    "weight": 0.8,
+    "description": "Mechanical spaces benefit from exterior access for ventilation"
   }
 ]

@@ -47,5 +47,47 @@
     "room_type2": "ballroom",
     "weight": 1.2,
     "description": "Service areas should not be adjacent to ballroom"
+  },
+  {
+    "type": "separation",
+    "room_type1": "mechanical",
+    "room_type2": "ballroom",
+    "weight": 2.5,
+    "description": "Mechanical rooms must be separated from ballroom (noise/vibration)"
+  },
+  {
+    "type": "separation",
+    "room_type1": "mechanical",
+    "room_type2": "guest_room",
+    "weight": 2.0,
+    "description": "Mechanical rooms must be separated from guest rooms (noise/vibration)"
+  },
+  {
+    "type": "separation",
+    "room_type1": "service",
+    "room_type2": "ballroom",
+    "weight": 1.2,
+    "description": "Service areas should be separated from ballroom"
+  },
+  {
+    "type": "separation",
+    "room_type1": "maintenance",
+    "room_type2": "guest_room",
+    "weight": 1.8,
+    "description": "Maintenance should be separated from guest rooms (noise)"
+  },
+  {
+    "type": "separation",
+    "room_type1": "entertainment",
+    "room_type2": "guest_room",
+    "weight": 1.8,
+    "description": "Entertainment areas should be separated from guest rooms (noise)"
+  },
+  {
+    "type": "separation",
+    "room_type1": "generator_room",
+    "room_type2": "guest_room",
+    "weight": 2.5,
+    "description": "Generator room must be far from guest rooms (noise/vibration)"
   }
 ]

@@ -1,0 +1,103 @@
+{
+  "name": "Workshop",
+  "type": "workshop",
+  "dimensions": {
+    "width": 5.0,
+    "length": 8.0,
+    "height": 3.5
+  },
+  "requirements": {
+    "natural_light": false,
+    "exterior_access": false,
+    "ventilation": true,
+    "min_area": 40.0,
+    "preferred_adjacencies": ["back_of_house", "service_area"],
+    "avoid_adjacencies": ["guest_room", "meeting_room", "ballroom", "restaurant"]
+  },
+  "variants": [
+    {
+      "name": "Carpentry Workshop",
+      "dimensions": {
+        "width": 6.0,
+        "length": 8.0,
+        "height": 4.0
+      },
+      "min_area": 48.0,
+      "requires_dust_collection": true
+    },
+    {
+      "name": "Electrical Workshop",
+      "dimensions": {
+        "width": 5.0,
+        "length": 6.0,
+        "height": 3.5
+      },
+      "min_area": 30.0
+    },
+    {
+      "name": "Plumbing Workshop",
+      "dimensions": {
+        "width": 5.0,
+        "length": 6.0,
+        "height": 3.5
+      },
+      "min_area": 30.0,
+      "requires_drainage": true
+    }
+  ],
+  "typical_layout": {
+    "zones": [
+      {
+        "name": "Work Area",
+        "area_percentage": 60,
+        "adjacencies": ["Storage"]
+      },
+      {
+        "name": "Storage",
+        "area_percentage": 30,
+        "adjacencies": ["Work Area", "Entry"]
+      },
+      {
+        "name": "Entry",
+        "area_percentage": 10,
+        "adjacencies": ["Storage"]
+      }
+    ]
+  },
+  "equipment": [
+    {
+      "name": "Workbench",
+      "count": 2,
+      "dimensions": {
+        "width": 0.9,
+        "length": 2.4,
+        "height": 0.9
+      },
+      "zone": "Work Area",
+      "clearance": 1.2
+    },
+    {
+      "name": "Tool Cabinet",
+      "count": 2,
+      "dimensions": {
+        "width": 0.6,
+        "length": 1.2,
+        "height": 2.0
+      },
+      "zone": "Storage",
+      "clearance": 0.9
+    }
+  ],
+  "attributes": {
+    "noise_level": "high",
+    "dust_level": "high",
+    "power_requirements": "high",
+    "drainage_requirements": "medium"
+  },
+  "codes": {
+    "minimum_ceiling_height": 3.0,
+    "minimum_door_width": 1.2,
+    "requires_emergency_exit": true,
+    "requires_floor_drain": true
+  }
+}

@@ -1,0 +1,366 @@
+{
+  "public": {
+    "reception": {
+      "area": 160,
+      "details": {
+        "front_desk": 120,
+        "luggage_room": 40
+      },
+      "room_type": "lobby",
+      "min_width": 12.0,
+      "min_height": 4.5,
+      "requires_natural_light": true,
+      "requires_adjacency": ["entrance"],
+      "floor": 0
+    },
+    "retail": {
+      "area": 400,
+      "details": {
+        "gift_shop": 300,
+        "flower_shop": 100
+      },
+      "room_type": "retail",
+      "min_width": 8.0,
+      "min_height": 3.5,
+      "requires_natural_light": true,
+      "requires_adjacency": ["lobby"],
+      "floor": 0
+    },
+    "service_areas": {
+      "area": 120,
+      "details": {
+        "business_center": 80,
+        "fire_control_room": 40
+      },
+      "room_type": "service",
+      "min_width": 6.0,
+      "min_height": 3.0,
+      "requires_natural_light": false,
+      "requires_adjacency": ["lobby"],
+      "floor": 0
+    },
+    "logistics_reserve": {
+      "area": 1720,
+      "room_type": "back_of_house",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": ["guest_room", "meeting_room"],
+      "floor": -1
+    }
+  },
+  "dining": {
+    "kitchen": {
+      "area": 850,
+      "details": {
+        "chinese_kitchen": 500,
+        "western_kitchen": 150,
+        "all_day_dining_kitchen": 200
+      },
+      "room_type": "kitchen",
+      "min_width": 20.0,
+      "min_height": 4.0,
+      "requires_exhaust": true,
+      "requires_adjacency": ["restaurants"],
+      "requires_separation": ["guest_room", "meeting_room"],
+      "floor": 0
+    },
+    "restaurants": {
+      "area": 1300,
+      "details": {
+        "chinese_restaurant": 500,
+        "western_restaurant": 200,
+        "all_day_dining": 300,
+        "coffee_shop": 200,
+        "bar": 100
+      },
+      "room_type": "restaurant",
+      "min_width": 15.0,
+      "min_height": 4.5,
+      "requires_natural_light": true,
+      "requires_adjacency": ["kitchen", "lobby"],
+      "floor": 0
+    },
+    "other": {
+      "area": 100,
+      "details": {
+        "coffee_preparation": 70,
+        "wine_cellar": 30
+      },
+      "room_type": "food_service",
+      "min_width": 5.0,
+      "min_height": 4.0,
+      "requires_natural_light": false,
+      "requires_adjacency": ["restaurants"],
+      "floor": 0
+    },
+    "logistics_reserve": {
+      "area": 1650,
+      "room_type": "back_of_house",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": ["guest_room", "meeting_room"],
+      "floor": -1
+    }
+  },
+  "meeting": {
+    "grand_ballroom": {
+      "area": 500,
+      "details": {
+        "main_space": 500
+      },
+      "room_type": "ballroom",
+      "min_width": 20.0,
+      "min_height": 5.0,
+      "requires_column_free": true,
+      "requires_adjacency": ["pre_function"],
+      "requires_separation": ["kitchen", "mechanical"],
+      "floor": 0
+    },
+    "multipurpose_hall": {
+      "area": 650,
+      "details": {
+        "large_hall": 400,
+        "pre_function": 150,
+        "preparation_room": 30,
+        "furniture_storage": 70
+      },
+      "room_type": "meeting_room",
+      "min_width": 10.0,
+      "min_height": 4.0,
+      "requires_natural_light": true,
+      "requires_adjacency": ["pre_function"],
+      "requires_separation": ["kitchen", "mechanical"],
+      "floor": 0
+    },
+    "small_meeting_rooms": {
+      "area": 250,
+      "details": {
+        "meeting_room_1": 62.5,
+        "meeting_room_2": 62.5,
+        "meeting_room_3": 62.5,
+        "meeting_room_4": 62.5
+      },
+      "room_type": "meeting_room",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": true,
+      "requires_adjacency": ["pre_function"],
+      "floor": 0
+    },
+    "vip_lounge": {
+      "area": 100,
+      "room_type": "lounge",
+      "min_width": 8.0,
+      "min_height": 3.5,
+      "requires_natural_light": true,
+      "requires_adjacency": ["ballroom"],
+      "floor": 0
+    },
+    "other": {
+      "area": 110,
+      "details": {
+        "cloakroom": 50,
+        "restrooms": 60
+      },
+      "room_type": "pre_function",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_adjacency": ["ballroom", "meeting_room"],
+      "floor": 0
+    },
+    "logistics_reserve": {
+      "area": 690,
+      "room_type": "back_of_house",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": ["guest_room", "lobby"],
+      "floor": -1
+    }
+  },
+  "recreational": {
+    "swimming_pool": {
+      "area": 700,
+      "details": {
+        "pool": 450,
+        "changing_rooms": 150,
+        "sauna": 100
+      },
+      "room_type": "pool",
+      "min_width": 25.0,
+      "min_length": 25.0,
+      "min_height": 5.0,
+      "requires_natural_light": true,
+      "requires_column_free": true,
+      "requires_adjacency": ["fitness"],
+      "floor": 0
+    },
+    "gym": {
+      "area": 150,
+      "room_type": "fitness",
+      "min_width": 10.0,
+      "min_height": 4.0,
+      "requires_natural_light": true,
+      "requires_adjacency": ["pool"],
+      "floor": 0
+    },
+    "beauty_shop": {
+      "area": 80,
+      "room_type": "retail",
+      "min_width": 8.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_adjacency": ["lobby"],
+      "floor": 0
+    },
+    "billiards_room": {
+      "area": 120,
+      "room_type": "recreation",
+      "min_width": 10.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "floor": 0
+    },
+    "ktv_bar": {
+      "area": 350,
+      "room_type": "entertainment",
+      "min_width": 15.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": ["meeting"],
+      "floor": 0
+    },
+    "logistics_reserve": {
+      "area": 700,
+      "room_type": "back_of_house",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": ["guest_room", "lobby"],
+      "floor": -1
+    }
+  },
+  "administrative": {
+    "offices": {
+      "area": 540,
+      "details": {
+        "office_spaces": 360,
+        "meeting_rooms": 100,
+        "restrooms": 80
+      },
+      "room_type": "office",
+      "min_width": 6.0,
+      "min_height": 3.5,
+      "requires_natural_light": true,
+      "requires_separation": ["entertainment"],
+      "floor": 1
+    },
+    "staff_facilities": {
+      "area": 800,
+      "details": {
+        "dining": 160,
+        "kitchen": 140,
+        "lockers": 300,
+        "dormitory": 100,
+        "medical": 20
+      },
+      "room_type": "staff_area",
+      "min_width": 10.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_adjacency": ["office"],
+      "floor": 1
+    },
+    "miscellaneous_services": {
+      "area": 700,
+      "details": {
+        "general_office": 15,
+        "admin_garage": 70,
+        "driver_room": 15,
+        "laundry": 300,
+        "mail_room": 30,
+        "sewing_room": 25,
+        "cleaning_storage": 10,
+        "linen_storage": 60,
+        "receiving_office": 10,
+        "storage": 150,
+        "restrooms": 40
+      },
+      "room_type": "service_area",
+      "min_width": 8.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_adjacency": ["staff_area"],
+      "floor": 1
+    }
+  },
+  "engineering": {
+    "maintenance": {
+      "area": 315,
+      "details": {
+        "workshop": 20,
+        "drawing_archive": 40,
+        "print_room": 40,
+        "interior_workshop": 40,
+        "carpentry": 50,
+        "painting": 30,
+        "plumbing": 30,
+        "electrical": 15,
+        "storage": 50
+      },
+      "room_type": "maintenance",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_adjacency": ["mechanical"],
+      "requires_separation": ["guest_room", "public"],
+      "floor": -1
+    },
+    "equipment_rooms": {
+      "area": 2485,
+      "details": {
+        "electrical_rooms": 250,
+        "generator_room": 125,
+        "water_supply_room": 120,
+        "reclaimed_water_room": 120,
+        "hot_water_room": 150,
+        "fire_water_tank_pump": 400,
+        "weak_current_room": 50,
+        "network_room": 150,
+        "fire_security_room": 100,
+        "pool_equipment_room": 150,
+        "elevator_machine_room": 80,
+        "fire_water_tank_room": 70,
+        "mechanical_rooms": 720
+      },
+      "room_type": "mechanical",
+      "min_width": 10.0,
+      "min_height": 4.0,
+      "requires_natural_light": false,
+      "requires_separation": [
+        "meeting",
+        "restaurants",
+        "guest_room",
+        "ballroom"
+      ],
+      "floor": -1
+    }
+  },
+  "parking": {
+    "underground_parking": {
+      "area": 3900,
+      "details": {
+        "parking_spaces": 90
+      },
+      "room_type": "parking",
+      "min_width": 30.0,
+      "min_height": 3.0,
+      "requires_column_spacing": true,
+      "requires_adjacency": ["vertical_circulation"],
+      "floor": -1
+    }
+  }
+}
