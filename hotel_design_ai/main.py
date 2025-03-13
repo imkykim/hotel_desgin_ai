@@ -425,6 +425,35 @@ def evaluate_layout(layout: SpatialGrid, rooms: List[Room]):
     for room_type, area in sorted(areas_by_type.items()):
         print(f"  {room_type}: {area:.1f} m²")
 
+    # Group areas by department
+    print("\nAreas by department:")
+    areas_by_department = {}
+    total_area = 0
+
+    # Create a mapping of room_id to department
+    room_id_to_dept = {
+        room.id: room.metadata.get("department", "unknown") for room in rooms
+    }
+
+    # Calculate areas by department using actual layout
+    for room_id, room_data in layout.rooms.items():
+        dept = room_id_to_dept.get(room_id, "unknown")
+
+        if dept not in areas_by_department:
+            areas_by_department[dept] = 0
+
+        width, length, _ = room_data["dimensions"]
+        area = width * length
+        areas_by_department[dept] += area
+        total_area += area
+
+    # Print department summaries
+    for dept, area in sorted(areas_by_department.items()):
+        print(f"  {dept}: {area:.1f} m²")
+
+    # Print total area
+    print(f"\nTotal area: {total_area:.1f} m²")
+
     # Return metrics for possible export
     return all_metrics
 
