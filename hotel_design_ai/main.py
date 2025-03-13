@@ -81,7 +81,7 @@ def parse_arguments():
     parser.add_argument(
         "--program-config",
         type=str,
-        default="default",
+        default="hotel_requirements",  # Changed default from "default" to "hotel_requirements"
         help="Program configuration name (without .json extension)",
     )
 
@@ -421,12 +421,12 @@ def evaluate_layout(layout: SpatialGrid, rooms: List[Room]):
 
     # Show areas by room type
     areas_by_type = layout_model.get_areas_by_type()
-    print("\nAreas by room type:")
+    print("\nAreas by room type (in final layout):")
     for room_type, area in sorted(areas_by_type.items()):
         print(f"  {room_type}: {area:.1f} m²")
 
-    # Group areas by department
-    print("\nAreas by department:")
+    # Group areas by department in final layout
+    print("\nAreas by department (in final layout):")
     areas_by_department = {}
     total_area = 0
 
@@ -452,7 +452,23 @@ def evaluate_layout(layout: SpatialGrid, rooms: List[Room]):
         print(f"  {dept}: {area:.1f} m²")
 
     # Print total area
-    print(f"\nTotal area: {total_area:.1f} m²")
+    print(f"\nTotal area placed in layout: {total_area:.1f} m²")
+
+    # Compare with programmed areas from the original requirements
+    print("\nProgrammed areas from requirements (excluding logistics reserves):")
+    program_areas = {
+        "public": 680,  # reception 160 + retail 400 + service_areas 120
+        "dining": 2250,  # kitchen 850 + restaurants 1300 + other 100
+        "meeting": 1610,  # ballroom 500 + hall 650 + meeting_rooms 250 + vip 100 + other 110
+        "recreational": 1400,  # pool 700 + gym 150 + beauty 80 + billiards 120 + ktv 350
+        "administrative": 2040,  # offices 540 + staff 800 + misc 700
+        "engineering": 2800,  # maintenance 315 + equipment 2485
+        "parking": 3900,  # underground 3900
+    }
+    total_programmed = sum(program_areas.values())
+    for dept, area in sorted(program_areas.items()):
+        print(f"  {dept}: {area:.1f} m²")
+    print(f"  Total programmed: {total_programmed:.1f} m²")
 
     # Return metrics for possible export
     return all_metrics
@@ -576,9 +592,29 @@ def main():
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    # Create rooms from program requirements
+    # Create rooms from program requirements - pass the correct program config
+    from hotel_design_ai.config.config_loader import (
+        create_room_objects_from_program,
+        get_program_requirements,
+    )
+
+    # Override the default to use hotel_requirements.json
+    original_get_program_requirements = get_program_requirements
+
+    def patched_get_program_requirements(name=args.program_config):
+        return original_get_program_requirements(name)
+
+    # Monkey patch the function to use our specified config
+    import hotel_design_ai.config.config_loader
+
+    hotel_design_ai.config.config_loader.get_program_requirements = (
+        patched_get_program_requirements
+    )
+
+    # Now create the rooms
     room_dicts = create_room_objects_from_program()
     rooms = convert_room_dicts_to_room_objects(room_dicts)
+
     print(f"Created {len(rooms)} rooms from program requirements")
     # In the main function, after creating rooms:
     print("Room Configuration Check:")

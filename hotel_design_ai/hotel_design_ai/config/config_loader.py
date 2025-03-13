@@ -84,7 +84,7 @@ def get_building_envelope(name: str = "default") -> Dict[str, Any]:
     return _load_json_file(filepath, default_envelope)
 
 
-def get_program_requirements(name: str = "default") -> Dict[str, Any]:
+def get_program_requirements(name: str = "hotel_requirements") -> Dict[str, Any]:
     """
     Get program requirements.
 
@@ -394,18 +394,50 @@ def create_room_objects_from_program() -> List[Dict[str, Any]]:
                     "requires_natural_light": natural_light,
                     "requires_adjacency": adjacencies,
                     "floor": space.get("floor", None),
-                    "metadata": {"original_name": detail_key},  # Add this line
+                    "metadata": {
+                        "original_name": space_key
+                    },  # FIXED: was incorrectly using detail_key
                 }
                 all_rooms.append(room)
                 room_id += 1
 
-    # At the end of create_room_objects_from_program function, add:
+    # Display debug information
     print(f"Created {len(all_rooms)} rooms from program requirements")
-    # Debug - print first few rooms to check metadata
-    for i in range(min(3, len(all_rooms))):
-        print(
-            f"Room {i+1}: {all_rooms[i]['name']} - Metadata: {all_rooms[i].get('metadata', {})}"
-        )
+
+    # Debug - print all rooms with areas to check
+    print("\nRoom areas from program requirements:")
+    area_by_room_type = {}
+    area_by_department = {}
+    total_area = 0
+
+    for room in all_rooms:
+        area = room["width"] * room["length"]
+        room_type = room["room_type"]
+        department = room["department"]
+
+        # Sum by room type
+        if room_type not in area_by_room_type:
+            area_by_room_type[room_type] = 0
+        area_by_room_type[room_type] += area
+
+        # Sum by department
+        if department not in area_by_department:
+            area_by_department[department] = 0
+        area_by_department[department] += area
+
+        total_area += area
+
+    # Print room type summaries
+    print("Areas by room type:")
+    for room_type, area in sorted(area_by_room_type.items()):
+        print(f"  {room_type}: {area:.1f} m²")
+
+    # Print department summaries
+    print("\nAreas by department:")
+    for dept, area in sorted(area_by_department.items()):
+        print(f"  {dept}: {area:.1f} m²")
+
+    print(f"\nTotal area from program: {total_area:.1f} m²")
 
     return all_rooms
 
