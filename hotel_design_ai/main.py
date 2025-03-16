@@ -81,7 +81,7 @@ def parse_arguments():
     parser.add_argument(
         "--program-config",
         type=str,
-        default="hotel_requirements",  # Changed default from "default" to "hotel_requirements"
+        default="default",
         help="Program configuration name (without .json extension)",
     )
 
@@ -122,7 +122,7 @@ def parse_arguments():
     parser.add_argument(
         "--train-iterations",
         type=int,
-        default=10,
+        default=20,
         help="Number of training iterations for RL",
     )
     parser.add_argument(
@@ -259,6 +259,7 @@ def generate_rl_layout(
         exploration_rate=rl_params["training"]["exploration_rate"],
         learning_rate=rl_params["training"]["learning_rate"],
         discount_factor=rl_params["training"]["discount_factor"],
+        building_config=building_config,
     )
 
     # Load pre-trained model if specified
@@ -357,8 +358,11 @@ def evaluate_layout(layout: SpatialGrid, rooms: List[Room]):
     # Create Layout model wrapper
     layout_model = Layout(layout)
 
+    # Get building parameters for metrics
+    building_config = get_building_envelope()
+
     # Create metrics calculator
-    metrics = LayoutMetrics(layout)
+    metrics = LayoutMetrics(layout, building_config=building_config)
 
     # Calculate metrics
     space_utilization = metrics.space_utilization() * 100
@@ -381,8 +385,7 @@ def evaluate_layout(layout: SpatialGrid, rooms: List[Room]):
             adjacency_preferences[room_type1] = []
         adjacency_preferences[room_type1].append(room_type2)
 
-    # Get building parameters for metrics
-    building_config = get_building_envelope()
+    # Get structural grid for metrics
     structural_grid = (
         building_config["structural_grid_x"],
         building_config["structural_grid_y"],
@@ -485,22 +488,27 @@ def visualize_layout(layout: SpatialGrid, args):
 
     print("\nCreating visualizations...")
 
+    # Get building parameters
+    building_config = get_building_envelope(args.building_config)
+
     # Create renderer
-    renderer = LayoutRenderer(layout)
+    renderer = LayoutRenderer(layout, building_config=building_config)
 
     try:
         # Create 3D visualization
         fig1, ax1 = renderer.render_3d(show_labels=True)
         fig1.suptitle("Hotel Layout - 3D View")
 
-        # Get building parameters
-        building_config = get_building_envelope(args.building_config)
-        num_floors = building_config["num_floors"] + 1  # +1 for basement
+        # Use min_floor and max_floor from building_config
+        min_floor = building_config.get("min_floor", -1)
+        max_floor = building_config.get(
+            "max_floor", building_config.get("num_floors", 4)
+        )
 
         # Create floor plans for each level
-        for floor in range(-1, num_floors - 1):
+        for floor in range(min_floor, max_floor + 1):
             fig, ax = renderer.render_floor_plan(floor=floor)
-            floor_name = "Basement" if floor == -1 else f"Floor {floor}"
+            floor_name = "Basement" if floor < 0 else f"Floor {floor}"
             fig.suptitle(f"Hotel Layout - {floor_name}")
 
         # Show all figures
@@ -529,6 +537,9 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
 
     prefix = f"hotel_layout"
 
+    # Get building parameters
+    building_config = get_building_envelope(args.building_config)
+
     # Determine export formats
     export_formats = [f.strip().lower() for f in args.export_formats.split(",")]
 
@@ -545,15 +556,31 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
                 json.dump(metrics, f, indent=2)
             print(f"  Saved metrics to {metrics_file}")
 
-        # Other export formats...
+        elif export_format == "csv":
+            csv_file = os.path.join(output_subfolder, f"{prefix}.csv")
+            export_to_csv(layout, csv_file)
+            print(f"  Saved CSV to {csv_file}")
+
+        elif export_format == "revit":
+            revit_file = os.path.join(output_subfolder, f"{prefix}_revit.csv")
+            export_to_revit(layout, revit_file, building_config=building_config)
+            print(f"  Saved Revit CSV to {revit_file}")
+
+        elif export_format == "threejs":
+            threejs_file = os.path.join(output_subfolder, f"{prefix}_threejs.json")
+            export_for_three_js(layout, threejs_file)
+            print(f"  Saved Three.js JSON to {threejs_file}")
 
     # Create visualizations
-    renderer = LayoutRenderer(layout)
+    renderer = LayoutRenderer(layout, building_config=building_config)
 
     try:
-        # Get building parameters
-        building_config = get_building_envelope(args.building_config)
-        num_floors = building_config["num_floors"] + 1  # +1 for basement
+        # Use min_floor and max_floor from building_config
+        min_floor = building_config.get("min_floor", -1)
+        max_floor = building_config.get(
+            "max_floor", building_config.get("num_floors", 4)
+        )
+        num_floors = max_floor - min_floor + 1
 
         # Save renders to output directory
         print("  Saving visualizations...")
@@ -563,6 +590,7 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
             include_3d=True,
             include_floor_plans=True,
             num_floors=num_floors,
+            min_floor=min_floor,
         )
 
         # Close any open matplotlib figures to prevent hanging
@@ -584,6 +612,9 @@ def main():
     # Parse command line arguments
     args = parse_arguments()
 
+    print(f"Using building config: {args.building_config}")
+    print(f"Using program config: {args.program_config}")
+
     # Set random seed if specified
     if args.seed is not None:
         import random
@@ -592,37 +623,12 @@ def main():
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    # Create rooms from program requirements - pass the correct program config
-    from hotel_design_ai.config.config_loader import (
-        create_room_objects_from_program,
-        get_program_requirements,
-    )
+    # Create rooms from program requirements with the specified config
+    from hotel_design_ai.config.config_loader import create_room_objects_from_program
 
-    # Override the default to use hotel_requirements.json
-    original_get_program_requirements = get_program_requirements
-
-    def patched_get_program_requirements(name=args.program_config):
-        return original_get_program_requirements(name)
-
-    # Monkey patch the function to use our specified config
-    import hotel_design_ai.config.config_loader
-
-    hotel_design_ai.config.config_loader.get_program_requirements = (
-        patched_get_program_requirements
-    )
-
-    # Now create the rooms
-    room_dicts = create_room_objects_from_program()
+    # Simply pass the program config directly
+    room_dicts = create_room_objects_from_program(args.program_config)
     rooms = convert_room_dicts_to_room_objects(room_dicts)
-
-    print(f"Created {len(rooms)} rooms from program requirements")
-    # In the main function, after creating rooms:
-    print("Room Configuration Check:")
-    if rooms and len(rooms) > 0:
-        for i in range(min(3, len(rooms))):
-            print(
-                f"Room {i}: {rooms[i].name}, Type: {rooms[i].room_type}, Metadata: {rooms[i].metadata}"
-            )
 
     # Load fixed room positions if specified
     fixed_positions = None

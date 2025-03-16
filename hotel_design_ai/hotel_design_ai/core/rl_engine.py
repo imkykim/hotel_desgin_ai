@@ -57,6 +57,7 @@ class RLEngine:
         exploration_min: float = 0.01,
         exploration_decay: float = 0.995,
         memory_size: int = 10000,
+        building_config: Dict[str, Any] = None,
     ):
         """
         Initialize the RL engine.
@@ -71,10 +72,16 @@ class RLEngine:
             exploration_min: Minimum exploration rate
             exploration_decay: Rate at which exploration decays
             memory_size: Size of experience replay buffer
+            building_config: Building configuration parameters
         """
         self.width, self.length, self.height = bounding_box
         self.grid_size = grid_size
         self.structural_grid = structural_grid
+        self.building_config = building_config or {
+            "floor_height": 4.0,
+            "min_floor": 0,
+            "max_floor": int(self.height / 4.0),
+        }
 
         # Initialize spatial grid
         self.spatial_grid = SpatialGrid(
@@ -155,7 +162,9 @@ class RLEngine:
         simplified_grid_cells = (
             int(self.width / self.structural_grid[0])
             * int(self.length / self.structural_grid[1])
-            * int(self.height / 4.0)  # Assuming standard floor height
+            * int(
+                self.height / self.building_config["floor_height"]
+            )  # Use floor height from config
         )
 
         # Room properties (type, dimensions, requirements)
@@ -171,7 +180,7 @@ class RLEngine:
         # Action is (x, y, z) position, which we'll discretize to structural grid
         grid_cells_x = int(self.width / self.structural_grid[0])
         grid_cells_y = int(self.length / self.structural_grid[1])
-        floors = int(self.height / 4.0)  # Assuming standard floor height
+        floors = int(self.height / self.building_config["floor_height"])
 
         return grid_cells_x * grid_cells_y * floors
 
@@ -190,7 +199,7 @@ class RLEngine:
             (
                 int(self.width / self.structural_grid[0]),
                 int(self.length / self.structural_grid[1]),
-                int(self.height / 4.0),  # Assuming standard floor height
+                int(self.height / self.building_config["floor_height"]),
             )
         )
 
@@ -211,11 +220,11 @@ class RLEngine:
             # Calculate simplified grid coordinates
             grid_x = int(pos_x / self.structural_grid[0])
             grid_y = int(pos_y / self.structural_grid[1])
-            grid_z = int(pos_z / 4.0)
+            grid_z = int(pos_z / self.building_config["floor_height"])
 
             grid_w = max(1, int(dim_w / self.structural_grid[0]))
             grid_l = max(1, int(dim_l / self.structural_grid[1]))
-            grid_h = max(1, int(dim_h / 4.0))
+            grid_h = max(1, int(dim_h / self.building_config["floor_height"]))
 
             # Fill the grid region
             for x in range(grid_x, min(grid_x + grid_w, simplified_grid.shape[0])):
@@ -266,11 +275,11 @@ class RLEngine:
                 # Calculate simplified grid coordinates
                 grid_x = int(pos_x / self.structural_grid[0])
                 grid_y = int(pos_y / self.structural_grid[1])
-                grid_z = int(pos_z / 4.0)
+                grid_z = int(pos_z / self.building_config["floor_height"])
 
                 grid_w = max(1, int(dim_w / self.structural_grid[0]))
                 grid_l = max(1, int(dim_l / self.structural_grid[1]))
-                grid_h = max(1, int(dim_h / 4.0))
+                grid_h = max(1, int(dim_h / self.building_config["floor_height"]))
 
                 # Fill the fixed mask
                 for x in range(grid_x, min(grid_x + grid_w, simplified_grid.shape[0])):
@@ -316,7 +325,7 @@ class RLEngine:
         # Calculate simplified grid dimensions
         grid_cells_x = int(self.width / self.structural_grid[0])
         grid_cells_y = int(self.length / self.structural_grid[1])
-        floors = int(self.height / 4.0)
+        floors = int(self.height / self.building_config["floor_height"])
 
         # Convert action index to 3D coordinates
         z = action // (grid_cells_x * grid_cells_y)
@@ -327,7 +336,7 @@ class RLEngine:
         # Convert to actual coordinates
         actual_x = x * self.structural_grid[0]
         actual_y = y * self.structural_grid[1]
-        actual_z = z * 4.0  # Standard floor height
+        actual_z = z * self.building_config["floor_height"]
 
         # Ensure room fits within building bounds
         actual_x = min(actual_x, self.width - room.width)
@@ -543,7 +552,11 @@ class RLEngine:
     def _find_valid_position(self, room: Room) -> Optional[Tuple[float, float, float]]:
         """Find a valid position using grid search"""
         # Try positions aligned with structural grid
-        for z in range(0, int(self.height - room.height) + 1, 4):  # Floor height = 4m
+        for z in range(
+            0,
+            int(self.height - room.height) + 1,
+            int(self.building_config["floor_height"]),
+        ):
             for x in range(
                 0, int(self.width - room.width) + 1, int(self.structural_grid[0])
             ):
@@ -757,14 +770,15 @@ class RLEngine:
 
         # Floor preferences (0=ground, 1=first, etc. None=any)
         floor_preferences = {
-            "entrance": 0,
-            "lobby": 0,
-            "restaurant": 0,
-            "meeting_room": 0,
+            "entrance": self.building_config.get("min_floor", 0),
+            "lobby": self.building_config.get("min_floor", 0),
+            "restaurant": self.building_config.get("min_floor", 0),
+            "meeting_room": self.building_config.get("min_floor", 0),
             "vertical_circulation": None,  # Any floor
-            "guest_room": 1,  # First floor or above
+            "guest_room": self.building_config.get("min_floor", 0)
+            + 1,  # First floor or above
             "service_area": None,
-            "back_of_house": 0,
+            "back_of_house": self.building_config.get("min_floor", 0),
         }
 
         for room_id, room_data in layout.rooms.items():
@@ -775,7 +789,7 @@ class RLEngine:
                 total_checked += 1
                 _, _, z = room_data["position"]
 
-                actual_floor = int(z / 4.0)  # Assuming 4m floor height
+                actual_floor = int(z / self.building_config["floor_height"])
 
                 if room_type == "guest_room":
                     # For guest rooms, we prefer them above ground floor

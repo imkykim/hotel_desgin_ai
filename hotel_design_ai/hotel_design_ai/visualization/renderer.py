@@ -13,14 +13,16 @@ class LayoutRenderer:
     3D visualization renderer for hotel layouts.
     """
 
-    def __init__(self, layout: SpatialGrid):
+    def __init__(self, layout: SpatialGrid, building_config: Dict[str, Any] = None):
         """
         Initialize the renderer.
 
         Args:
             layout: The spatial grid layout to render
+            building_config: Building configuration parameters
         """
         self.layout = layout
+        self.building_config = building_config or {"floor_height": 4.0}
 
         # Room type to color mapping
         self.room_colors = {
@@ -131,8 +133,8 @@ class LayoutRenderer:
         ax.set_xlim(0, self.layout.width)
         ax.set_ylim(0, self.layout.length)
 
-        # Calculate floor height (assuming typical floor height)
-        floor_height = 4.0
+        # Calculate floor height from building config
+        floor_height = self.building_config["floor_height"]
         z_min = floor * floor_height
         z_max = (floor + 1) * floor_height
 
@@ -142,7 +144,7 @@ class LayoutRenderer:
             w, l, h = room_data["dimensions"]
 
             # Check if room is on this floor
-            if z < z_max and z + h > z_min:
+            if floor * floor_height <= z < (floor + 1) * floor_height:
                 is_highlighted = (
                     highlight_rooms is not None and room_id in highlight_rooms
                 )
@@ -163,6 +165,7 @@ class LayoutRenderer:
         include_3d: bool = True,
         include_floor_plans: bool = True,
         num_floors: int = None,
+        min_floor: int = None,
     ):
         """
         Save renders to disk.
@@ -173,6 +176,7 @@ class LayoutRenderer:
             include_3d: Whether to include 3D render
             include_floor_plans: Whether to include floor plans
             num_floors: Number of floors to render (if None, detect automatically)
+            min_floor: Minimum floor to render (if None, use building_config or default to 0)
         """
         import os
 
@@ -189,20 +193,34 @@ class LayoutRenderer:
 
         # Save floor plans
         if include_floor_plans:
-            # Determine number of floors if not specified
-            if num_floors is None:
-                max_z = 0
-                for _, room_data in self.layout.rooms.items():
-                    _, _, z = room_data["position"]
-                    _, _, h = room_data["dimensions"]
-                    max_z = max(max_z, z + h)
+            # Get min_floor from building_config if not specified
+            if min_floor is None:
+                min_floor = self.building_config.get("min_floor", 0)
 
-                num_floors = int(np.ceil(max_z / 4.0))  # Assuming 4m floor height
+            # Determine max_floor if num_floors is not specified
+            if num_floors is None:
+                # Try to get max_floor from building_config
+                max_floor = self.building_config.get("max_floor")
+
+                # If max_floor is not in building_config, calculate it
+                if max_floor is None:
+                    max_z = 0
+                    for _, room_data in self.layout.rooms.items():
+                        _, _, z = room_data["position"]
+                        _, _, h = room_data["dimensions"]
+                        max_z = max(max_z, z + h)
+
+                    floor_height = self.building_config["floor_height"]
+                    max_floor = int(np.ceil(max_z / floor_height)) - 1
+            else:
+                # If num_floors is specified, calculate max_floor
+                max_floor = min_floor + num_floors - 1
 
             # Render each floor
-            for floor in range(num_floors):
+            for floor in range(min_floor, max_floor + 1):
                 fig, ax = self.render_floor_plan(floor=floor)
-                filename = os.path.join(output_dir, f"{prefix}_floor{floor}.png")
+                floor_name = f"basement" if floor < 0 else f"floor{floor}"
+                filename = os.path.join(output_dir, f"{prefix}_{floor_name}.png")
                 fig.savefig(filename, dpi=300, bbox_inches="tight")
                 plt.close(fig)
                 print(f"Saved floor plan for level {floor} to {filename}")
@@ -395,9 +413,9 @@ class LayoutRenderer:
 
     def _draw_structural_grid(self, ax):
         """Draw the structural grid on the floor plan"""
-        # Get structural grid spacing (default to 8m if not available)
-        grid_x = 8.0
-        grid_y = 8.0
+        # Get structural grid spacing from building config if available
+        grid_x = self.building_config.get("structural_grid_x", 8.0)
+        grid_y = self.building_config.get("structural_grid_y", 8.0)
 
         # Draw vertical grid lines
         for x in np.arange(0, self.layout.width + 0.1, grid_x):

@@ -236,7 +236,7 @@
     "underground_parking": {
       "area": 3900,
       "details": {
-        "parking_spaces": 90
+        "parking_spaces": 3900
       },
       "room_type": "parking",
       "min_width": 30.0,
