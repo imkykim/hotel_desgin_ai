@@ -242,30 +242,88 @@ class RuleEngine:
     def _place_vertical_circulation_across_floors(
         self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
     ) -> Optional[Tuple[float, float, float]]:
-        """
-        Place vertical circulation elements consistently across all floors.
+        """Find position and place vertical circulation on all floors"""
+        # Find position that works on all floors
+        position = self._find_vertical_circulation_position(room, placed_rooms_by_type)
 
-        Args:
-            room: Room representing vertical circulation
-            placed_rooms_by_type: Dictionary of already placed rooms by type
+        if not position:
+            return None
 
-        Returns:
-            Optional[Tuple[float, float, float]]: Position for ground floor element
-        """
-        # Find a good central position first
-        center_x = (self.width - room.width) / 2
-        center_y = (self.length - room.length) / 2
-
-        # Align with structural grid
-        grid_x = round(center_x / self.structural_grid[0]) * self.structural_grid[0]
-        grid_y = round(center_y / self.structural_grid[1]) * self.structural_grid[1]
+        x, y, _ = position  # We only need x,y; z will vary by floor
 
         # Get floor range from building configuration
         min_floor = self.building_config.get("min_floor", -1)
         max_floor = self.building_config.get("max_floor", 3)
         floor_height = self.building_config.get("floor_height", 5.0)
 
-        # Try center position - check if it works for all floors
+        # Place vertical circulation on ALL floors including ground floor
+        for floor in range(min_floor, max_floor + 1):
+            z = floor * floor_height
+
+            # Create a unique ID for each floor's circulation element
+            circ_id = room.id + (floor * 1000)  # Use offset to create unique IDs
+
+            # Make sure we set the room_type to 'vertical_circulation' for all elements
+            self.spatial_grid.place_room(
+                room_id=circ_id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type="vertical_circulation",  # Ensure correct room type
+                metadata={"floor": floor, "is_vertical_circulation": True},
+            )
+
+        # Return the ground floor position (for reference)
+        return (x, y, 0)
+
+    def _can_place_across_floors(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        length: float,
+        height: float,
+        min_floor: int,
+        max_floor: int,
+        floor_height: float,
+    ) -> bool:
+        """
+        Check if a position works for placing vertical circulation on all floors.
+
+        Args:
+            x, y: Position coordinates
+            width, length, height: Dimensions
+            min_floor, max_floor: Floor range
+            floor_height: Height of each floor
+
+        Returns:
+            bool: True if the position works for all floors
+        """
+        # Check position on each floor
+        for floor in range(min_floor, max_floor + 1):
+            z = floor * floor_height
+            if not self._is_valid_position(x, y, z, width, length, height):
+                return False
+
+        return True
+
+    def _find_vertical_circulation_position(
+        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
+    ) -> Optional[Tuple[float, float, float]]:
+        """Find a position that works across all floors"""
+        min_floor = self.building_config.get("min_floor", -1)
+        max_floor = self.building_config.get("max_floor", 3)
+        floor_height = self.building_config.get("floor_height", 5.0)
+
+        # Try central position
+        center_x = (self.width - room.width) / 2
+        center_y = (self.length - room.length) / 2
+        grid_x = round(center_x / self.structural_grid[0]) * self.structural_grid[0]
+        grid_y = round(center_y / self.structural_grid[1]) * self.structural_grid[1]
+
         if self._can_place_across_floors(
             grid_x,
             grid_y,
@@ -276,8 +334,10 @@ class RuleEngine:
             max_floor,
             floor_height,
         ):
-            return (grid_x, grid_y, 0)  # Return ground floor position
+            return (grid_x, grid_y, 0)
 
+        # Additional position checks...
+        # [Rest of the positioning logic]
         # If lobby is placed, try positions adjacent to it
         if "lobby" in placed_rooms_by_type and placed_rooms_by_type["lobby"]:
             lobby_id = placed_rooms_by_type["lobby"][0]
@@ -333,37 +393,7 @@ class RuleEngine:
         return self._find_vertical_circulation_position_on_grid(
             room, min_floor, max_floor, floor_height
         )
-
-    def _can_place_across_floors(
-        self,
-        x: float,
-        y: float,
-        width: float,
-        length: float,
-        height: float,
-        min_floor: int,
-        max_floor: int,
-        floor_height: float,
-    ) -> bool:
-        """
-        Check if a position works for placing vertical circulation on all floors.
-
-        Args:
-            x, y: Position coordinates
-            width, length, height: Dimensions
-            min_floor, max_floor: Floor range
-            floor_height: Height of each floor
-
-        Returns:
-            bool: True if the position works for all floors
-        """
-        # Check position on each floor
-        for floor in range(min_floor, max_floor + 1):
-            z = floor * floor_height
-            if not self._is_valid_position(x, y, z, width, length, height):
-                return False
-
-        return True
+        return None
 
     def _find_vertical_circulation_position_on_grid(
         self, room: Room, min_floor: int, max_floor: int, floor_height: float
@@ -524,6 +554,71 @@ class RuleEngine:
         self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
     ) -> Optional[Tuple[float, float, float]]:
         """Default placement logic for other room types"""
+        # Check if room has preferred floor
+        preferred_floor = None
+        if hasattr(room, "floor") and room.floor is not None:
+            preferred_floor = room.floor
+        else:
+            # Assign floors based on room type
+            room_type_floors = {
+                "entrance": 0,
+                "lobby": 0,
+                "restaurant": 0,
+                "kitchen": 0,
+                "meeting_room": 0,
+                "ballroom": 0,
+                "guest_room": None,  # Will be distributed across floors 1-3
+                "office": 1,
+                "staff_area": 1,
+                "back_of_house": -1,  # Basement
+                "mechanical": -1,
+                "maintenance": -1,
+                "parking": -1,
+                "storage": -1,
+                "service_area": -1,
+            }
+            preferred_floor = room_type_floors.get(room.room_type)
+
+            # Special handling for guest rooms - distribute across floors 1, 2, and 3
+            if room.room_type == "guest_room":
+                # Get count of existing guest rooms by floor
+                floor_counts = {1: 0, 2: 0, 3: 0}
+                for room_id in placed_rooms_by_type.get("guest_room", []):
+                    existing_room = self.spatial_grid.rooms[room_id]
+                    floor_height = self.building_config.get("floor_height", 5.0)
+                    room_floor = int(existing_room["position"][2] / floor_height)
+                    if room_floor in floor_counts:
+                        floor_counts[room_floor] += 1
+
+                # Find the floor with the fewest guest rooms
+                if floor_counts:
+                    min_count = min(floor_counts.values())
+                    candidate_floors = [
+                        f for f, count in floor_counts.items() if count == min_count
+                    ]
+                    preferred_floor = candidate_floors[0] if candidate_floors else 1
+                else:
+                    # Start with floor 1 if no guest rooms yet
+                    preferred_floor = 1
+
+        # If we have a preferred floor, try to place there first
+        if preferred_floor is not None:
+            floor_height = self.building_config.get("floor_height", 5.0)
+            z = preferred_floor * floor_height
+            position = self._find_valid_position_on_grid(room, z=z)
+            if position:
+                return position
+
+            # For guest rooms, if preferred floor is full, try other floors
+            if room.room_type == "guest_room":
+                for floor in [1, 2, 3]:  # Try all guest room floors
+                    if floor != preferred_floor:  # Skip the floor we already tried
+                        z = floor * floor_height
+                        position = self._find_valid_position_on_grid(room, z=z)
+                        if position:
+                            return position
+
+        # Continue with the original logic for adjacency, etc.
         # Check for adjacency preferences
         adjacent_to = self.adjacency_preferences.get(room.room_type, [])
 

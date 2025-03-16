@@ -28,7 +28,7 @@ class LayoutRenderer:
         self.room_colors = {
             "entrance": "#2c7fb8",
             "lobby": "#7fcdbb",
-            "vertical_circulation": "#c7e9b4",
+            "vertical_circulation": "#FF0000",
             "restaurant": "#f0f9e8",
             "meeting_room": "#edf8b1",
             "guest_room": "#f7fcb9",
