@@ -2,11 +2,11 @@
   "width": 60.0,
   "length": 80.0,
   "height": 20.0,
-  "min_floor": -1, // Lowest floor level (basement)
-  "max_floor": 3, // Highest floor level
+  "min_floor": -1,
+  "max_floor": 3,
   "floor_height": 5.0,
-  "structural_grid_x": 8.4,
-  "structural_grid_y": 8.4,
+  "structural_grid_x": 8.0,
+  "structural_grid_y": 8.0,
   "grid_size": 1.0,
   "main_entry": "flexible",
   "description": "Standard hotel building envelope",

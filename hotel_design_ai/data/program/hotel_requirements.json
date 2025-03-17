@@ -349,11 +349,37 @@
       "floor": -1
     }
   },
+  "circulation": {
+    "main_core": {
+      "area": 64,
+      "room_type": "vertical_circulation",
+      "min_width": 8.0,
+      "min_height": 20.0,
+      "requires_natural_light": false,
+      "floor": 0,
+      "metadata": {
+        "original_name": "Main Circulation Core",
+        "is_core": true
+      }
+    },
+    "secondary_core": {
+      "area": 36,
+      "room_type": "vertical_circulation",
+      "min_width": 6.0,
+      "min_height": 20.0,
+      "requires_natural_light": false,
+      "floor": 0,
+      "metadata": {
+        "original_name": "Secondary Circulation",
+        "is_core": true
+      }
+    }
+  },
   "parking": {
     "underground_parking": {
       "area": 3900,
       "details": {
-        "parking_spaces": 3900
+        "parking_spaces": 1900
       },
       "room_type": "parking",
       "min_width": 30.0,

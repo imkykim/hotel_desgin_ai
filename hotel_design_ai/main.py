@@ -494,6 +494,18 @@ def visualize_layout(layout: SpatialGrid, args):
     # Create renderer
     renderer = LayoutRenderer(layout, building_config=building_config)
 
+    rooms_by_floor = {}
+    for room_id, room_data in layout.rooms.items():
+        z = room_data["position"][2]
+        floor = int(z / building_config["floor_height"])
+        if floor not in rooms_by_floor:
+            rooms_by_floor[floor] = []
+        rooms_by_floor[floor].append(room_id)
+
+    print("\nRoom distribution by floor:")
+    for floor in sorted(rooms_by_floor.keys()):
+        print(f"Floor {floor}: {len(rooms_by_floor[floor])} rooms")
+
     try:
         # Create 3D visualization
         fig1, ax1 = renderer.render_3d(show_labels=True)

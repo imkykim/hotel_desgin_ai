@@ -134,10 +134,23 @@ class LayoutRenderer:
         ax.set_ylim(0, self.layout.length)
 
         # Calculate floor height from building config
-        floor_height = self.building_config["floor_height"]
+        floor_height = self.building_config.get("floor_height", 5.0)
         z_min = floor * floor_height
         z_max = (floor + 1) * floor_height
 
+        print(f"Rendering floor {floor}: z from {z_min} to {z_max}")
+
+        # Count rooms in this range
+        rooms_on_floor = []
+        for room_id, room_data in self.layout.rooms.items():
+            x, y, z = room_data["position"]
+            h = room_data["dimensions"][2]
+
+            # Check if room is on this floor
+            if z < z_max and z + h > z_min:
+                rooms_on_floor.append(room_id)
+
+            print(f"Found {len(rooms_on_floor)} rooms to render on floor {floor}")
         # Draw rooms on this floor
         for room_id, room_data in self.layout.rooms.items():
             x, y, z = room_data["position"]
