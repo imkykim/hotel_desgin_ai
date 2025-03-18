@@ -101,7 +101,7 @@ class RLEngine:
         # Experience replay buffer
         self.memory = deque(maxlen=memory_size)
 
-        # Room types and architectural knowledge - DEFINED BEFORE STATE DIM CALCULATION
+        # Room types and architectural knowledge
         self.room_types = [
             "entrance",
             "lobby",
@@ -151,26 +151,17 @@ class RLEngine:
 
     def _calculate_state_dim(self) -> int:
         """Calculate the dimension of the state representation"""
-        # Grid state + room properties + fixed elements mask
-        grid_cells = (
-            self.spatial_grid.width_cells
-            * self.spatial_grid.length_cells
-            * self.spatial_grid.height_cells
-        )
-
-        # We'll use a simplified grid representation for efficiency
+        # Simplified grid representation for efficiency
         simplified_grid_cells = (
             int(self.width / self.structural_grid[0])
             * int(self.length / self.structural_grid[1])
-            * int(
-                self.height / self.building_config["floor_height"]
-            )  # Use floor height from config
+            * int(self.height / self.building_config["floor_height"])
         )
 
         # Room properties (type, dimensions, requirements)
         room_props = len(self.room_types) + 3  # 3 basic properties + one-hot encoding
 
-        # Additional state components
+        # Fixed mask
         fixed_mask = simplified_grid_cells
 
         return simplified_grid_cells + room_props + fixed_mask
@@ -209,9 +200,7 @@ class RLEngine:
             try:
                 room_type_code = self.room_types.index(room_type) + 1  # 0 is empty
             except ValueError:
-                room_type_code = (
-                    self.room_types.index("back_of_house") + 1
-                )  # Default type
+                room_type_code = self.room_types.index("back_of_house") + 1  # Default
 
             # Convert room position to simplified grid coordinates
             pos_x, pos_y, pos_z = room_data["position"]
@@ -255,10 +244,6 @@ class RLEngine:
             room_type_idx = self.room_types.index(room_to_place.room_type)
             room_props[3 + room_type_idx] = 1.0
         except ValueError:
-            # Handle unknown room type by defaulting to a generic type
-            print(
-                f"Warning: Room type '{room_to_place.room_type}' not in predefined types. Using default."
-            )
             # Use 'back_of_house' as default type
             back_of_house_idx = self.room_types.index("back_of_house")
             room_props[3 + back_of_house_idx] = 1.0
@@ -469,7 +454,6 @@ class RLEngine:
                 )
 
         # Sort rooms by architectural priority
-        # This architectural knowledge helps the RL agent
         room_type_priority = {
             "entrance": 10,
             "lobby": 9,
@@ -694,8 +678,6 @@ class RLEngine:
 
     def _calculate_coherence_reward(self, layout: SpatialGrid) -> float:
         """Calculate reward component for architectural coherence"""
-        coherence_score = 0.0
-
         # 1. Vertical alignment of rooms (e.g., guest rooms stacked vertically)
         vertical_alignment = self._check_vertical_alignment(layout)
 
@@ -804,48 +786,28 @@ class RLEngine:
             return correct_floor / total_checked
         return 1.0  # If no floor preferences, consider it perfect
 
+    def update_model(self, user_rating: float):
+        """
+        Update the RL model based on user feedback.
 
-# In hotel_design_ai/core/rl_engine.py
-# Enhance the update_model method
+        Args:
+            user_rating: User rating (0-10) of the current layout
+        """
+        # Convert user rating to reward
+        reward = user_rating / 10.0
 
+        # Update exploration rate
+        self.exploration_rate = max(
+            self.exploration_min, self.exploration_rate * self.exploration_decay
+        )
 
-def update_model(self, user_rating: float):
-    """
-    Update the RL model based on user feedback.
+        # Update training metrics
+        self.training_iterations += 1
+        self.average_reward = self.average_reward * 0.95 + reward * 0.05
 
-    Args:
-        user_rating: User rating (0-10) of the current layout
-    """
-    # Convert user rating to reward
-    reward = user_rating / 10.0
-
-    # Update exploration rate
-    old_exploration_rate = self.exploration_rate
-    self.exploration_rate = max(
-        self.exploration_min, self.exploration_rate * self.exploration_decay
-    )
-
-    # Update training metrics
-    self.training_iterations += 1
-    old_avg_reward = self.average_reward
-    self.average_reward = self.average_reward * 0.95 + reward * 0.05
-
-    # Print detailed update
-    print(f"\nRL Update - Iteration {self.training_iterations}:")
-    print(f"  User Rating: {user_rating:.1f}/10.0")
-    print(f"  Reward: {reward:.3f}")
-    print(
-        f"  Exploration Rate: {old_exploration_rate:.3f} → {self.exploration_rate:.3f}"
-    )
-    print(f"  Average Reward: {old_avg_reward:.3f} → {self.average_reward:.3f}")
-
-    if self.training_iterations % 10 == 0:
-        print("\nCurrent Model Statistics:")
-        print(f"  Total Iterations: {self.training_iterations}")
-        print(f"  Learning Rate: {self.learning_rate}")
-        print(f"  Discount Factor: {self.discount_factor}")
-
-    # In real implementation, we would update the model weights here
+        # In a full implementation, we would update the model weights here
+        # using reinforcement learning algorithms such as Q-learning or policy gradients
+        # For this simplified version, we'll just update the exploration rate
 
     def save_model(self, path: str):
         """Save the RL model to disk"""
