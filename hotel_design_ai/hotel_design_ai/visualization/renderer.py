@@ -198,9 +198,31 @@ class LayoutRenderer:
             x, y, z = room_data["position"]
             h = room_data["dimensions"][2]
 
-            # Check if room is on this floor
-            if z < z_max and z + h > z_min:
+            # Debug: Print room data for basement floor
+            if floor == -1:
+                print(
+                    f"Room {room_id} ({room_data.get('type')}): z={z}, h={h}, z_min={z_min}, z_max={z_max}"
+                )
+
+            # Check if room is on this floor - improved condition for better basement handling
+            room_bottom = z
+            room_top = z + h
+            floor_bottom = z_min
+            floor_top = z_max
+
+            # Room is on this floor if:
+            # 1. Room bottom is within the floor range, OR
+            # 2. Room top is within the floor range, OR
+            # 3. Room completely contains the floor (spans multiple floors)
+            if (
+                (room_bottom >= floor_bottom and room_bottom < floor_top)
+                or (room_top > floor_bottom and room_top <= floor_top)
+                or (room_bottom <= floor_bottom and room_top >= floor_top)
+            ):
                 rooms_on_floor.append(room_id)
+
+        # Debug: Show count of rooms found on this floor
+        print(f"Found {len(rooms_on_floor)} rooms on floor {floor}")
 
         # Draw each room
         for room_id in rooms_on_floor:
@@ -495,19 +517,21 @@ class LayoutRenderer:
         Returns:
             str: Display name for the room
         """
-        # Try to get name from room data
-        room_name = room_data.get("name", f"Room {room_id}")
-
-        # Try to get a more descriptive name from metadata
+        # First try to get name from metadata (highest priority)
         metadata = room_data.get("metadata", {})
         if "original_name" in metadata:
-            room_name = metadata["original_name"]
+            return metadata["original_name"]
 
-        # If room has a long name, use room_type instead but keep detail
-        if len(room_name) > 15:
-            room_name = f"{room_data['type']}_{room_id}"
+        # Try room type as it shows the program purpose (preferred for visualization)
+        room_type = room_data["type"].replace("_", " ").title()
 
-        return room_name
+        # Then try to use the room's name field
+        name = room_data.get("name")
+        if name and not name.startswith("Room "):  # Avoid generic Room names
+            return name
+
+        # Return room type as default - shows the program purpose
+        return room_type
 
     def _draw_room_2d(
         self,
