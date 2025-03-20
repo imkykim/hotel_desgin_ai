@@ -6,8 +6,6 @@ import matplotlib.colors as mcolors
 from typing import Dict, List, Tuple, Optional, Set, Any, Union
 import os
 
-from hotel_design_ai.core.spatial_grid import SpatialGrid
-
 
 class RenderingTheme:
     """Configuration for visualization styles and colors."""
@@ -65,11 +63,12 @@ class RenderingTheme:
 class LayoutRenderer:
     """
     3D visualization renderer for hotel layouts.
+    Enhanced to handle any floor range dynamically.
     """
 
     def __init__(
         self,
-        layout: SpatialGrid,
+        layout,
         building_config: Dict[str, Any] = None,
         render_config: Dict[str, Any] = None,
     ):
@@ -92,6 +91,25 @@ class LayoutRenderer:
         self.room_alphas = self.render_config.get(
             "room_alphas", RenderingTheme.DEFAULT_ROOM_ALPHAS.copy()
         )
+
+        # Determine floor range from layout and building_config
+        self._init_floor_range()
+
+    def _init_floor_range(self):
+        """
+        Determine the floor range by analyzing the layout and building_config.
+        """
+        # Start with defaults from building_config
+        self.min_floor = self.building_config.get("min_floor", -1)
+        self.max_floor = self.building_config.get("max_floor", 3)
+        self.floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Validate floor range
+        if self.min_floor > self.max_floor:
+            print(
+                f"Warning: min_floor ({self.min_floor}) > max_floor ({self.max_floor}). Setting min_floor = max_floor."
+            )
+            self.min_floor = self.max_floor
 
     def render_3d(
         self,
@@ -132,6 +150,28 @@ class LayoutRenderer:
         self._set_aspect_equal_3d(ax)
 
         return fig, ax
+
+    def _setup_3d_axes(self, ax):
+        """Set up the 3D axes with proper labels and limits."""
+        ax.set_xlabel("Width (m)")
+        ax.set_ylabel("Length (m)")
+        ax.set_zlabel("Height (m)")
+
+        # Calculate z limits based on floor range
+        min_z = self.min_floor * self.floor_height
+        max_z = (self.max_floor + 1) * self.floor_height
+
+        # Set axis limits to include all floors
+        ax.set_xlim(0, self.layout.width)
+        ax.set_ylim(0, self.layout.length)
+        ax.set_zlim(min_z, max_z)
+
+        # Add a grid at z=0 to delineate ground level
+        xx, yy = np.meshgrid(
+            np.linspace(0, self.layout.width, 5), np.linspace(0, self.layout.length, 5)
+        )
+        zz = np.zeros_like(xx)
+        ax.plot_surface(xx, yy, zz, alpha=0.2, color="gray")
 
     def _draw_all_rooms_3d(
         self, ax, show_labels: bool, highlight_rooms: List[int] = None
@@ -181,163 +221,24 @@ class LayoutRenderer:
 
         return fig, ax
 
-    def _setup_3d_axes(self, ax):
-        """Set up the 3D axes with proper labels and limits."""
-        ax.set_xlabel("Width (m)")
-        ax.set_ylabel("Length (m)")
-        ax.set_zlabel("Height (m)")
-
-        # Get building configuration
-        min_floor = self.building_config.get("min_floor", -1)
-        floor_height = self.building_config.get("floor_height", 4.0)
-
-        # Calculate minimum z to include basement floors
-        min_z = min(0, min_floor * floor_height)
-
-        # Set axis limits - make sure we include basement floors
-        ax.set_xlim(0, self.layout.width)
-        ax.set_ylim(0, self.layout.length)
-        ax.set_zlim(min_z, self.layout.height)
-
-        # Add a grid at z=0 to delineate ground level
-        xx, yy = np.meshgrid(
-            np.linspace(0, self.layout.width, 5), np.linspace(0, self.layout.length, 5)
-        )
-        zz = np.zeros_like(xx)
-        ax.plot_surface(xx, yy, zz, alpha=0.2, color="gray")
-
     def _setup_2d_axes(self, ax, floor: int):
         """Set up the 2D axes with proper labels and limits."""
         ax.set_xlabel("Width (m)")
         ax.set_ylabel("Length (m)")
 
-        # Set appropriate title based on floor number
-        floor_name = f"Floor {floor}"
+        # Determine a more descriptive floor name
+        if floor == 0:
+            floor_name = "Ground Floor"
+        elif floor < 0:
+            floor_name = f"Basement {abs(floor)}"
+        else:
+            floor_name = f"Floor {floor}"
+
         ax.set_title(f"Floor Plan - {floor_name}")
 
         # Set axis limits
         ax.set_xlim(0, self.layout.width)
         ax.set_ylim(0, self.layout.length)
-
-    def save_renders(
-        self,
-        output_dir: str = "renders",
-        prefix: str = "layout",
-        include_3d: bool = True,
-        include_floor_plans: bool = True,
-        num_floors: int = None,
-        min_floor: int = None,
-    ):
-        """
-        Save renders to disk.
-
-        Args:
-            output_dir: Directory to save renders in
-            prefix: Filename prefix
-            include_3d: Whether to include 3D render
-            include_floor_plans: Whether to include floor plans
-            num_floors: Number of floors to render (if None, detect automatically)
-            min_floor: Minimum floor to render (if None, use building_config or default to 0)
-        """
-        # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Save 3D render
-        if include_3d:
-            self._save_3d_render(output_dir, prefix)
-
-        # Save floor plans
-        if include_floor_plans:
-            self._save_floor_plans(output_dir, prefix, num_floors, min_floor)
-
-    def _save_3d_render(self, output_dir: str, prefix: str):
-        """
-        Save 3D render to disk.
-
-        Args:
-            output_dir: Directory to save renders in
-            prefix: Filename prefix
-        """
-        fig, ax = self.render_3d()
-        filename = os.path.join(output_dir, f"{prefix}_3d.png")
-        fig.savefig(filename, dpi=300, bbox_inches="tight")
-        plt.close(fig)
-
-    def _save_floor_plans(
-        self,
-        output_dir: str,
-        prefix: str,
-        num_floors: Optional[int] = None,
-        min_floor: Optional[int] = None,
-    ):
-        """
-        Save floor plans to disk.
-
-        Args:
-            output_dir: Directory to save renders in
-            prefix: Filename prefix
-            num_floors: Number of floors to render
-            min_floor: Minimum floor to render
-        """
-        # Get min_floor from building_config if not specified
-        if min_floor is None:
-            min_floor = self.building_config.get("min_floor", 0)
-
-        # Determine max_floor if num_floors is not specified
-        if num_floors is None:
-            # Try to get max_floor from building_config
-            max_floor = self.building_config.get("max_floor")
-
-            # If max_floor is not in building_config, calculate it
-            if max_floor is None:
-                max_floor = self._calculate_max_floor()
-        else:
-            # If num_floors is specified, calculate max_floor
-            max_floor = min_floor + num_floors - 1
-
-        # Render each floor, including basement floors
-        for floor in range(min_floor, max_floor + 1):
-            fig, ax = self.render_floor_plan(floor=floor)
-
-            # Name for basement floors should be clear
-            if floor < 0:
-                floor_name = f"basement{abs(floor)}"
-            else:
-                floor_name = f"floor{floor}"
-
-            filename = os.path.join(output_dir, f"{prefix}_{floor_name}.png")
-            fig.savefig(filename, dpi=300, bbox_inches="tight")
-            plt.close(fig)
-
-    def _calculate_max_floor(self) -> int:
-        """
-        Calculate the maximum floor occupied by rooms.
-
-        Returns:
-            int: Maximum floor number
-        """
-        max_z = 0
-        min_z = 0  # Add tracking for minimum z value
-
-        for _, room_data in self.layout.rooms.items():
-            _, _, z = room_data["position"]
-            _, _, h = room_data["dimensions"]
-            max_z = max(max_z, z + h)
-            min_z = min(min_z, z)  # Track lowest point
-
-        floor_height = self.building_config["floor_height"]
-
-        # Calculate max floor
-        max_floor = int(np.ceil(max_z / floor_height)) - 1
-
-        # Calculate min floor (could be negative for basement)
-        min_floor = int(np.floor(min_z / floor_height))
-
-        # Update the min_floor in building_config if needed
-        if min_floor < self.building_config.get("min_floor", 0):
-            self.building_config["min_floor"] = min_floor
-
-        return max_floor
 
     def _draw_bounding_box(self, ax):
         """Draw the building bounding box."""
@@ -357,12 +258,8 @@ class LayoutRenderer:
         Returns:
             tuple: (vertices, faces) for the bounding box
         """
-        # Get min_floor from building_config
-        min_floor = self.building_config.get("min_floor", 0)
-        floor_height = self.building_config.get("floor_height", 4.0)
-
-        # Calculate minimum z to include basement floors
-        min_z = min(0, min_floor * floor_height)
+        # Calculate minimum z based on min_floor
+        min_z = self.min_floor * self.floor_height
 
         # Vertices of the bounding box, including basement if needed
         vertices = [
@@ -443,16 +340,35 @@ class LayoutRenderer:
         x, y, _ = room_data["position"]
         w, l, _ = room_data["dimensions"]
 
-        # Draw room rectangle
-        rect = plt.Rectangle(
-            (x, y),
-            w,
-            l,
-            facecolor=style["face_color"],
-            alpha=style["alpha"],
-            edgecolor=style["edge_color"],
-            linewidth=style["linewidth"],
-        )
+        # Check if this room overlaps with others
+        has_overlaps = "overlaps_with" in room_data and room_data["overlaps_with"]
+
+        # If room has overlaps, use a special hatch pattern to indicate it
+        if has_overlaps:
+            # Highlighted edge to indicate overlap
+            rect = plt.Rectangle(
+                (x, y),
+                w,
+                l,
+                facecolor=style["face_color"],
+                alpha=style["alpha"],
+                edgecolor=style["edge_color"],
+                # edgecolor="red",
+                linewidth=style["linewidth"],
+                # hatch="//",  # Add hatch pattern to indicate overlap
+            )
+        else:
+            # Regular room rectangle
+            rect = plt.Rectangle(
+                (x, y),
+                w,
+                l,
+                facecolor=style["face_color"],
+                alpha=style["alpha"],
+                edgecolor=style["edge_color"],
+                linewidth=style["linewidth"],
+            )
+
         ax.add_patch(rect)
 
     def _get_room_geometry(self, room_data: Dict[str, Any]):
@@ -604,7 +520,7 @@ class LayoutRenderer:
         """
         # First try to get name from metadata (highest priority)
         metadata = room_data.get("metadata", {})
-        if "original_name" in metadata:
+        if isinstance(metadata, dict) and "original_name" in metadata:
             return metadata["original_name"]
 
         # Try room type as it shows the program purpose (preferred for visualization)
@@ -630,9 +546,8 @@ class LayoutRenderer:
             show_labels: Whether to show room labels
             highlight_rooms: Optional list of room IDs to highlight
         """
-        floor_height = self.building_config.get("floor_height", 5.0)
-        z_min = floor * floor_height
-        z_max = (floor + 1) * floor_height
+        z_min = floor * self.floor_height
+        z_max = (floor + 1) * self.floor_height
 
         # Get rooms for this floor
         rooms_on_floor = self._get_rooms_on_floor(floor, z_min, z_max)
@@ -683,6 +598,7 @@ class LayoutRenderer:
                 x, y, z = room_data["position"]
                 w, l, h = room_data["dimensions"]
 
+                # Vertical circulation appears on any floor it passes through
                 if (z <= z_min and z + h >= z_max) or (z >= z_min and z < z_max):
                     circulation_rooms.append(room_id)
                     continue
@@ -747,6 +663,91 @@ class LayoutRenderer:
         ax.set_xlim(x_mid - max_range / 2, x_mid + max_range / 2)
         ax.set_ylim(y_mid - max_range / 2, y_mid + max_range / 2)
         ax.set_zlim(z_mid - max_range / 2, z_mid + max_range / 2)
+
+    def save_renders(
+        self,
+        output_dir: str = "renders",
+        prefix: str = "layout",
+        include_3d: bool = True,
+        include_floor_plans: bool = True,
+        num_floors: int = None,
+        min_floor: int = None,
+    ):
+        """
+        Save renders to disk.
+
+        Args:
+            output_dir: Directory to save renders in
+            prefix: Filename prefix
+            include_3d: Whether to include 3D render
+            include_floor_plans: Whether to include floor plans
+            num_floors: Number of floors to render (if None, detect automatically)
+            min_floor: Minimum floor to render (if None, use building_config or default to 0)
+        """
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Save 3D render
+        if include_3d:
+            self._save_3d_render(output_dir, prefix)
+
+        # Save floor plans
+        if include_floor_plans:
+            self._save_floor_plans(output_dir, prefix, num_floors, min_floor)
+
+    def _save_3d_render(self, output_dir: str, prefix: str):
+        """
+        Save 3D render to disk.
+
+        Args:
+            output_dir: Directory to save renders in
+            prefix: Filename prefix
+        """
+        fig, ax = self.render_3d()
+        filename = os.path.join(output_dir, f"{prefix}_3d.png")
+        fig.savefig(filename, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    def _save_floor_plans(
+        self,
+        output_dir: str,
+        prefix: str,
+        num_floors: Optional[int] = None,
+        min_floor: Optional[int] = None,
+    ):
+        """
+        Save floor plans to disk.
+
+        Args:
+            output_dir: Directory to save renders in
+            prefix: Filename prefix
+            num_floors: Number of floors to render
+            min_floor: Minimum floor to render
+        """
+        # Use instance min_floor if not provided
+        if min_floor is None:
+            min_floor = self.min_floor
+
+        # Determine max_floor if num_floors is not specified
+        if num_floors is None:
+            max_floor = self.max_floor
+        else:
+            # If num_floors is specified, calculate max_floor
+            max_floor = min_floor + num_floors - 1
+
+        # Render each floor, including basement floors
+        for floor in range(min_floor, max_floor + 1):
+            fig, ax = self.render_floor_plan(floor=floor)
+
+            # Name for basement floors should be clear
+            if floor < 0:
+                floor_name = f"basement{abs(floor)}"
+            else:
+                floor_name = f"floor{floor}"
+
+            filename = os.path.join(output_dir, f"{prefix}_{floor_name}.png")
+            fig.savefig(filename, dpi=300, bbox_inches="tight")
+            plt.close(fig)
 
     def create_room_legend(self, ax=None, fig=None):
         """Create a legend for room types."""

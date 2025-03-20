@@ -10,9 +10,7 @@
       "min_width": 12.0,
       "min_height": 4.5,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "entrance"
-      ],
+      "requires_adjacency": ["entrance"],
       "floor": 0
     },
     "retail": {
@@ -25,9 +23,7 @@
       "min_width": 8.0,
       "min_height": 3.5,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "lobby"
-      ],
+      "requires_adjacency": ["lobby"],
       "floor": 0
     },
     "service_areas": {
@@ -40,9 +36,7 @@
       "min_width": 6.0,
       "min_height": 3.0,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "lobby"
-      ],
+      "requires_adjacency": ["lobby"],
       "floor": 0
     },
     "logistics_reserve": {
@@ -51,10 +45,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_separation": [
-        "guest_room",
-        "meeting_room"
-      ],
+      "requires_separation": ["guest_room", "meeting_room"],
       "floor": -1
     }
   },
@@ -70,13 +61,8 @@
       "min_width": 20.0,
       "min_height": 4.0,
       "requires_exhaust": true,
-      "requires_adjacency": [
-        "restaurants"
-      ],
-      "requires_separation": [
-        "guest_room",
-        "meeting_room"
-      ],
+      "requires_adjacency": ["restaurants"],
+      "requires_separation": ["guest_room", "meeting_room"],
       "floor": 0
     },
     "restaurants": {
@@ -92,10 +78,7 @@
       "min_width": 15.0,
       "min_height": 4.5,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "kitchen",
-        "lobby"
-      ],
+      "requires_adjacency": ["kitchen", "lobby"],
       "floor": 0
     },
     "other": {
@@ -108,9 +91,7 @@
       "min_width": 5.0,
       "min_height": 4.0,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "restaurants"
-      ],
+      "requires_adjacency": ["restaurants"],
       "floor": 0
     },
     "logistics_reserve": {
@@ -119,10 +100,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_separation": [
-        "guest_room",
-        "meeting_room"
-      ],
+      "requires_separation": ["guest_room", "meeting_room"],
       "floor": -1
     }
   },
@@ -136,13 +114,8 @@
       "min_width": 20.0,
       "min_height": 5.0,
       "requires_column_free": true,
-      "requires_adjacency": [
-        "pre_function"
-      ],
-      "requires_separation": [
-        "kitchen",
-        "mechanical"
-      ],
+      "requires_adjacency": ["pre_function"],
+      "requires_separation": ["kitchen", "mechanical"],
       "floor": 0
     },
     "multipurpose_hall": {
@@ -157,13 +130,8 @@
       "min_width": 10.0,
       "min_height": 4.0,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "pre_function"
-      ],
-      "requires_separation": [
-        "kitchen",
-        "mechanical"
-      ],
+      "requires_adjacency": ["pre_function"],
+      "requires_separation": ["kitchen", "mechanical"],
       "floor": 0
     },
     "small_meeting_rooms": {
@@ -178,9 +146,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "pre_function"
-      ],
+      "requires_adjacency": ["pre_function"],
       "floor": 0
     },
     "vip_lounge": {
@@ -189,9 +155,7 @@
       "min_width": 8.0,
       "min_height": 3.5,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "ballroom"
-      ],
+      "requires_adjacency": ["ballroom"],
       "floor": 0
     },
     "other": {
@@ -204,10 +168,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "ballroom",
-        "meeting_room"
-      ],
+      "requires_adjacency": ["ballroom", "meeting_room"],
       "floor": 0
     },
     "logistics_reserve": {
@@ -216,10 +177,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_separation": [
-        "guest_room",
-        "lobby"
-      ],
+      "requires_separation": ["guest_room", "lobby"],
       "floor": -1
     }
   },
@@ -237,9 +195,7 @@
       "min_height": 5.0,
       "requires_natural_light": true,
       "requires_column_free": true,
-      "requires_adjacency": [
-        "fitness"
-      ],
+      "requires_adjacency": ["fitness"],
       "floor": 0
     },
     "gym": {
@@ -248,9 +204,7 @@
       "min_width": 10.0,
       "min_height": 4.0,
       "requires_natural_light": true,
-      "requires_adjacency": [
-        "pool"
-      ],
+      "requires_adjacency": ["pool"],
       "floor": 0
     },
     "beauty_shop": {
@@ -259,9 +213,7 @@
       "min_width": 8.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "lobby"
-      ],
+      "requires_adjacency": ["lobby"],
       "floor": 0
     },
     "billiards_room": {
@@ -278,9 +230,7 @@
       "min_width": 15.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_separation": [
-        "meeting"
-      ],
+      "requires_separation": ["meeting"],
       "floor": 0
     },
     "logistics_reserve": {
@@ -289,10 +239,7 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_separation": [
-        "guest_room",
-        "lobby"
-      ],
+      "requires_separation": ["guest_room", "lobby"],
       "floor": -1
     }
   },
@@ -308,9 +255,7 @@
       "min_width": 6.0,
       "min_height": 3.5,
       "requires_natural_light": true,
-      "requires_separation": [
-        "entertainment"
-      ],
+      "requires_separation": ["entertainment"],
       "floor": 1
     },
     "staff_facilities": {
@@ -326,9 +271,7 @@
       "min_width": 10.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "office"
-      ],
+      "requires_adjacency": ["office"],
       "floor": 1
     },
     "miscellaneous_services": {
@@ -350,9 +293,7 @@
       "min_width": 8.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "staff_area"
-      ],
+      "requires_adjacency": ["staff_area"],
       "floor": 1
     }
   },
@@ -374,13 +315,8 @@
       "min_width": 5.0,
       "min_height": 3.5,
       "requires_natural_light": false,
-      "requires_adjacency": [
-        "mechanical"
-      ],
-      "requires_separation": [
-        "guest_room",
-        "public"
-      ],
+      "requires_adjacency": ["mechanical"],
+      "requires_separation": ["guest_room", "public"],
       "floor": -2
     },
     "equipment_rooms": {
@@ -449,10 +385,8 @@
       "min_width": 30.0,
       "min_height": 3.0,
       "requires_column_spacing": true,
-      "requires_adjacency": [
-        "vertical_circulation"
-      ],
-      "floor": -2
+      "requires_adjacency": ["vertical_circulation"],
+      "floor": -1
     }
   }
 }

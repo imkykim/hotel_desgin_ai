@@ -317,7 +317,8 @@ def get_design_constraints() -> Dict[str, Any]:
 
 def create_room_objects_from_program(program_config="default") -> List[Dict[str, Any]]:
     """
-    Create room objects from program requirements with improved floor distribution.
+    Create room objects from program requirements with improved flexibility.
+    Adapts to changes in building configuration and program requirements.
 
     Args:
         program_config: Name of the program configuration file to use
@@ -337,36 +338,21 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
     structural_grid_y = building.get("structural_grid_y", 8.0)
     min_floor = building.get("min_floor", -1)
     max_floor = building.get("max_floor", 3)
-
-    # Define floor mapping for various room types
-    default_floor_mapping = {
-        # Ground floor (public access)
-        "entrance": 0,
-        "lobby": 0,
-        "restaurant": 0,
-        "retail": 0,
-        "service": 0,
-        "ballroom": 0,
-        "meeting_room": 0,
-        "food_service": 0,
-        "pool": 0,
-        # Upper floors
-        "guest_room": min(1, max_floor),
-        "office": min(1, max_floor),
-        "staff_area": min(1, max_floor),
-        # Basement
-        "parking": min_floor,
-        "mechanical": min_floor,
-        "maintenance": min_floor,
-        "back_of_house": min_floor,
-        "kitchen": 0,  # could be basement or ground
-    }
+    floor_capacity = {}
 
     # Building area for floor capacity calculations
     building_area = building.get("width", 80.0) * building.get("length", 100.0)
-    floor_capacity = {
-        floor: building_area * 0.7 for floor in range(min_floor, max_floor + 1)
-    }
+
+    # Create floor capacity dict dynamically based on the floor range
+    for floor in range(min_floor, max_floor + 1):
+        # Adjust capacity based on floor type (reduced for basement, etc.)
+        if floor < 0:
+            # Basements typically can use more of the floor area
+            floor_capacity[floor] = building_area * 0.85
+        else:
+            # Above-ground floors have standard capacity
+            floor_capacity[floor] = building_area * 0.7
+
     floor_area_used = {floor: 0.0 for floor in range(min_floor, max_floor + 1)}
 
     # Create rooms from program requirements
@@ -375,8 +361,9 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
 
     for department_key, department in program.items():
         for space_key, space in department.items():
-            # Skip logistics reserves for initial design
-            if "logistics_reserve" in space_key:
+            # Allow configuration to specify whether to skip logistics reserves
+            skip_logistics = building.get("skip_logistics_reserve", True)
+            if skip_logistics and "logistics_reserve" in space_key:
                 continue
 
             area = space["area"]
@@ -386,71 +373,55 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
             room_type_def = room_types.get(room_type, {})
             dimensions = room_type_def.get("dimensions", {})
 
+            # Get minimum dimensions from either the space or the room type definition
             min_width = space.get("min_width", dimensions.get("width", 5.0))
             min_height = space.get("min_height", dimensions.get("height", 3.5))
 
-            # Determine floor assignment
+            # Determine floor assignment - respect the floor specified in the program if available
             floor = space.get("floor")
-            if floor is None:
-                # Use default mapping with balancing
-                default_floor = default_floor_mapping.get(room_type)
 
-                if default_floor is not None:
-                    # Check if default floor is over capacity
-                    if (
-                        floor_area_used[default_floor] + area
-                        > floor_capacity[default_floor]
-                    ):
-                        # Find alternative floor with capacity
-                        alternative_floors = _get_alternative_floors(
-                            room_type, min_floor, max_floor
-                        )
+            # Create a more complete metadata dictionary
+            metadata = {
+                "original_name": space_key,
+                "department": department_key,
+            }
 
-                        # Choose best alternative
-                        for alt_floor in sorted(
-                            alternative_floors,
-                            key=lambda f: floor_area_used[f] / floor_capacity[f],
-                        ):
-                            if (
-                                floor_area_used[alt_floor] + area
-                                <= floor_capacity[alt_floor]
-                            ):
-                                floor = alt_floor
-                                break
-                        else:
-                            # No good alternative, use default
-                            floor = default_floor
-                    else:
-                        floor = default_floor
-                else:
-                    # If no default mapping, distribute evenly
-                    floor_usage = [
-                        (f, floor_area_used[f] / floor_capacity[f])
-                        for f in range(min_floor, max_floor + 1)
-                    ]
-                    floor_usage.sort(key=lambda x: x[1])  # Sort by usage ratio
-                    floor = floor_usage[0][0]  # Take least used floor
+            # Add any additional metadata from the space
+            for key, value in space.items():
+                if key not in [
+                    "area",
+                    "room_type",
+                    "min_width",
+                    "min_height",
+                    "floor",
+                    "details",
+                    "requires_natural_light",
+                    "requires_adjacency",
+                    "requires_separation",
+                ]:
+                    metadata[key] = value
 
-            # Calculate dimensions - try to align with structural grid
-            width, length = _calculate_room_dimensions(
-                area, min_width, structural_grid_x, structural_grid_y
-            )
-            height = min_height
-
-            # Update floor area tracking
-            floor_area_used[floor] += area
+            # If floor is specified, include it in the metadata
+            if floor is not None:
+                metadata["floor"] = floor
 
             # Check if details are provided
             if "details" in space:
                 # Create rooms for each detailed space
                 for detail_key, detail_area in space["details"].items():
-                    # Skip very small details
-                    if detail_area < 10:
+                    # Skip very small details or use a minimum area
+                    if detail_area < 5:
                         continue
 
+                    # Calculate appropriate dimensions based on area and constrains
                     detail_width, detail_length = _calculate_room_dimensions(
                         detail_area, min_width, structural_grid_x, structural_grid_y
                     )
+
+                    # Create detailed metadata
+                    detail_metadata = metadata.copy()
+                    detail_metadata["subspace_name"] = detail_key
+                    detail_metadata["original_name"] = f"{space_key} - {detail_key}"
 
                     # Create room dictionary
                     room = {
@@ -458,63 +429,171 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                         "name": f"{detail_key}",
                         "width": detail_width,
                         "length": detail_length,
-                        "height": height,
+                        "height": min_height,
                         "room_type": room_type,
                         "department": department_key,
                         "requires_natural_light": space.get(
                             "requires_natural_light", False
                         ),
                         "requires_adjacency": space.get("requires_adjacency", []),
+                        "requires_separation": space.get("requires_separation", []),
                         "floor": floor,
-                        "metadata": {
-                            "original_name": detail_key,
-                            "department": department_key,
-                        },
+                        "metadata": detail_metadata,
                     }
                     all_rooms.append(room)
                     room_id += 1
+
+                    # Update floor area tracking if floor is specified
+                    if floor is not None:
+                        floor_area_used[floor] += detail_area
             else:
-                # Create single room for this space
+                # Calculate appropriate dimensions
+                width, length = _calculate_room_dimensions(
+                    area, min_width, structural_grid_x, structural_grid_y
+                )
+
+                # Create room dictionary
                 room = {
                     "id": room_id,
                     "name": f"{space_key}",
                     "width": width,
                     "length": length,
-                    "height": height,
+                    "height": min_height,
                     "room_type": room_type,
                     "department": department_key,
                     "requires_natural_light": space.get(
                         "requires_natural_light", False
                     ),
                     "requires_adjacency": space.get("requires_adjacency", []),
+                    "requires_separation": space.get("requires_separation", []),
                     "floor": floor,
-                    "metadata": {
-                        "original_name": space_key,
-                        "department": department_key,
-                    },
+                    "metadata": metadata,
                 }
                 all_rooms.append(room)
                 room_id += 1
 
+                # Update floor area tracking if floor is specified
+                if floor is not None:
+                    floor_area_used[floor] += area
+
+    # Print floor usage summary to help with debugging
+    print("\nFloor utilization in program requirements:")
+    for floor in sorted(floor_area_used.keys()):
+        capacity = floor_capacity.get(floor, 0)
+        usage = floor_area_used.get(floor, 0)
+        percentage = (usage / capacity * 100) if capacity > 0 else 0
+        floor_name = "Basement" if floor < 0 else f"Floor {floor}"
+        print(
+            f"  {floor_name}: {usage:.1f} m² used of {capacity:.1f} m² ({percentage:.1f}%)"
+        )
+
     return all_rooms
 
 
-def _get_alternative_floors(room_type, min_floor, max_floor):
-    """Get alternative floors for a room type when default floor is full"""
-    if room_type == "guest_room":
-        # Guest rooms can go on any upper floor
-        return list(range(1, max_floor + 1))
-    elif room_type in ["office", "staff_area"]:
-        # Office spaces can go on any upper floor
-        return list(range(1, max_floor + 1))
-    elif room_type in ["mechanical", "maintenance", "back_of_house"]:
-        # Service spaces can go in basement or upper floors
-        return [min_floor] + list(range(2, max_floor + 1))
-    elif room_type in ["meeting_room", "food_service"]:
-        # These can go on ground or 1st floor
-        return [0, 1]
+def _calculate_room_dimensions(area, min_width, grid_x, grid_y):
+    """
+    Calculate optimal room dimensions based on area and constraints.
+    Enhanced to better align with structural grid.
+
+    Args:
+        area: Required area in square meters
+        min_width: Minimum width in meters
+        grid_x: X structural grid spacing
+        grid_y: Y structural grid spacing
+
+    Returns:
+        Tuple of (width, length) in meters
+    """
+    # Ensure area is positive
+    area = max(1.0, area)
+
+    # For very large areas, align with structural grid
+    if area > 300:
+        # Find dimensions that are multiples of structural grid
+        grid_multiplier_w = max(1, round(min_width / grid_x))
+        width = grid_multiplier_w * grid_x
+
+        # Calculate length based on required area
+        length = math.ceil(area / width)
+
+        # Adjust length to grid if possible
+        grid_multiplier_l = max(1, round(length / grid_y))
+        grid_length = grid_multiplier_l * grid_y
+
+        # If grid_length is reasonably close to the required length, use it
+        if 0.8 <= (grid_length / length) <= 1.2:
+            length = grid_length
     else:
-        # For other types, check all floors
+        # For smaller rooms, use more flexible dimensions
+        width = max(min_width, math.sqrt(area / 2))  # Avoid excessively narrow rooms
+        length = area / width
+
+        # Round to nearest half meter for better placement
+        width = round(width * 2) / 2
+        length = round(length * 2) / 2
+
+        # Ensure minimum width
+        if width < min_width:
+            width = min_width
+            length = area / width
+
+        # If length is too long compared to width, adjust
+        if length > 3 * width:
+            width = math.sqrt(area)
+            length = area / width
+
+            # Round again
+            width = round(width * 2) / 2
+            length = round(length * 2) / 2
+
+    # Ensure width >= min_width
+    width = max(width, min_width)
+
+    # Recalculate length to ensure we have at least the required area
+    actual_area = width * length
+    if actual_area < area:
+        # Increase length to meet area requirement
+        length = area / width
+
+    return width, length
+
+
+def _get_alternative_floors(room_type, min_floor, max_floor):
+    """
+    Get alternative floors for a room type when default floor is full.
+    Dynamically adapts to the building's floor range.
+
+    Args:
+        room_type: Type of room
+        min_floor: Minimum floor
+        max_floor: Maximum floor
+
+    Returns:
+        List of alternative floor numbers
+    """
+    # Define floor ranges for different room categories
+    habitable_floors = [f for f in range(max(0, min_floor), max_floor + 1)]
+    upper_floors = [f for f in range(1, max_floor + 1)]
+    basement_floors = [f for f in range(min_floor, 0)]
+
+    if room_type == "guest_room":
+        # Guest rooms preferably on upper floors, but could go on ground floor if needed
+        return upper_floors + [0] if upper_floors else [max(0, min_floor)]
+
+    elif room_type in ["office", "staff_area"]:
+        # Office spaces preferably on upper floors or ground
+        return upper_floors + [0] if upper_floors else [max(0, min_floor)]
+
+    elif room_type in ["mechanical", "maintenance", "back_of_house", "parking"]:
+        # Service spaces preferably in basement, then upper floors
+        return basement_floors + [max(0, min_floor)] + upper_floors
+
+    elif room_type in ["meeting_room", "food_service", "restaurant", "retail"]:
+        # Public areas preferably on ground or 1st floor
+        return [0, 1] if 1 <= max_floor else [max(0, min_floor)]
+
+    else:
+        # For other types, try all floors
         return list(range(min_floor, max_floor + 1))
 
 

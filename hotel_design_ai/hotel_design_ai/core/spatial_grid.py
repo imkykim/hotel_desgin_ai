@@ -6,29 +6,50 @@ class SpatialGrid:
     """
     3D spatial representation system for hotel layouts.
     Uses a voxel-based grid to represent spaces.
+    Enhanced to support basement floors properly.
     """
 
     def __init__(
-        self, width: float, length: float, height: float, grid_size: float = 1.0
+        self,
+        width: float,
+        length: float,
+        height: float,
+        grid_size: float = 1.0,
+        min_floor: int = -2,
+        floor_height: float = 5.0,
     ):
         """
-        Initialize a 3D spatial grid.
+        Initialize a 3D spatial grid with support for basement floors.
 
         Args:
             width: Total width of the bounding box in meters
             length: Total length of the bounding box in meters
             height: Total height of the bounding box in meters
             grid_size: Size of each grid cell in meters
+            min_floor: Lowest basement floor (negative number)
+            floor_height: Height of each floor in meters
         """
         self.width = width
         self.length = length
         self.height = height
         self.grid_size = grid_size
+        self.min_floor = min_floor
+        self.floor_height = floor_height
+
+        # Calculate total height including basement
+        total_height = height
+        if min_floor < 0:
+            total_height += abs(min_floor) * floor_height
 
         # Calculate grid dimensions
         self.width_cells = int(width / grid_size)
         self.length_cells = int(length / grid_size)
-        self.height_cells = int(height / grid_size)
+        self.height_cells = int(total_height / grid_size)
+
+        # Calculate z-offset for converting between real coordinates and grid indices
+        self.z_offset = 0
+        if min_floor < 0:
+            self.z_offset = int(abs(min_floor) * floor_height / grid_size)
 
         # Initialize 3D grid (0 = empty space, positive int = room ID)
         self.grid = np.zeros(
@@ -38,7 +59,23 @@ class SpatialGrid:
         # Room metadata
         self.rooms = {}  # room_id -> metadata
 
-    # Modifications needed for SpatialGrid to support negative z-coordinates
+    def _convert_to_grid_indices(
+        self, x: float, y: float, z: float
+    ) -> Tuple[int, int, int]:
+        """
+        Convert real-world coordinates to grid indices, handling negative z-coordinates.
+
+        Args:
+            x, y, z: Real-world coordinates
+
+        Returns:
+            Tuple of grid indices (gx, gy, gz)
+        """
+        gx = int(x / self.grid_size)
+        gy = int(y / self.grid_size)
+        gz = int(z / self.grid_size) + self.z_offset  # Apply offset for basement
+
+        return gx, gy, gz
 
     def _is_valid_placement(
         self,
@@ -50,22 +87,16 @@ class SpatialGrid:
         grid_height: int,
     ) -> bool:
         """Check if a room can be placed at the specified location"""
-        # Check bounds - handling negative grid_z properly
+        # Check bounds
         if (
             grid_x < 0
             or grid_y < 0
+            or grid_z < 0  # Now grid_z should always be non-negative
             or grid_x + grid_width > self.width_cells
             or grid_y + grid_length > self.length_cells
             or grid_z + grid_height > self.height_cells
         ):
             return False
-
-        # Special handling for basement (negative z)
-        if grid_z < 0:
-            # Check if the negative index is within range
-            # For basement grid cells, we use negative indexing
-            if abs(grid_z) > self.height_cells:
-                return False
 
         # Check for collisions with existing rooms
         try:
@@ -82,6 +113,7 @@ class SpatialGrid:
             # If there's an index error, the room would be out of bounds
             return False
 
+    # Modify this section in SpatialGrid.place_room method
     def place_room(
         self,
         room_id: int,
@@ -94,10 +126,11 @@ class SpatialGrid:
         room_type: str = "generic",
         metadata: Dict = None,
         allow_overlap: List[str] = None,
-    ) -> bool:
+        force_placement: bool = False,  # Add force_placement parameter
+    ):
         """
         Place a room in the grid at the specified position.
-        Enhanced to allow overlapping with specific room types.
+        Enhanced to handle overlaps between parking and vertical circulation.
 
         Args:
             room_id: Unique identifier for the room
@@ -106,28 +139,29 @@ class SpatialGrid:
             room_type: Type of room (e.g., "guest_room", "lobby", etc.)
             metadata: Additional room information
             allow_overlap: List of room types this room can overlap with
+            force_placement: If True, force placement even if it would overlap
 
         Returns:
             bool: True if placement was successful, False otherwise
         """
         # Default allowed overlap types
         if allow_overlap is None:
-            # By default, vertical circulation can overlap with parking
+            # Allow bidirectional overlap between parking and vertical circulation
             if room_type == "vertical_circulation":
                 allow_overlap = ["parking"]
+            elif room_type == "parking":
+                allow_overlap = ["vertical_circulation"]
             else:
                 allow_overlap = []
 
-        # Convert to grid coordinates
-        grid_x = int(x / self.grid_size)
-        grid_y = int(y / self.grid_size)
-        grid_z = int(z / self.grid_size)
+        # Convert to grid coordinates using the helper method
+        grid_x, grid_y, grid_z = self._convert_to_grid_indices(x, y, z)
         grid_width = int(width / self.grid_size)
         grid_length = int(length / self.grid_size)
         grid_height = int(height / self.grid_size)
 
-        # Check if placement is valid, with special handling for allowed overlaps
-        if not self._is_valid_placement_with_overlaps(
+        # Check if placement is valid or force placement
+        if not force_placement and not self._is_valid_placement_with_overlaps(
             grid_x,
             grid_y,
             grid_z,
@@ -157,7 +191,24 @@ class SpatialGrid:
         except IndexError:
             return False  # Grid indices out of bounds
 
-        # Place the room in the grid, handling negative z-coordinates
+        # If force_placement, we need to update overlapping rooms
+        if force_placement and existing_room_ids:
+            # For each existing room, add this room to its overlaps
+            for existing_id in existing_room_ids:
+                if existing_id in self.rooms:
+                    # Skip if overlap is not allowed
+                    if not allow_overlap and room_type not in self.rooms.get(
+                        existing_id, {}
+                    ).get("allowed_overlap_types", []):
+                        continue
+
+                    # Add to overlaps
+                    if "overlaps_with" not in self.rooms[existing_id]:
+                        self.rooms[existing_id]["overlaps_with"] = [room_id]
+                    else:
+                        self.rooms[existing_id]["overlaps_with"].append(room_id)
+
+        # Place the room in the grid
         self.grid[
             grid_x : grid_x + grid_width,
             grid_y : grid_y + grid_length,
@@ -172,11 +223,12 @@ class SpatialGrid:
             "dimensions": (width, length, height),
             "grid_position": (grid_x, grid_y, grid_z),
             "grid_dimensions": (grid_width, grid_length, grid_height),
+            "allowed_overlap_types": allow_overlap,  # Store allowed overlap types
             **(metadata or {}),
         }
 
         # For rooms that can overlap, store the overlapping relationship
-        if existing_room_ids and allow_overlap:
+        if existing_room_ids:
             # Create a new metadata field or add to existing
             if "overlaps_with" not in self.rooms[room_id]:
                 self.rooms[room_id]["overlaps_with"] = list(existing_room_ids)
@@ -213,17 +265,12 @@ class SpatialGrid:
         if (
             grid_x < 0
             or grid_y < 0
+            or grid_z < 0  # Now grid_z should always be non-negative
             or grid_x + grid_width > self.width_cells
             or grid_y + grid_length > self.length_cells
             or grid_z + grid_height > self.height_cells
         ):
             return False
-
-        # Special handling for basement (negative z)
-        if grid_z < 0:
-            # Check if the negative index is within range
-            if abs(grid_z) > self.height_cells:
-                return False
 
         # Check for collisions with existing rooms
         try:
@@ -291,6 +338,10 @@ class SpatialGrid:
 
         return True
 
+    # Rest of the methods remain largely unchanged
+    # Just ensure any method that converts between real coordinates and grid coordinates
+    # uses the _convert_to_grid_indices method or applies the offset correctly
+
     def are_adjacent(self, room_id1: int, room_id2: int) -> bool:
         """Check if two rooms are adjacent to each other"""
         if room_id1 not in self.rooms or room_id2 not in self.rooms:
@@ -346,116 +397,6 @@ class SpatialGrid:
 
         return neighbors
 
-    """
-    Add helper methods to the SpatialGrid class to support our enhanced placement
-    """
-
-    # Add these methods to the SpatialGrid class
-
-    def get_rooms_on_floor(self, z: float) -> List[Dict]:
-        """
-        Get all rooms on a specific floor
-
-        Args:
-            z: Z-coordinate of the floor
-
-        Returns:
-            List of room dictionaries
-        """
-        floor_height = 5.0  # Standard floor height, should match your building config
-        floor = int(z / floor_height)
-        min_z = floor * floor_height
-        max_z = min_z + floor_height
-
-        rooms_on_floor = []
-        for room_id, room in self.rooms.items():
-            room_z = room["z"]
-            if min_z <= room_z < max_z:
-                rooms_on_floor.append(room)
-
-        return rooms_on_floor
-
-    """
-    Add the missing check_collision method to the SpatialGrid class
-    """
-
-    def check_collision(
-        self, x: float, y: float, z: float, width: float, length: float, height: float
-    ) -> bool:
-        """
-        Check if a proposed room placement would collide with any existing rooms.
-
-        Args:
-            x, y, z: Position coordinates
-            width, length, height: Room dimensions
-
-        Returns:
-            bool: True if there's a collision, False otherwise
-        """
-        # Convert to grid coordinates
-        grid_x = int(x / self.grid_size)
-        grid_y = int(y / self.grid_size)
-        grid_z = int(z / self.grid_size)
-        grid_width = int(width / self.grid_size)
-        grid_length = int(length / self.grid_size)
-        grid_height = int(height / self.grid_size)
-
-        # Check if out of bounds
-        if (
-            grid_x < 0
-            or grid_y < 0
-            or grid_z < 0
-            or grid_x + grid_width > self.width_cells
-            or grid_y + grid_length > self.length_cells
-            or grid_z + grid_height > self.height_cells
-        ):
-            return True
-
-        # Check if space is already occupied
-        try:
-            # Get the region of the grid where the room would be placed
-            target_region = self.grid[
-                grid_x : grid_x + grid_width,
-                grid_y : grid_y + grid_length,
-                grid_z : grid_z + grid_height,
-            ]
-
-            # If any cell in this region is non-zero, there's a collision
-            return not np.all(target_region == 0)
-        except IndexError:
-            # If there's an index error, the room would be out of bounds
-            return True
-
-    def get_all_rooms(self) -> List[Dict]:
-        """
-        Get all rooms in the layout
-
-        Returns:
-            List of room dictionaries
-        """
-        return list(self.rooms.values())
-
-    def calculate_space_utilization(self) -> float:
-        """
-        Calculate space utilization as a ratio
-
-        Returns:
-            Float: Ratio of used space to total space (0.0 to 1.0)
-        """
-        if not self.rooms:
-            return 0.0
-
-        # Calculate total building volume
-        building_volume = self.width * self.length * self.height
-
-        # Calculate used volume
-        used_volume = 0.0
-        for room in self.rooms.values():
-            room_volume = room["width"] * room["length"] * room["height"]
-            used_volume += room_volume
-
-        return used_volume / building_volume
-
     def get_exterior_rooms(self) -> List[int]:
         """Get rooms that are on the exterior of the building"""
         exterior_rooms = []
@@ -470,7 +411,8 @@ class SpatialGrid:
             if (
                 x == 0
                 or y == 0
-                or z == 0
+                or z
+                == 0  # This is now the absolute bottom of the grid, including basement
                 or x + w == self.width_cells
                 or y + l == self.length_cells
                 or z + h == self.height_cells
@@ -483,7 +425,7 @@ class SpatialGrid:
         """Calculate what percentage of the volume is utilized"""
         occupied_cells = np.count_nonzero(self.grid)
         total_cells = self.width_cells * self.length_cells * self.height_cells
-        return occupied_cells / total_cells
+        return occupied_cells / total_cells if total_cells > 0 else 0.0
 
     def to_dict(self) -> Dict:
         """Convert the spatial grid to a serializable dictionary"""
@@ -493,6 +435,8 @@ class SpatialGrid:
                 "length": self.length,
                 "height": self.height,
                 "grid_size": self.grid_size,
+                "min_floor": self.min_floor,
+                "floor_height": self.floor_height,
             },
             "rooms": self.rooms,
             "grid": self.grid.tolist(),
@@ -501,11 +445,14 @@ class SpatialGrid:
     @classmethod
     def from_dict(cls, data: Dict) -> "SpatialGrid":
         """Create a SpatialGrid from a dictionary"""
+        dimensions = data["dimensions"]
         grid = cls(
-            width=data["dimensions"]["width"],
-            length=data["dimensions"]["length"],
-            height=data["dimensions"]["height"],
-            grid_size=data["dimensions"]["grid_size"],
+            width=dimensions["width"],
+            length=dimensions["length"],
+            height=dimensions["height"],
+            grid_size=dimensions["grid_size"],
+            min_floor=dimensions.get("min_floor", -2),
+            floor_height=dimensions.get("floor_height", 5.0),
         )
 
         grid.grid = np.array(data["grid"])

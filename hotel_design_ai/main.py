@@ -200,13 +200,30 @@ def generate_rule_based_layout(
         building_config["structural_grid_x"],
         building_config["structural_grid_y"],
     )
+    min_floor = building_config.get("min_floor", -1)
+    max_floor = building_config.get("max_floor", 3)
+    floor_height = building_config.get("floor_height", 5.0)
+
+    # Create a spatial grid that properly supports basements
+    spatial_grid = SpatialGrid(
+        width=width,
+        length=length,
+        height=height,
+        grid_size=grid_size,
+        min_floor=min_floor,
+        floor_height=floor_height,
+    )
 
     # Initialize rule engine
     rule_engine = RuleEngine(
         bounding_box=(width, length, height),
         grid_size=grid_size,
         structural_grid=structural_grid,
+        building_config=building_config,  # Pass the complete building config
     )
+
+    # Replace the spatial grid to ensure basement support
+    rule_engine.spatial_grid = spatial_grid
 
     # Apply fixed positions if provided
     if fixed_positions:
@@ -231,6 +248,7 @@ def generate_rule_based_layout(
     return layout
 
 
+# Update similar patterns in generate_rl_layout and generate_hybrid_layout functions
 def generate_rl_layout(
     args, rooms: List[Room], fixed_positions: Optional[Dict[int, Any]] = None
 ):
@@ -247,9 +265,22 @@ def generate_rl_layout(
         building_config["structural_grid_x"],
         building_config["structural_grid_y"],
     )
+    min_floor = building_config.get("min_floor", -1)
+    max_floor = building_config.get("max_floor", 3)
+    floor_height = building_config.get("floor_height", 5.0)
 
     # Get RL parameters
     rl_params = get_rl_parameters()
+
+    # Create a spatial grid that properly supports basements
+    spatial_grid = SpatialGrid(
+        width=width,
+        length=length,
+        height=height,
+        grid_size=grid_size,
+        min_floor=min_floor,
+        floor_height=floor_height,
+    )
 
     # Initialize RL engine
     rl_engine = RLEngine(
@@ -259,8 +290,11 @@ def generate_rl_layout(
         exploration_rate=rl_params["training"]["exploration_rate"],
         learning_rate=rl_params["training"]["learning_rate"],
         discount_factor=rl_params["training"]["discount_factor"],
-        building_config=building_config,
+        building_config=building_config,  # Pass the complete building config
     )
+
+    # Replace the spatial grid to ensure basement support
+    rl_engine.spatial_grid = spatial_grid
 
     # Load pre-trained model if specified
     if args.rl_model and os.path.exists(args.rl_model):
@@ -503,12 +537,12 @@ def visualize_layout(layout: SpatialGrid, args):
         rooms_by_floor[floor].append(room_id)
 
     print("\nRoom distribution by floor:")
-    
+
     # Get floor range from building configuration
     building_config = get_building_envelope(args.building_config)
     min_floor = building_config.get("min_floor", -1)
     max_floor = building_config.get("max_floor", 3)
-    
+
     # Show all floors in the range
     for floor in range(min_floor, max_floor + 1):
         print(f"Floor {floor}: {len(rooms_by_floor.get(floor, []))} rooms")
