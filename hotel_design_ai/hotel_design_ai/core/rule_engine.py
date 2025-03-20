@@ -1,16 +1,13 @@
+"""
+Rule-based layout generation engine that uses architectural principles to create hotel layouts.
+"""
+
 from typing import Dict, List, Tuple, Optional, Set, Any, Union
 import numpy as np
 import random
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 from hotel_design_ai.models.room import Room
 from hotel_design_ai.core.constraints import create_default_constraints
-
-
-import numpy as np
-import random
-from typing import Dict, List, Tuple, Optional, Set, Any, Union
-from hotel_design_ai.core.spatial_grid import SpatialGrid
-from hotel_design_ai.models.room import Room
 
 
 class RuleEngine:
@@ -294,6 +291,7 @@ class RuleEngine:
     ) -> bool:
         """
         Place a room according to architectural constraints.
+        Enhanced to support a list of preferred floors.
 
         Args:
             room: Room to place
@@ -302,20 +300,40 @@ class RuleEngine:
         Returns:
             bool: True if placed successfully
         """
-        # First determine target floor - use the room's specified floor if available
-        floor = getattr(room, "floor", None)
+        # First try to extract preferred floors from the room's attributes
+        # Check different sources in order of precedence
 
-        # If no floor is specified on the room, check the metadata
-        if floor is None and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
+        # 1. Check for preferred_floors attribute
+        preferred_floors = None
+        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
+            # Use the preferred_floors attribute directly if available
+            preferred_floors = room.preferred_floors
 
-        # If still no floor, use floor preferences
-        if floor is None:
-            # Use default floor preference by room type
-            floor = self.floor_preferences.get(room.room_type)
+        # 2. Check for preferred_floors in metadata
+        elif (
+            hasattr(room, "metadata")
+            and room.metadata
+            and "preferred_floors" in room.metadata
+        ):
+            preferred_floors = room.metadata["preferred_floors"]
 
-            # If no preference, use appropriate default
-            if floor is None:
+        # 3. Check for a single floor attribute on the room
+        elif hasattr(room, "floor") and room.floor is not None:
+            # If it's a single floor value, convert to a list
+            preferred_floors = [room.floor]
+
+        # 4. Check for a single floor in metadata
+        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
+            preferred_floors = [room.metadata["floor"]]
+
+        # 5. Use default floor preferences by room type
+        if preferred_floors is None:
+            default_floor = self.floor_preferences.get(room.room_type)
+            if default_floor is not None:
+                # Convert single floor to list
+                preferred_floors = [default_floor]
+            else:
+                # Handle special case for guest rooms distribution
                 if room.room_type == "guest_room":
                     # Distribute guest rooms across upper floors starting from 1 or min habitable floor
                     start_floor = (
@@ -325,46 +343,86 @@ class RuleEngine:
                         len(placed_rooms_by_type.get("guest_room", []))
                         % max(1, self.max_floor - start_floor + 1)
                     )
+                    preferred_floors = [floor]
                 else:
                     # Default to ground floor or min habitable floor
-                    floor = max(0, self.min_floor)
+                    preferred_floors = [max(0, self.min_floor)]
 
-        # Calculate z coordinate
-        z = floor * self.floor_height
+        # Try each preferred floor in order
+        for floor_value in preferred_floors:
+            # Ensure floor_value is an integer
+            try:
+                floor_value = int(floor_value)
+                # Calculate z coordinate for this floor
+                z = floor_value * self.floor_height
 
-        # Handle special room types
-        if self._needs_special_handling(room.room_type):
-            return self._handle_special_room_type(room, placed_rooms_by_type, z)
-
-        # Try to place based on adjacency requirements
-        if room.room_type in self.adjacency_preferences:
-            adjacent_types = self.adjacency_preferences[room.room_type]
-            for adj_type in adjacent_types:
-                if adj_type in placed_rooms_by_type:
-                    position = self._find_position_adjacent_to(
-                        room, adj_type, placed_rooms_by_type, z
+                # Handle special room types
+                if self._needs_special_handling(room.room_type):
+                    success = self._handle_special_room_type(
+                        room, placed_rooms_by_type, z
                     )
-                    if position:
-                        x, y, z_pos = position
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=x,
-                            y=y,
-                            z=z_pos,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
+                    if success:
+                        return True
+                    else:
+                        # Continue to next floor if this floor failed for special handling
+                        continue
+            except (ValueError, TypeError):
+                # Skip this floor value if it can't be converted to an integer
+                print(
+                    f"Warning: Invalid floor value {floor_value} for room {room.name}, skipping"
+                )
+                continue
+            # Try to place based on adjacency requirements
+            if room.room_type in self.adjacency_preferences:
+                adjacent_types = self.adjacency_preferences[room.room_type]
+                for adj_type in adjacent_types:
+                    if adj_type in placed_rooms_by_type:
+                        position = self._find_position_adjacent_to(
+                            room, adj_type, placed_rooms_by_type, z
                         )
-                        if success:
-                            return True
+                        if position:
+                            x, y, z_pos = position
+                            success = self.spatial_grid.place_room(
+                                room_id=room.id,
+                                x=x,
+                                y=y,
+                                z=z_pos,
+                                width=room.width,
+                                length=room.length,
+                                height=room.height,
+                                room_type=room.room_type,
+                                metadata=room.metadata,
+                            )
+                            if success:
+                                return True
 
-        # Check if room needs exterior access
-        exterior_pref = self.exterior_preferences.get(room.room_type, 0)
-        if exterior_pref > 0:
-            # Try perimeter position
-            position = self._find_perimeter_position(room, floor)
+            # Check if room needs exterior access
+            exterior_pref = self.exterior_preferences.get(room.room_type, 0)
+            if exterior_pref > 0:
+                # Try perimeter position
+                position = self._find_perimeter_position(room, floor)
+                if position:
+                    x, y, z_pos = position
+                    success = self.spatial_grid.place_room(
+                        room_id=room.id,
+                        x=x,
+                        y=y,
+                        z=z_pos,
+                        width=room.width,
+                        length=room.length,
+                        height=room.height,
+                        room_type=room.room_type,
+                        metadata=room.metadata,
+                    )
+                    if success:
+                        return True
+
+                # If exterior is required but no position found, try next floor
+                if exterior_pref == 2:
+                    continue
+
+            # Try any position on this floor
+            position = self._find_position_on_floor(room, floor)
             if position:
                 x, y, z_pos = position
                 success = self.spatial_grid.place_room(
@@ -381,31 +439,13 @@ class RuleEngine:
                 if success:
                     return True
 
-            # If exterior is required but no position found, consider this a failure
-            if exterior_pref == 2:
-                return False
-
-        # Fall back to any position on the target floor
-        position = self._find_position_on_floor(room, floor)
-        if position:
-            x, y, z_pos = position
-            success = self.spatial_grid.place_room(
-                room_id=room.id,
-                x=x,
-                y=y,
-                z=z_pos,
-                width=room.width,
-                length=room.length,
-                height=room.height,
-                room_type=room.room_type,
-                metadata=room.metadata,
-            )
-            if success:
-                return True
-
-        # If preferred floor failed, try alternate floors
-        alternate_floors = self._get_alternate_floors(room.room_type, floor)
+        # If all preferred floors failed, try alternative floors
+        alternate_floors = self._get_alternate_floors(room.room_type, preferred_floors)
         for alt_floor in alternate_floors:
+            # Skip floors already tried in preferred_floors
+            if alt_floor in preferred_floors:
+                continue
+
             z_pos = alt_floor * self.floor_height
             position = self._find_position_on_floor(room, alt_floor)
             if position:
@@ -424,6 +464,7 @@ class RuleEngine:
                 if success:
                     return True
 
+        # If all attempts fail, report failure
         return False
 
     def _needs_special_handling(self, room_type: str) -> bool:
@@ -918,14 +959,16 @@ class RuleEngine:
 
         return None
 
-    def _get_alternate_floors(self, room_type: str, current_floor: int) -> List[int]:
+    def _get_alternate_floors(
+        self, room_type: str, used_floors: List[int]
+    ) -> List[int]:
         """
-        Get alternative floors for a room type if the preferred floor is full.
-        This is dynamically calculated based on the building's floor range.
+        Get alternative floors for a room type if the preferred floors are full.
+        Enhanced to avoid floors already tried.
 
         Args:
             room_type: Type of room
-            current_floor: Current floor that couldn't fit the room
+            used_floors: Floors already tried
 
         Returns:
             List of alternative floor numbers
@@ -937,35 +980,47 @@ class RuleEngine:
         upper_floors = [f for f in range(1, self.max_floor + 1)]
         basement_floors = [f for f in range(self.min_floor, min(0, self.max_floor + 1))]
 
-        # Skip the current floor since it's already tried
-        all_floors = [
-            f for f in range(self.min_floor, self.max_floor + 1) if f != current_floor
-        ]
+        # Get all floors to try
+        all_floors = list(range(self.min_floor, self.max_floor + 1))
 
+        # First remove the floors we've already tried
+        candidate_floors = [f for f in all_floors if f not in used_floors]
+
+        # If all floors have been tried, return empty list
+        if not candidate_floors:
+            return []
+
+        # Now prioritize floors based on room type
         if room_type == "guest_room":
             # Guest rooms preferably on upper floors, but could go on ground floor if needed
-            return [f for f in upper_floors if f != current_floor] + (
-                [0] if 0 != current_floor else []
+            return sorted(
+                candidate_floors,
+                key=lambda f: (-1 if f in upper_floors else 0 if f == 0 else 1),
             )
 
         elif room_type in ["office", "staff_area"]:
             # Office spaces preferably on upper floors or ground
-            return [f for f in upper_floors + [0] if f != current_floor]
+            return sorted(
+                candidate_floors,
+                key=lambda f: (-1 if f in upper_floors else 0 if f == 0 else 1),
+            )
 
         elif room_type in ["mechanical", "maintenance", "back_of_house", "parking"]:
             # Service spaces preferably in basement, then upper floors
-            return [f for f in basement_floors + habitable_floors if f != current_floor]
+            return sorted(
+                candidate_floors, key=lambda f: (-1 if f in basement_floors else 0)
+            )
 
         elif room_type in ["meeting_room", "food_service", "restaurant", "retail"]:
             # Public areas preferably on ground or 1st floor
-            floors_to_try = [0, 1] if 1 in habitable_floors else [0]
-            return [f for f in floors_to_try if f != current_floor] + [
-                f for f in all_floors if f not in floors_to_try
-            ]
+            priority_floors = [0, 1] if 1 in all_floors else [0]
+            return sorted(
+                candidate_floors, key=lambda f: (-1 if f in priority_floors else 0)
+            )
 
         else:
-            # For other types, try all available floors except current
-            return all_floors
+            # For other types, no particular ordering
+            return candidate_floors
 
     def _is_valid_position(
         self, x: float, y: float, z: float, width: float, length: float, height: float

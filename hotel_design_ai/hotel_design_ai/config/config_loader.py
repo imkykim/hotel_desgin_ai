@@ -8,7 +8,7 @@ import os
 import json
 import glob
 import math
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Union
 
 # Define paths to data directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -319,6 +319,7 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
     """
     Create room objects from program requirements with improved flexibility.
     Adapts to changes in building configuration and program requirements.
+    Now supports a list of preferred floors instead of just a single floor.
 
     Args:
         program_config: Name of the program configuration file to use
@@ -378,7 +379,14 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
             min_height = space.get("min_height", dimensions.get("height", 3.5))
 
             # Determine floor assignment - respect the floor specified in the program if available
+            # UPDATED: Now supports both a single floor integer and a list of floors
             floor = space.get("floor")
+            # If floor is a list, keep it as is; if it's a single integer, convert to a list
+            preferred_floors = (
+                floor
+                if isinstance(floor, list)
+                else ([floor] if floor is not None else None)
+            )
 
             # Create a more complete metadata dictionary
             metadata = {
@@ -401,9 +409,9 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                 ]:
                     metadata[key] = value
 
-            # If floor is specified, include it in the metadata
-            if floor is not None:
-                metadata["floor"] = floor
+            # If preferred_floors is specified, include it in the metadata
+            if preferred_floors is not None:
+                metadata["preferred_floors"] = preferred_floors
 
             # Check if details are provided
             if "details" in space:
@@ -437,14 +445,15 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                         ),
                         "requires_adjacency": space.get("requires_adjacency", []),
                         "requires_separation": space.get("requires_separation", []),
-                        "floor": floor,
+                        "floor": floor,  # Keep original floor value for compatibility
+                        "preferred_floors": preferred_floors,  # Add preferred_floors
                         "metadata": detail_metadata,
                     }
                     all_rooms.append(room)
                     room_id += 1
 
                     # Update floor area tracking if floor is specified
-                    if floor is not None:
+                    if floor is not None and not isinstance(floor, list):
                         floor_area_used[floor] += detail_area
             else:
                 # Calculate appropriate dimensions
@@ -466,14 +475,15 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                     ),
                     "requires_adjacency": space.get("requires_adjacency", []),
                     "requires_separation": space.get("requires_separation", []),
-                    "floor": floor,
+                    "floor": floor,  # Keep original floor value for compatibility
+                    "preferred_floors": preferred_floors,  # Add preferred_floors
                     "metadata": metadata,
                 }
                 all_rooms.append(room)
                 room_id += 1
 
                 # Update floor area tracking if floor is specified
-                if floor is not None:
+                if floor is not None and not isinstance(floor, list):
                     floor_area_used[floor] += area
 
     # Print floor usage summary to help with debugging
@@ -595,34 +605,6 @@ def _get_alternative_floors(room_type, min_floor, max_floor):
     else:
         # For other types, try all floors
         return list(range(min_floor, max_floor + 1))
-
-
-def _calculate_room_dimensions(area, min_width, grid_x, grid_y):
-    """Calculate optimal room dimensions based on area and constraints"""
-    if area > 300:
-        # Find dimensions that are multiples of structural grid
-        grid_multiplier_w = max(1, round(min_width / grid_x))
-        width = grid_multiplier_w * grid_x
-        length = math.ceil(area / width)
-
-        # Adjust length to grid if possible
-        grid_multiplier_l = max(1, round(length / grid_y))
-        grid_length = grid_multiplier_l * grid_y
-
-        # If grid_length is reasonably close, use it
-        if 0.8 <= (grid_length / length) <= 1.2:
-            length = grid_length
-    else:
-        # For smaller rooms, use more flexible dimensions
-        width = min_width
-        length = area / width
-
-        # If length is too long compared to width, adjust
-        if length > 2 * width:
-            width = (area / 2) ** 0.5
-            length = area / width
-
-    return width, length
 
 
 def save_default_files():
