@@ -320,11 +320,17 @@ class RuleEngine:
         # 3. Check for a single floor attribute on the room
         elif hasattr(room, "floor") and room.floor is not None:
             # If it's a single floor value, convert to a list
-            preferred_floors = [room.floor]
+            if isinstance(room.floor, list):
+                preferred_floors = room.floor
+            else:
+                preferred_floors = [room.floor]
 
         # 4. Check for a single floor in metadata
         elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            preferred_floors = [room.metadata["floor"]]
+            if isinstance(room.metadata["floor"], list):
+                preferred_floors = room.metadata["floor"]
+            else:
+                preferred_floors = [room.metadata["floor"]]
 
         # 5. Use default floor preferences by room type
         if preferred_floors is None:
@@ -372,6 +378,7 @@ class RuleEngine:
                     f"Warning: Invalid floor value {floor_value} for room {room.name}, skipping"
                 )
                 continue
+
             # Try to place based on adjacency requirements
             if room.room_type in self.adjacency_preferences:
                 adjacent_types = self.adjacency_preferences[room.room_type]
@@ -400,7 +407,7 @@ class RuleEngine:
             exterior_pref = self.exterior_preferences.get(room.room_type, 0)
             if exterior_pref > 0:
                 # Try perimeter position
-                position = self._find_perimeter_position(room, floor)
+                position = self._find_perimeter_position(room, floor_value)
                 if position:
                     x, y, z_pos = position
                     success = self.spatial_grid.place_room(
@@ -422,7 +429,7 @@ class RuleEngine:
                     continue
 
             # Try any position on this floor
-            position = self._find_position_on_floor(room, floor)
+            position = self._find_position_on_floor(room, floor_value)
             if position:
                 x, y, z_pos = position
                 success = self.spatial_grid.place_room(

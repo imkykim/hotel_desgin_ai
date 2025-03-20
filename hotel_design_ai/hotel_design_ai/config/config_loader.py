@@ -379,14 +379,13 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
             min_height = space.get("min_height", dimensions.get("height", 3.5))
 
             # Determine floor assignment - respect the floor specified in the program if available
-            # UPDATED: Now supports both a single floor integer and a list of floors
+            # Support both a single floor integer and a list of floors
             floor = space.get("floor")
-            # If floor is a list, keep it as is; if it's a single integer, convert to a list
-            preferred_floors = (
-                floor
-                if isinstance(floor, list)
-                else ([floor] if floor is not None else None)
-            )
+            # Ensure preferred_floors is available for the rule engine
+            if isinstance(floor, list):
+                preferred_floors = floor
+            else:
+                preferred_floors = [floor] if floor is not None else None
 
             # Create a more complete metadata dictionary
             metadata = {
@@ -409,9 +408,8 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                 ]:
                     metadata[key] = value
 
-            # If preferred_floors is specified, include it in the metadata
-            if preferred_floors is not None:
-                metadata["preferred_floors"] = preferred_floors
+            # Always include preferred_floors in the metadata
+            metadata["preferred_floors"] = preferred_floors
 
             # Check if details are provided
             if "details" in space:
@@ -445,16 +443,21 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                         ),
                         "requires_adjacency": space.get("requires_adjacency", []),
                         "requires_separation": space.get("requires_separation", []),
-                        "floor": floor,  # Keep original floor value for compatibility
+                        "floor": floor,  # Keep original floor value (can be int or list)
                         "preferred_floors": preferred_floors,  # Add preferred_floors
                         "metadata": detail_metadata,
                     }
                     all_rooms.append(room)
                     room_id += 1
 
-                    # Update floor area tracking if floor is specified
-                    if floor is not None and not isinstance(floor, list):
+                    # Update floor area tracking if floor is specified as a single int
+                    if isinstance(floor, int):
                         floor_area_used[floor] += detail_area
+                    elif isinstance(floor, list) and len(floor) > 0:
+                        # Just track on the first floor if it's a list
+                        first_floor = floor[0]
+                        if first_floor in floor_area_used:
+                            floor_area_used[first_floor] += detail_area
             else:
                 # Calculate appropriate dimensions
                 width, length = _calculate_room_dimensions(
@@ -475,16 +478,21 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
                     ),
                     "requires_adjacency": space.get("requires_adjacency", []),
                     "requires_separation": space.get("requires_separation", []),
-                    "floor": floor,  # Keep original floor value for compatibility
+                    "floor": floor,  # Keep original floor value (can be int or list)
                     "preferred_floors": preferred_floors,  # Add preferred_floors
                     "metadata": metadata,
                 }
                 all_rooms.append(room)
                 room_id += 1
 
-                # Update floor area tracking if floor is specified
-                if floor is not None and not isinstance(floor, list):
+                # Update floor area tracking if floor is specified as a single int
+                if isinstance(floor, int):
                     floor_area_used[floor] += area
+                elif isinstance(floor, list) and len(floor) > 0:
+                    # Just track on the first floor if it's a list
+                    first_floor = floor[0]
+                    if first_floor in floor_area_used:
+                        floor_area_used[first_floor] += area
 
     # Print floor usage summary to help with debugging
     print("\nFloor utilization in program requirements:")
@@ -566,45 +574,6 @@ def _calculate_room_dimensions(area, min_width, grid_x, grid_y):
         length = area / width
 
     return width, length
-
-
-def _get_alternative_floors(room_type, min_floor, max_floor):
-    """
-    Get alternative floors for a room type when default floor is full.
-    Dynamically adapts to the building's floor range.
-
-    Args:
-        room_type: Type of room
-        min_floor: Minimum floor
-        max_floor: Maximum floor
-
-    Returns:
-        List of alternative floor numbers
-    """
-    # Define floor ranges for different room categories
-    habitable_floors = [f for f in range(max(0, min_floor), max_floor + 1)]
-    upper_floors = [f for f in range(1, max_floor + 1)]
-    basement_floors = [f for f in range(min_floor, 0)]
-
-    if room_type == "guest_room":
-        # Guest rooms preferably on upper floors, but could go on ground floor if needed
-        return upper_floors + [0] if upper_floors else [max(0, min_floor)]
-
-    elif room_type in ["office", "staff_area"]:
-        # Office spaces preferably on upper floors or ground
-        return upper_floors + [0] if upper_floors else [max(0, min_floor)]
-
-    elif room_type in ["mechanical", "maintenance", "back_of_house", "parking"]:
-        # Service spaces preferably in basement, then upper floors
-        return basement_floors + [max(0, min_floor)] + upper_floors
-
-    elif room_type in ["meeting_room", "food_service", "restaurant", "retail"]:
-        # Public areas preferably on ground or 1st floor
-        return [0, 1] if 1 <= max_floor else [max(0, min_floor)]
-
-    else:
-        # For other types, try all floors
-        return list(range(min_floor, max_floor + 1))
 
 
 def save_default_files():
