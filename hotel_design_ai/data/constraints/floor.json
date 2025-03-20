@@ -86,28 +86,28 @@
   {
     "type": "floor",
     "room_type": "mechanical",
-    "floor": -1,
+    "floor": -2,
     "weight": 1.0,
     "description": "Mechanical spaces preferably in basement"
   },
   {
     "type": "floor",
     "room_type": "maintenance",
-    "floor": -1,
+    "floor": -2,
     "weight": 1.0,
     "description": "Maintenance spaces preferably in basement"
   },
   {
     "type": "floor",
     "room_type": "back_of_house",
-    "floor": -1,
+    "floor": -2,
     "weight": 1.0,
     "description": "Back of house preferably in basement"
   },
   {
     "type": "floor",
     "room_type": "parking",
-    "floor": -1,
+    "floor": -2,
     "weight": 3.0,
     "description": "Parking must be in basement"
   },

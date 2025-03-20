@@ -351,14 +351,14 @@ def create_room_objects_from_program(program_config="default") -> List[Dict[str,
         "food_service": 0,
         "pool": 0,
         # Upper floors
-        "guest_room": 1,
-        "office": 1,
-        "staff_area": 1,
+        "guest_room": min(1, max_floor),
+        "office": min(1, max_floor),
+        "staff_area": min(1, max_floor),
         # Basement
-        "parking": -1,
-        "mechanical": -1,
-        "maintenance": -1,
-        "back_of_house": -1,
+        "parking": min_floor,
+        "mechanical": min_floor,
+        "maintenance": min_floor,
+        "back_of_house": min_floor,
         "kitchen": 0,  # could be basement or ground
     }
 
