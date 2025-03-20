@@ -503,8 +503,15 @@ def visualize_layout(layout: SpatialGrid, args):
         rooms_by_floor[floor].append(room_id)
 
     print("\nRoom distribution by floor:")
-    for floor in sorted(rooms_by_floor.keys()):
-        print(f"Floor {floor}: {len(rooms_by_floor[floor])} rooms")
+    
+    # Get floor range from building configuration
+    building_config = get_building_envelope(args.building_config)
+    min_floor = building_config.get("min_floor", -1)
+    max_floor = building_config.get("max_floor", 3)
+    
+    # Show all floors in the range
+    for floor in range(min_floor, max_floor + 1):
+        print(f"Floor {floor}: {len(rooms_by_floor.get(floor, []))} rooms")
 
     try:
         # Create 3D visualization

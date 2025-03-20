@@ -212,7 +212,7 @@ class LayoutRenderer:
         ax.set_ylabel("Length (m)")
 
         # Set appropriate title based on floor number
-        floor_name = "Basement" if floor < 0 else f"Floor {floor}"
+        floor_name = f"Floor {floor}"
         ax.set_title(f"Floor Plan - {floor_name}")
 
         # Set axis limits
