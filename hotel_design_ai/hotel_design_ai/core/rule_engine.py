@@ -262,6 +262,7 @@ class RuleEngine:
     def place_with_fallback(self, room: Room) -> bool:
         """
         Place a room on its assigned floor, with fallback to ANY floor if necessary.
+        Special handling for vertical circulation elements.
 
         Args:
             room: Room object to place
@@ -274,11 +275,18 @@ class RuleEngine:
         min_floor = self.building_config.get("min_floor", -1)
         max_floor = self.building_config.get("max_floor", 3)
 
+        # Special handling for vertical circulation elements
+        if room.room_type == "vertical_circulation":
+            return self._place_vertical_circulation(
+                room, min_floor, max_floor, floor_height
+            )
+
         # Determine assigned floor (if any)
         assigned_floor = getattr(room, "floor", None)
 
         # Step 1: Try the assigned floor first (if specified)
         if assigned_floor is not None:
+            # Calculate z-coordinate from floor number, handling negative floors correctly
             z_pos = assigned_floor * floor_height
             # Find position on assigned floor
             position = self._find_best_position(room, {}, assigned_floor)
@@ -351,6 +359,32 @@ class RuleEngine:
 
         return False
 
+    def _find_best_position(
+        self, room: Room, placed_rooms_by_type: Dict[str, List[int]], target_floor: int
+    ) -> Optional[Tuple[float, float, float]]:
+        """
+        Find the best position for a room based on architectural rules.
+
+        Args:
+            room: Room to place
+            placed_rooms_by_type: Dictionary of already placed rooms by type
+            target_floor: Target floor to place the room on
+
+        Returns:
+            Optional[Tuple[float, float, float]]: Best (x, y, z) position or None if no valid position
+        """
+        # Convert floor to z coordinate - ensure negative floors become negative z coordinates
+        target_z = target_floor * self.floor_height
+
+        # Special handling based on room type
+        if room.room_type == "lobby":
+            return self._place_lobby(room, placed_rooms_by_type, target_z)
+        elif room.room_type == "guest_room":
+            return self._place_guest_room(room, placed_rooms_by_type, target_z)
+        else:
+            # Default placement logic for other room types
+            return self._place_general_room(room, placed_rooms_by_type, target_z)
+
     def _is_valid_position(
         self, x: float, y: float, z: float, width: float, length: float, height: float
     ) -> bool:
@@ -364,8 +398,7 @@ class RuleEngine:
         Returns:
             bool: True if position is valid, False otherwise
         """
-        # Check if position is within building bounds
-        # NOTE: Allow negative z for basement floors
+        # Check if position is within building bounds for x and y
         if x < 0 or y < 0 or x + width > self.width or y + length > self.length:
             return False
 
@@ -374,7 +407,7 @@ class RuleEngine:
         max_floor = self.building_config.get("max_floor", 3)
         floor_height = self.building_config.get("floor_height", 5.0)
 
-        # Calculate z bounds based on floor range
+        # Calculate z bounds based on floor range, properly handling negative floors
         min_z = min_floor * floor_height
         max_z = (max_floor + 1) * floor_height  # +1 for the ceiling of the top floor
 
@@ -386,6 +419,14 @@ class RuleEngine:
         grid_x = int(x / self.grid_size)
         grid_y = int(y / self.grid_size)
         grid_z = int(z / self.grid_size)
+
+        # Handle negative z coordinates for basement properly
+        if z < 0:
+            # Make sure grid_z is negative too
+            grid_z = int(z / self.grid_size)  # This might already be negative
+            if grid_z >= 0:  # Extra safety check
+                grid_z = -1  # Force it to be in basement grid cells
+
         grid_width = int(width / self.grid_size)
         grid_length = int(length / self.grid_size)
         grid_height = int(height / self.grid_size)
@@ -394,11 +435,14 @@ class RuleEngine:
         if (
             grid_x < 0
             or grid_y < 0
-            or grid_z < 0
             or grid_x + grid_width > self.spatial_grid.width_cells
             or grid_y + grid_length > self.spatial_grid.length_cells
             or grid_z + grid_height > self.spatial_grid.height_cells
         ):
+            return False
+
+        # Handle special case for basement: ensure grid_z is negative and within bounds
+        if grid_z < 0 and abs(grid_z) > self.spatial_grid.height_cells:
             return False
 
         # Check for collisions with existing rooms
@@ -416,31 +460,285 @@ class RuleEngine:
             # If there's an index error, the room would be out of bounds
             return False
 
-    def _find_best_position(
-        self, room: Room, placed_rooms_by_type: Dict[str, List[int]], target_floor: int
+    def _find_valid_position_on_floor(
+        self, room: Room, z: float
     ) -> Optional[Tuple[float, float, float]]:
+        """Find a valid position on a specific floor"""
+        grid_step_x = self.structural_grid[0]
+        grid_step_y = self.structural_grid[1]
+
+        # Try positions aligned with structural grid
+        # Start from the center and spiral outward for better space utilization
+        center_x = self.width / 2
+        center_y = self.length / 2
+
+        # Generate positions in a spiral pattern starting from center
+        positions = []
+        max_radius = max(self.width, self.length) / 2
+
+        for radius in range(0, int(max_radius) + 1, int(min(grid_step_x, grid_step_y))):
+            # Add positions in a rough "circle" at this radius
+            for angle in range(0, 360, 45):  # 45 degree increments
+                # Convert polar to cartesian coordinates
+                angle_rad = angle * 3.14159 / 180
+                x = center_x + radius * np.cos(angle_rad)
+                y = center_y + radius * np.sin(angle_rad)
+
+                # Snap to grid
+                x = round(x / grid_step_x) * grid_step_x
+                y = round(y / grid_step_y) * grid_step_y
+
+                # Ensure within bounds
+                x = max(0, min(x, self.width - room.width))
+                y = max(0, min(y, self.length - room.length))
+
+                positions.append((x, y))
+
+        # Remove duplicates
+        positions = list(set(positions))
+
+        # Try each position
+        for x, y in positions:
+            if self._is_valid_position(x, y, z, room.width, room.length, room.height):
+                return (x, y, z)
+
+        # If structural grid positions don't work, fall back to a finer grid
+        # Try positions at a finer grain
+        for x in range(0, int(self.width - room.width) + 1, int(self.grid_size)):
+            for y in range(0, int(self.length - room.length) + 1, int(self.grid_size)):
+                if self._is_valid_position(
+                    x, y, z, room.width, room.length, room.height
+                ):
+                    return (x, y, z)
+
+        # No valid position found on this floor
+        return None
+
+    def _place_vertical_circulation(
+        self, room: Room, min_floor: int, max_floor: int, floor_height: float
+    ) -> bool:
         """
-        Find the best position for a room based on architectural rules.
+        Special placement logic for vertical circulation elements (elevators, stairs)
+        that need to span multiple floors from basement to top floor.
 
         Args:
-            room: Room to place
-            placed_rooms_by_type: Dictionary of already placed rooms by type
-            target_floor: Target floor to place the room on
+            room: Vertical circulation room to place
+            min_floor: Minimum floor (usually basement)
+            max_floor: Maximum floor
+            floor_height: Height of each floor
 
         Returns:
-            Optional[Tuple[float, float, float]]: Best (x, y, z) position or None if no valid position
+            bool: True if placed successfully, False otherwise
         """
-        # Convert floor to z coordinate
-        target_z = target_floor * self.floor_height
+        # Calculate full height from min to max floor
+        total_floors = max_floor - min_floor + 1
+        total_height = total_floors * floor_height
 
-        # Special handling based on room type
-        if room.room_type == "lobby":
-            return self._place_lobby(room, placed_rooms_by_type, target_z)
-        elif room.room_type == "guest_room":
-            return self._place_guest_room(room, placed_rooms_by_type, target_z)
-        else:
-            # Default placement logic for other room types
-            return self._place_general_room(room, placed_rooms_by_type, target_z)
+        # Starting z-coordinate from the lowest floor (usually basement)
+        start_z = min_floor * floor_height
+
+        # Update the metadata to show this is a core element
+        if not room.metadata:
+            room.metadata = {}
+        room.metadata["is_core"] = True
+        room.metadata["spans_floors"] = list(range(min_floor, max_floor + 1))
+
+        # Print debug info
+        print(
+            f"Placing vertical circulation {room.id} with height {total_height} from z={start_z}"
+        )
+
+        # Find a valid (x,y) position that works for the entire vertical span
+        # Start with a grid search aligned to structural grid
+        grid_x = self.structural_grid[0]
+        grid_y = self.structural_grid[1]
+
+        # Try center positions first for better architecture
+        center_x = self.width / 2
+        center_y = self.length / 2
+
+        # Generate positions in a spiral pattern starting from center
+        positions = []
+        max_radius = max(self.width, self.length) / 2
+
+        for radius in range(0, int(max_radius) + 1, int(min(grid_x, grid_y))):
+            # Add positions in a rough "circle" at this radius
+            for angle in range(0, 360, 45):  # 45 degree increments
+                # Convert polar to cartesian coordinates
+                angle_rad = angle * 3.14159 / 180
+                x = center_x + radius * np.cos(angle_rad)
+                y = center_y + radius * np.sin(angle_rad)
+
+                # Snap to grid
+                x = round(x / grid_x) * grid_x
+                y = round(y / grid_y) * grid_y
+
+                # Ensure within bounds
+                x = max(0, min(x, self.width - room.width))
+                y = max(0, min(y, self.length - room.length))
+
+                positions.append((x, y))
+
+        # Remove duplicates
+        positions = list(set(positions))
+
+        # Try each position
+        for x, y in positions:
+            # Check if this position works for a vertical circulation spanning all floors
+            if self._is_valid_for_vertical_circulation(
+                x, y, start_z, room.width, room.length, total_height
+            ):
+                # Place the room spanning all floors
+                success = self.spatial_grid.place_room(
+                    room_id=room.id,
+                    x=x,
+                    y=y,
+                    z=start_z,
+                    width=room.width,
+                    length=room.length,
+                    height=total_height,
+                    room_type=room.room_type,
+                    metadata=room.metadata,
+                )
+
+                if success:
+                    print(
+                        f"Successfully placed vertical circulation at ({x}, {y}, {start_z})"
+                    )
+                    return True
+
+        # If all attempts fail, try to place it without overlapping with parking
+        print("Falling back to non-overlapping vertical circulation placement")
+        for x, y in positions:
+            # Check if position is valid without allowing overlaps
+            valid = self._is_valid_position(
+                x, y, start_z, room.width, room.length, total_height
+            )
+            if valid:
+                success = self.spatial_grid.place_room(
+                    room_id=room.id,
+                    x=x,
+                    y=y,
+                    z=start_z,
+                    width=room.width,
+                    length=room.length,
+                    height=total_height,
+                    room_type=room.room_type,
+                    metadata=room.metadata,
+                )
+
+                if success:
+                    print(
+                        f"Successfully placed non-overlapping vertical circulation at ({x}, {y}, {start_z})"
+                    )
+                    return True
+
+        # If completely failed, place at a fixed location as a last resort
+        print("Falling back to fixed position for vertical circulation")
+        x = grid_x
+        y = grid_y
+
+        # Force placement even if it has to overlap
+        success = self.spatial_grid.place_room(
+            room_id=room.id,
+            x=x,
+            y=y,
+            z=start_z,
+            width=room.width,
+            length=room.length,
+            height=total_height,
+            room_type=room.room_type,
+            metadata=room.metadata,
+            force_placement=True,
+        )
+
+        if success:
+            print(f"Forced placement of vertical circulation at ({x}, {y}, {start_z})")
+            return True
+
+        # If all fails, report failure
+        print("Failed to place vertical circulation")
+        return False
+
+    def _is_valid_for_vertical_circulation(
+        self, x: float, y: float, z: float, width: float, length: float, height: float
+    ) -> bool:
+        """
+        Check if a position is valid for vertical circulation, with special rules:
+        - Can overlap with parking areas
+        - Cannot overlap with other rooms
+
+        Args:
+            x, y, z: Position coordinates
+            width, length, height: Room dimensions
+
+        Returns:
+            bool: True if position is valid for vertical circulation
+        """
+        # Check building bounds
+        if x < 0 or y < 0 or x + width > self.width or y + length > self.length:
+            return False
+
+        # Check if the position is within the valid height range
+        min_floor = self.building_config.get("min_floor", -1)
+        max_floor = self.building_config.get("max_floor", 3)
+        floor_height = self.building_config.get("floor_height", 5.0)
+
+        min_z = min_floor * floor_height
+        max_z = (max_floor + 1) * floor_height
+
+        if z < min_z or z + height > max_z:
+            return False
+
+        # Convert to grid coordinates
+        grid_x = int(x / self.grid_size)
+        grid_y = int(y / self.grid_size)
+        grid_z = int(z / self.grid_size)
+        grid_width = int(width / self.grid_size)
+        grid_length = int(length / self.grid_size)
+        grid_height = int(height / self.grid_size)
+
+        # Check grid bounds
+        if (
+            grid_x < 0
+            or grid_y < 0
+            or grid_z < 0
+            or grid_x + grid_width > self.spatial_grid.width_cells
+            or grid_y + grid_length > self.spatial_grid.length_cells
+            or grid_z + grid_height > self.spatial_grid.height_cells
+        ):
+            return False
+
+        # Check for collisions with non-parking rooms
+        # Get the grid region where we would place the vertical circulation
+        try:
+            region = self.spatial_grid.grid[
+                grid_x : grid_x + grid_width,
+                grid_y : grid_y + grid_length,
+                grid_z : grid_z + grid_height,
+            ]
+
+            # Find any non-zero values (existing rooms)
+            room_ids = set(np.unique(region)) - {0}
+
+            # If there are no rooms, position is valid
+            if not room_ids:
+                return True
+
+            # Check if all overlapping rooms are parking areas
+            for room_id in room_ids:
+                if room_id in self.spatial_grid.rooms:
+                    room_type = self.spatial_grid.rooms[room_id]["type"]
+                    # Only allow overlap with parking areas
+                    if room_type != "parking":
+                        return False
+
+            # If we get here, all overlaps are with parking areas, which is allowed
+            return True
+
+        except IndexError:
+            # Grid index out of bounds
+            return False
 
     def _place_lobby(
         self, room: Room, placed_rooms_by_type: Dict[str, List[int]], target_z: float
@@ -625,57 +923,3 @@ class RuleEngine:
 
         # Default to grid-based placement on specified floor
         return self._find_valid_position_on_floor(room, target_z)
-
-    def _find_valid_position_on_floor(
-        self, room: Room, z: float
-    ) -> Optional[Tuple[float, float, float]]:
-        """Find a valid position on a specific floor"""
-        grid_step_x = self.structural_grid[0]
-        grid_step_y = self.structural_grid[1]
-
-        # Try positions aligned with structural grid
-        # Start from the center and spiral outward for better space utilization
-        center_x = self.width / 2
-        center_y = self.length / 2
-
-        # Generate positions in a spiral pattern starting from center
-        positions = []
-        max_radius = max(self.width, self.length) / 2
-
-        for radius in range(0, int(max_radius) + 1, int(min(grid_step_x, grid_step_y))):
-            # Add positions in a rough "circle" at this radius
-            for angle in range(0, 360, 45):  # 45 degree increments
-                # Convert polar to cartesian coordinates
-                angle_rad = angle * 3.14159 / 180
-                x = center_x + radius * np.cos(angle_rad)
-                y = center_y + radius * np.sin(angle_rad)
-
-                # Snap to grid
-                x = round(x / grid_step_x) * grid_step_x
-                y = round(y / grid_step_y) * grid_step_y
-
-                # Ensure within bounds
-                x = max(0, min(x, self.width - room.width))
-                y = max(0, min(y, self.length - room.length))
-
-                positions.append((x, y))
-
-        # Remove duplicates
-        positions = list(set(positions))
-
-        # Try each position
-        for x, y in positions:
-            if self._is_valid_position(x, y, z, room.width, room.length, room.height):
-                return (x, y, z)
-
-        # If structural grid positions don't work, fall back to a finer grid
-        # Try positions at a finer grain
-        for x in range(0, int(self.width - room.width) + 1, int(self.grid_size)):
-            for y in range(0, int(self.length - room.length) + 1, int(self.grid_size)):
-                if self._is_valid_position(
-                    x, y, z, room.width, room.length, room.height
-                ):
-                    return (x, y, z)
-
-        # No valid position found on this floor
-        return None

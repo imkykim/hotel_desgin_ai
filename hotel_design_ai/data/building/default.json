@@ -3,7 +3,7 @@
   "length": 80.0,
   "height": 20.0,
   "min_floor": -1,
-  "max_floor": 3,
+  "max_floor": 2,
   "floor_height": 5.0,
   "structural_grid_x": 8.0,
   "structural_grid_y": 8.0,

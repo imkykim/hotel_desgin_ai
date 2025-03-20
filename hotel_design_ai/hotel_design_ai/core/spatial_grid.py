@@ -38,6 +38,50 @@ class SpatialGrid:
         # Room metadata
         self.rooms = {}  # room_id -> metadata
 
+    # Modifications needed for SpatialGrid to support negative z-coordinates
+
+    def _is_valid_placement(
+        self,
+        grid_x: int,
+        grid_y: int,
+        grid_z: int,
+        grid_width: int,
+        grid_length: int,
+        grid_height: int,
+    ) -> bool:
+        """Check if a room can be placed at the specified location"""
+        # Check bounds - handling negative grid_z properly
+        if (
+            grid_x < 0
+            or grid_y < 0
+            or grid_x + grid_width > self.width_cells
+            or grid_y + grid_length > self.length_cells
+            or grid_z + grid_height > self.height_cells
+        ):
+            return False
+
+        # Special handling for basement (negative z)
+        if grid_z < 0:
+            # Check if the negative index is within range
+            # For basement grid cells, we use negative indexing
+            if abs(grid_z) > self.height_cells:
+                return False
+
+        # Check for collisions with existing rooms
+        try:
+            # Get the region of the grid where the room would be placed
+            target_region = self.grid[
+                grid_x : grid_x + grid_width,
+                grid_y : grid_y + grid_length,
+                grid_z : grid_z + grid_height,
+            ]
+
+            # If any cell in this region is non-zero, there's a collision
+            return np.all(target_region == 0)
+        except IndexError:
+            # If there's an index error, the room would be out of bounds
+            return False
+
     def place_room(
         self,
         room_id: int,
@@ -49,9 +93,11 @@ class SpatialGrid:
         height: float,
         room_type: str = "generic",
         metadata: Dict = None,
+        allow_overlap: List[str] = None,
     ) -> bool:
         """
         Place a room in the grid at the specified position.
+        Enhanced to allow overlapping with specific room types.
 
         Args:
             room_id: Unique identifier for the room
@@ -59,10 +105,19 @@ class SpatialGrid:
             width, length, height: Dimensions of the room
             room_type: Type of room (e.g., "guest_room", "lobby", etc.)
             metadata: Additional room information
+            allow_overlap: List of room types this room can overlap with
 
         Returns:
             bool: True if placement was successful, False otherwise
         """
+        # Default allowed overlap types
+        if allow_overlap is None:
+            # By default, vertical circulation can overlap with parking
+            if room_type == "vertical_circulation":
+                allow_overlap = ["parking"]
+            else:
+                allow_overlap = []
+
         # Convert to grid coordinates
         grid_x = int(x / self.grid_size)
         grid_y = int(y / self.grid_size)
@@ -71,13 +126,38 @@ class SpatialGrid:
         grid_length = int(length / self.grid_size)
         grid_height = int(height / self.grid_size)
 
-        # Check if placement is valid
-        if not self._is_valid_placement(
-            grid_x, grid_y, grid_z, grid_width, grid_length, grid_height
+        # Check if placement is valid, with special handling for allowed overlaps
+        if not self._is_valid_placement_with_overlaps(
+            grid_x,
+            grid_y,
+            grid_z,
+            grid_width,
+            grid_length,
+            grid_height,
+            room_type,
+            allow_overlap,
         ):
             return False
 
-        # Place room in grid
+        # Remember existing room IDs in the target region to handle overlaps
+        existing_room_ids = set()
+        try:
+            # Get the region where the room would be placed
+            target_region = self.grid[
+                grid_x : grid_x + grid_width,
+                grid_y : grid_y + grid_length,
+                grid_z : grid_z + grid_height,
+            ]
+
+            # Collect existing room IDs
+            unique_ids = np.unique(target_region)
+            for uid in unique_ids:
+                if uid != 0:  # Skip empty cells
+                    existing_room_ids.add(int(uid))
+        except IndexError:
+            return False  # Grid indices out of bounds
+
+        # Place the room in the grid, handling negative z-coordinates
         self.grid[
             grid_x : grid_x + grid_width,
             grid_y : grid_y + grid_length,
@@ -95,7 +175,92 @@ class SpatialGrid:
             **(metadata or {}),
         }
 
+        # For rooms that can overlap, store the overlapping relationship
+        if existing_room_ids and allow_overlap:
+            # Create a new metadata field or add to existing
+            if "overlaps_with" not in self.rooms[room_id]:
+                self.rooms[room_id]["overlaps_with"] = list(existing_room_ids)
+            else:
+                self.rooms[room_id]["overlaps_with"].extend(list(existing_room_ids))
+
         return True
+
+    def _is_valid_placement_with_overlaps(
+        self,
+        grid_x: int,
+        grid_y: int,
+        grid_z: int,
+        grid_width: int,
+        grid_length: int,
+        grid_height: int,
+        room_type: str,
+        allow_overlap: List[str],
+    ) -> bool:
+        """
+        Enhanced method to check if a room can be placed at the specified location,
+        with special handling for allowed overlaps.
+
+        Args:
+            grid_x, grid_y, grid_z: Grid coordinates
+            grid_width, grid_length, grid_height: Grid dimensions
+            room_type: Type of room being placed
+            allow_overlap: List of room types this room can overlap with
+
+        Returns:
+            bool: True if placement is valid, False otherwise
+        """
+        # Check bounds
+        if (
+            grid_x < 0
+            or grid_y < 0
+            or grid_x + grid_width > self.width_cells
+            or grid_y + grid_length > self.length_cells
+            or grid_z + grid_height > self.height_cells
+        ):
+            return False
+
+        # Special handling for basement (negative z)
+        if grid_z < 0:
+            # Check if the negative index is within range
+            if abs(grid_z) > self.height_cells:
+                return False
+
+        # Check for collisions with existing rooms
+        try:
+            # Get the region of the grid where the room would be placed
+            target_region = self.grid[
+                grid_x : grid_x + grid_width,
+                grid_y : grid_y + grid_length,
+                grid_z : grid_z + grid_height,
+            ]
+
+            # If any cell is non-zero, check if the existing room type is in allow_overlap
+            existing_room_ids = set(np.unique(target_region)) - {0}
+
+            # If no existing rooms, placement is valid
+            if not existing_room_ids:
+                return True
+
+            # If there are existing rooms and overlaps are allowed
+            if allow_overlap:
+                # Check if all existing rooms are of allowed types
+                for room_id in existing_room_ids:
+                    if room_id in self.rooms:
+                        existing_room_type = self.rooms[room_id]["type"]
+                        if existing_room_type not in allow_overlap:
+                            return False  # Overlap not allowed with this room type
+                    else:
+                        return False  # Unknown room ID, assume overlap not allowed
+
+                # All overlaps are with allowed room types
+                return True
+
+            # No overlaps allowed
+            return False
+
+        except IndexError:
+            # If there's an index error, the room would be out of bounds
+            return False
 
     def remove_room(self, room_id: int) -> bool:
         """
@@ -125,36 +290,6 @@ class SpatialGrid:
         del self.rooms[room_id]
 
         return True
-
-    def _is_valid_placement(
-        self,
-        grid_x: int,
-        grid_y: int,
-        grid_z: int,
-        grid_width: int,
-        grid_length: int,
-        grid_height: int,
-    ) -> bool:
-        """Check if a room can be placed at the specified location"""
-        # Check bounds
-        if (
-            grid_x < 0
-            or grid_y < 0
-            or grid_z < 0
-            or grid_x + grid_width > self.width_cells
-            or grid_y + grid_length > self.length_cells
-            or grid_z + grid_height > self.height_cells
-        ):
-            return False
-
-        # Check for collisions with existing rooms
-        target_region = self.grid[
-            grid_x : grid_x + grid_width,
-            grid_y : grid_y + grid_length,
-            grid_z : grid_z + grid_height,
-        ]
-
-        return np.all(target_region == 0)
 
     def are_adjacent(self, room_id1: int, room_id2: int) -> bool:
         """Check if two rooms are adjacent to each other"""

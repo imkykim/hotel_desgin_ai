@@ -356,7 +356,7 @@
       "min_width": 8.0,
       "min_height": 20.0,
       "requires_natural_light": false,
-      "floor": 0,
+      "floor": -1,
       "metadata": {
         "original_name": "Main Circulation Core",
         "is_core": true
@@ -368,7 +368,7 @@
       "min_width": 6.0,
       "min_height": 20.0,
       "requires_natural_light": false,
-      "floor": 0,
+      "floor": -1,
       "metadata": {
         "original_name": "Secondary Circulation",
         "is_core": true

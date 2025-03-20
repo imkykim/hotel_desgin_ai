@@ -4,6 +4,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import matplotlib.colors as mcolors
 from typing import Dict, List, Tuple, Optional, Set, Any, Union
+import os
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 
@@ -21,6 +22,9 @@ class StyleConfig:
         "guest_room": "#f7fcb9",
         "service_area": "#d9f0a3",
         "back_of_house": "#addd8e",
+        "parking": "#D3D3D3",  # Light gray for parking
+        "mechanical": "#A0A0A0",  # Darker gray for mechanical
+        "maintenance": "#909090",  # Medium gray for maintenance
         # Default color for unknown types
         "default": "#efefef",
     }
@@ -35,6 +39,9 @@ class StyleConfig:
         "guest_room": 0.6,
         "service_area": 0.5,
         "back_of_house": 0.5,
+        "parking": 0.5,
+        "mechanical": 0.6,
+        "maintenance": 0.6,
         "default": 0.5,
     }
 
@@ -123,10 +130,24 @@ class LayoutRenderer:
         ax.set_ylabel("Length (m)")
         ax.set_zlabel("Height (m)")
 
-        # Set axis limits
+        # Get building configuration
+        min_floor = self.building_config.get("min_floor", -1)
+        floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Calculate minimum z to include basement floors
+        min_z = min(0, min_floor * floor_height)
+
+        # Set axis limits - make sure we include basement floors
         ax.set_xlim(0, self.layout.width)
         ax.set_ylim(0, self.layout.length)
-        ax.set_zlim(0, self.layout.height)
+        ax.set_zlim(min_z, self.layout.height)
+
+        # Add a grid at z=0 to delineate ground level
+        xx, yy = np.meshgrid(
+            np.linspace(0, self.layout.width, 5), np.linspace(0, self.layout.length, 5)
+        )
+        zz = np.zeros_like(xx)
+        ax.plot_surface(xx, yy, zz, alpha=0.2, color="gray")
 
     def render_floor_plan(
         self,
@@ -170,65 +191,14 @@ class LayoutRenderer:
         """Set up the 2D axes with proper labels and limits."""
         ax.set_xlabel("Width (m)")
         ax.set_ylabel("Length (m)")
-        ax.set_title(f"Floor Plan - Level {floor}")
+
+        # Set appropriate title based on floor number
+        floor_name = "Basement" if floor < 0 else f"Floor {floor}"
+        ax.set_title(f"Floor Plan - {floor_name}")
 
         # Set axis limits
         ax.set_xlim(0, self.layout.width)
         ax.set_ylim(0, self.layout.length)
-
-    def _draw_rooms_on_floor(
-        self, ax, floor: int, show_labels: bool, highlight_rooms: List[int] = None
-    ):
-        """
-        Draw all rooms on a specific floor.
-
-        Args:
-            ax: Matplotlib axis
-            floor: Floor number to render
-            show_labels: Whether to show room labels
-            highlight_rooms: Optional list of room IDs to highlight
-        """
-        floor_height = self.building_config.get("floor_height", 5.0)
-        z_min = floor * floor_height
-        z_max = (floor + 1) * floor_height
-
-        # Find rooms on this floor
-        rooms_on_floor = []
-        for room_id, room_data in self.layout.rooms.items():
-            x, y, z = room_data["position"]
-            h = room_data["dimensions"][2]
-
-            # Debug: Print room data for basement floor
-            if floor == -1:
-                print(
-                    f"Room {room_id} ({room_data.get('type')}): z={z}, h={h}, z_min={z_min}, z_max={z_max}"
-                )
-
-            # Check if room is on this floor - improved condition for better basement handling
-            room_bottom = z
-            room_top = z + h
-            floor_bottom = z_min
-            floor_top = z_max
-
-            # Room is on this floor if:
-            # 1. Room bottom is within the floor range, OR
-            # 2. Room top is within the floor range, OR
-            # 3. Room completely contains the floor (spans multiple floors)
-            if (
-                (room_bottom >= floor_bottom and room_bottom < floor_top)
-                or (room_top > floor_bottom and room_top <= floor_top)
-                or (room_bottom <= floor_bottom and room_top >= floor_top)
-            ):
-                rooms_on_floor.append(room_id)
-
-        # Debug: Show count of rooms found on this floor
-        print(f"Found {len(rooms_on_floor)} rooms on floor {floor}")
-
-        # Draw each room
-        for room_id in rooms_on_floor:
-            room_data = self.layout.rooms[room_id]
-            is_highlighted = highlight_rooms is not None and room_id in highlight_rooms
-            self._draw_room_2d(ax, room_id, room_data, show_labels, is_highlighted)
 
     def save_renders(
         self,
@@ -250,8 +220,6 @@ class LayoutRenderer:
             num_floors: Number of floors to render (if None, detect automatically)
             min_floor: Minimum floor to render (if None, use building_config or default to 0)
         """
-        import os
-
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
@@ -275,7 +243,6 @@ class LayoutRenderer:
         filename = os.path.join(output_dir, f"{prefix}_3d.png")
         fig.savefig(filename, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"Saved 3D render to {filename}")
 
     def _save_floor_plans(
         self,
@@ -293,8 +260,6 @@ class LayoutRenderer:
             num_floors: Number of floors to render
             min_floor: Minimum floor to render
         """
-        import os
-
         # Get min_floor from building_config if not specified
         if min_floor is None:
             min_floor = self.building_config.get("min_floor", 0)
@@ -311,14 +276,19 @@ class LayoutRenderer:
             # If num_floors is specified, calculate max_floor
             max_floor = min_floor + num_floors - 1
 
-        # Render each floor
+        # Render each floor, including basement floors
         for floor in range(min_floor, max_floor + 1):
             fig, ax = self.render_floor_plan(floor=floor)
-            floor_name = f"basement" if floor < 0 else f"floor{floor}"
+
+            # Name for basement floors should be clear
+            if floor < 0:
+                floor_name = f"basement{abs(floor)}"
+            else:
+                floor_name = f"floor{floor}"
+
             filename = os.path.join(output_dir, f"{prefix}_{floor_name}.png")
             fig.savefig(filename, dpi=300, bbox_inches="tight")
             plt.close(fig)
-            print(f"Saved floor plan for level {floor} to {filename}")
 
     def _calculate_max_floor(self) -> int:
         """
@@ -328,13 +298,27 @@ class LayoutRenderer:
             int: Maximum floor number
         """
         max_z = 0
+        min_z = 0  # Add tracking for minimum z value
+
         for _, room_data in self.layout.rooms.items():
             _, _, z = room_data["position"]
             _, _, h = room_data["dimensions"]
             max_z = max(max_z, z + h)
+            min_z = min(min_z, z)  # Track lowest point
 
         floor_height = self.building_config["floor_height"]
-        return int(np.ceil(max_z / floor_height)) - 1
+
+        # Calculate max floor
+        max_floor = int(np.ceil(max_z / floor_height)) - 1
+
+        # Calculate min floor (could be negative for basement)
+        min_floor = int(np.floor(min_z / floor_height))
+
+        # Update the min_floor in building_config if needed
+        if min_floor < self.building_config.get("min_floor", 0):
+            self.building_config["min_floor"] = min_floor
+
+        return max_floor
 
     def _draw_bounding_box(self, ax):
         """Draw the building bounding box."""
@@ -354,13 +338,20 @@ class LayoutRenderer:
         Returns:
             tuple: (vertices, faces) for the bounding box
         """
-        # Vertices of the bounding box
+        # Get min_floor from building_config
+        min_floor = self.building_config.get("min_floor", 0)
+        floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Calculate minimum z to include basement floors
+        min_z = min(0, min_floor * floor_height)
+
+        # Vertices of the bounding box, including basement if needed
         vertices = [
-            [0, 0, 0],
-            [self.layout.width, 0, 0],
-            [self.layout.width, self.layout.length, 0],
-            [0, self.layout.length, 0],
-            [0, 0, self.layout.height],
+            [0, 0, min_z],  # Bottom left at lowest level
+            [self.layout.width, 0, min_z],  # Bottom right at lowest level
+            [self.layout.width, self.layout.length, min_z],  # Top right at lowest level
+            [0, self.layout.length, min_z],  # Top left at lowest level
+            [0, 0, self.layout.height],  # Top points remain the same
             [self.layout.width, 0, self.layout.height],
             [self.layout.width, self.layout.length, self.layout.height],
             [0, self.layout.length, self.layout.height],
@@ -446,13 +437,16 @@ class LayoutRenderer:
 
         return vertices, faces
 
-    def _get_room_style(self, room_data: Dict[str, Any], highlighted: bool):
+    def _get_room_style(
+        self, room_data: Dict[str, Any], highlighted: bool, is_circulation: bool = False
+    ):
         """
         Get styling information for a room.
 
         Args:
             room_data: Room data
             highlighted: Whether the room is highlighted
+            is_circulation: Whether this is a circulation element on a floor plan
 
         Returns:
             tuple: (face_color, edge_color, alpha, linewidth)
@@ -472,6 +466,21 @@ class LayoutRenderer:
         else:
             edge_color = "black"
             linewidth = 0.5
+
+        # Special adjustment for vertical circulation
+        if room_type == "vertical_circulation" or is_circulation:
+            # Make vertical circulation elements more visible
+            alpha = min(1.0, alpha + 0.3)
+            linewidth = 2.0
+            edge_color = "red"
+
+            # If it's specifically a circulation element on a floor plan
+            if is_circulation:
+                # Use an even more pronounced style
+                alpha = 0.9
+                linewidth = 2.5
+                # Add hatching pattern
+                # Note: hatching is not directly supported here but would be ideal
 
         return face_color, edge_color, alpha, linewidth
 
@@ -532,39 +541,6 @@ class LayoutRenderer:
 
         # Return room type as default - shows the program purpose
         return room_type
-
-    def _draw_room_2d(
-        self,
-        ax,
-        room_id: int,
-        room_data: Dict[str, Any],
-        show_labels: bool,
-        highlighted: bool,
-    ):
-        """Draw a 2D room on the floor plan."""
-        x, y, _ = room_data["position"]
-        w, l, _ = room_data["dimensions"]
-
-        # Get styling
-        face_color, edge_color, alpha, linewidth = self._get_room_style(
-            room_data, highlighted
-        )
-
-        # Draw room rectangle
-        rect = plt.Rectangle(
-            (x, y),
-            w,
-            l,
-            facecolor=face_color,
-            alpha=alpha,
-            edgecolor=edge_color,
-            linewidth=linewidth,
-        )
-        ax.add_patch(rect)
-
-        # Add label to center of room
-        if show_labels:
-            self._add_room_label_2d(ax, room_id, room_data)
 
     def _add_room_label_2d(self, ax, room_id: int, room_data: Dict[str, Any]):
         """
@@ -667,97 +643,216 @@ class LayoutRenderer:
 
         return fig, ax
 
+    def place_room(
+        self,
+        room_id: int,
+        x: float,
+        y: float,
+        z: float,
+        width: float,
+        length: float,
+        height: float,
+        room_type: str = "generic",
+        metadata: Dict = None,
+        allow_overlap: List[str] = None,
+        force_placement: bool = False,
+    ) -> bool:
+        """
+        Place a room in the grid at the specified position.
+        Enhanced to allow overlapping with specific room types.
 
-# Export functions separated from the renderer class
-def export_to_obj(layout: SpatialGrid, filename: str):
-    """
-    Export the layout to OBJ format for use in 3D modeling software.
+        Args:
+            room_id: Unique identifier for the room
+            x, y, z: Coordinates of the room's origin (bottom-left corner)
+            width, length, height: Dimensions of the room
+            room_type: Type of room (e.g., "guest_room", "lobby", etc.)
+            metadata: Additional room information
+            allow_overlap: List of room types this room can overlap with
+            force_placement: Force placement even if there are overlaps
 
-    Args:
-        layout: The spatial grid layout to export
-        filename: Output OBJ filename
-    """
-    with open(filename, "w") as f:
-        # Write header
-        f.write("# Hotel Layout OBJ file\n")
-        f.write(f"# Generated from SpatialGrid\n")
-        f.write(
-            f"# Width: {layout.width}, Length: {layout.length}, Height: {layout.height}\n\n"
-        )
+        Returns:
+            bool: True if placement was successful, False otherwise
+        """
+        # Default allowed overlap types
+        if allow_overlap is None:
+            # By default, vertical circulation can overlap with parking
+            if room_type == "vertical_circulation":
+                allow_overlap = ["parking"]
+            else:
+                allow_overlap = []
 
-        # Track vertex indices
-        vertex_index = 1
+        # Convert to grid coordinates
+        grid_x = int(x / self.grid_size)
+        grid_y = int(y / self.grid_size)
+        grid_z = int(z / self.grid_size)
+        grid_width = int(width / self.grid_size)
+        grid_length = int(length / self.grid_size)
+        grid_height = int(height / self.grid_size)
 
-        # Write rooms
-        for room_id, room_data in layout.rooms.items():
-            x, y, z = room_data["position"]
-            w, l, h = room_data["dimensions"]
-            room_type = room_data["type"]
+        # Check if out of grid bounds
+        if (
+            grid_x < 0
+            or grid_y < 0
+            or grid_x + grid_width > self.width_cells
+            or grid_y + grid_length > self.length_cells
+            or grid_z + grid_height > self.height_cells
+        ):
+            return False
 
-            # Add comment for room
-            f.write(f"# Room {room_id}: {room_type}\n")
+        # Check for valid placement unless force_placement is True
+        if not force_placement:
+            if not self._is_valid_placement_with_overlaps(
+                grid_x,
+                grid_y,
+                grid_z,
+                grid_width,
+                grid_length,
+                grid_height,
+                room_type,
+                allow_overlap,
+            ):
+                return False
 
-            # Define vertices for this room
-            vertices = [
-                [x, y, z],  # 0
-                [x + w, y, z],  # 1
-                [x + w, y + l, z],  # 2
-                [x, y + l, z],  # 3
-                [x, y, z + h],  # 4
-                [x + w, y, z + h],  # 5
-                [x + w, y + l, z + h],  # 6
-                [x, y + l, z + h],  # 7
+        # Remember existing room IDs in the target region to handle overlaps
+        existing_room_ids = set()
+        try:
+            # Get the region where the room would be placed
+            target_region = self.grid[
+                grid_x : grid_x + grid_width,
+                grid_y : grid_y + grid_length,
+                grid_z : grid_z + grid_height,
             ]
 
-            # Write vertices
-            for vertex in vertices:
-                f.write(f"v {vertex[0]} {vertex[1]} {vertex[2]}\n")
+            # Collect existing room IDs
+            unique_ids = np.unique(target_region)
+            for uid in unique_ids:
+                if uid != 0:  # Skip empty cells
+                    existing_room_ids.add(int(uid))
+        except IndexError:
+            return False  # Grid indices out of bounds
 
-            # Write faces (with proper vertex indexing)
-            f.write(
-                f"f {vertex_index} {vertex_index+1} {vertex_index+2} {vertex_index+3}\n"
-            )  # Bottom
-            f.write(
-                f"f {vertex_index+4} {vertex_index+5} {vertex_index+6} {vertex_index+7}\n"
-            )  # Top
-            f.write(
-                f"f {vertex_index} {vertex_index+1} {vertex_index+5} {vertex_index+4}\n"
-            )  # Front
-            f.write(
-                f"f {vertex_index+2} {vertex_index+3} {vertex_index+7} {vertex_index+6}\n"
-            )  # Back
-            f.write(
-                f"f {vertex_index+1} {vertex_index+2} {vertex_index+6} {vertex_index+5}\n"
-            )  # Right
-            f.write(
-                f"f {vertex_index} {vertex_index+3} {vertex_index+7} {vertex_index+4}\n"
-            )  # Left
+        # Place the room in the grid, handling negative z-coordinates
+        self.grid[
+            grid_x : grid_x + grid_width,
+            grid_y : grid_y + grid_length,
+            grid_z : grid_z + grid_height,
+        ] = room_id
 
-            # Update vertex index for next room
-            vertex_index += 8
+        # Store room metadata
+        self.rooms[room_id] = {
+            "id": room_id,
+            "type": room_type,
+            "position": (x, y, z),
+            "dimensions": (width, length, height),
+            "grid_position": (grid_x, grid_y, grid_z),
+            "grid_dimensions": (grid_width, grid_length, grid_height),
+            **(metadata or {}),
+        }
 
-            f.write("\n")
+        # For rooms that can overlap, store the overlapping relationship
+        if existing_room_ids:
+            # Create a new metadata field or add to existing
+            if "overlaps_with" not in self.rooms[room_id]:
+                self.rooms[room_id]["overlaps_with"] = list(existing_room_ids)
+            else:
+                self.rooms[room_id]["overlaps_with"].extend(list(existing_room_ids))
 
+        return True
 
-def export_to_gltf(layout: SpatialGrid, filename: str):
-    """
-    Export the layout to glTF format for web visualization.
-    This requires the pygltflib library.
+    def _draw_rooms_on_floor(
+        self, ax, floor: int, show_labels: bool, highlight_rooms: List[int] = None
+    ):
+        """
+        Draw all rooms on a specific floor.
 
-    Args:
-        layout: The spatial grid layout to export
-        filename: Output glTF filename
-    """
-    try:
-        import pygltflib
-        from pygltflib import GLTF2, Scene, Node, Mesh, Buffer, BufferView, Accessor
-        from pygltflib import AccessorType, ComponentType, BufferTarget, PrimitiveMode
-    except ImportError:
-        print(
-            "pygltflib is required for glTF export. Install with 'pip install pygltflib'"
+        Args:
+            ax: Matplotlib axis
+            floor: Floor number to render
+            show_labels: Whether to show room labels
+            highlight_rooms: Optional list of room IDs to highlight
+        """
+        floor_height = self.building_config.get("floor_height", 5.0)
+        z_min = floor * floor_height
+        z_max = (floor + 1) * floor_height
+
+        # Find rooms on this floor
+        rooms_on_floor = []
+        vertical_circulation_rooms = []
+
+        for room_id, room_data in self.layout.rooms.items():
+            x, y, z = room_data["position"]
+            w, l, h = room_data["dimensions"]
+
+            # Special handling for vertical circulation - make sure it shows on all floors it spans
+            if room_data["type"] == "vertical_circulation":
+                # Check if this vertical circulation spans this floor
+                if (z <= z_min and z + h >= z_max) or (z >= z_min and z < z_max):
+                    vertical_circulation_rooms.append(room_id)
+                    continue
+
+            # Check if regular room is on this floor
+            room_bottom = z
+            room_top = z + h
+            floor_bottom = z_min
+            floor_top = z_max
+
+            # Room is on this floor if:
+            # 1. Room bottom is within the floor range, OR
+            # 2. Room top is within the floor range, OR
+            # 3. Room completely contains the floor (spans multiple floors)
+            if (
+                (room_bottom >= floor_bottom and room_bottom < floor_top)
+                or (room_top > floor_bottom and room_top <= floor_top)
+                or (room_bottom <= floor_bottom and room_top >= floor_top)
+            ):
+                rooms_on_floor.append(room_id)
+
+        # Draw regular rooms first
+        for room_id in rooms_on_floor:
+            room_data = self.layout.rooms[room_id]
+            is_highlighted = highlight_rooms is not None and room_id in highlight_rooms
+            self._draw_room_2d(ax, room_id, room_data, show_labels, is_highlighted)
+
+        # Draw vertical circulation on top with enhanced visibility
+        for room_id in vertical_circulation_rooms:
+            room_data = self.layout.rooms[room_id]
+            is_highlighted = highlight_rooms is not None and room_id in highlight_rooms
+
+            # Draw with higher visibility
+            self._draw_room_2d(
+                ax, room_id, room_data, show_labels, is_highlighted, is_circulation=True
+            )
+
+    def _draw_room_2d(
+        self,
+        ax,
+        room_id: int,
+        room_data: Dict[str, Any],
+        show_labels: bool,
+        highlighted: bool,
+        is_circulation: bool = False,
+    ):
+        """Draw a 2D room on the floor plan."""
+        x, y, _ = room_data["position"]
+        w, l, _ = room_data["dimensions"]
+
+        # Get styling
+        face_color, edge_color, alpha, linewidth = self._get_room_style(
+            room_data, highlighted, is_circulation
         )
-        return
 
-    # Note: Full implementation of glTF export would be complex
-    # This placeholder would need to be expanded for proper implementation
-    print("glTF export not yet implemented")
+        # Draw room rectangle
+        rect = plt.Rectangle(
+            (x, y),
+            w,
+            l,
+            facecolor=face_color,
+            alpha=alpha,
+            edgecolor=edge_color,
+            linewidth=linewidth,
+        )
+        ax.add_patch(rect)
+
+        # Add label to center of room
+        if show_labels:
+            self._add_room_label_2d(ax, room_id, room_data)
