@@ -1,0 +1,52 @@
+{
+  "basement2": {
+    "mechanical_room": {
+      "area": 500,
+      "room_type": "mechanical",
+      "min_width": 10.0,
+      "min_height": 4.0,
+      "floor": -2,
+      "requires_natural_light": false
+    }
+  },
+  "basement1": {
+    "parking": {
+      "area": 400,
+      "room_type": "parking",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "floor": -1
+    }
+  },
+  "ground": {
+    "lobby": {
+      "area": 200,
+      "room_type": "lobby",
+      "min_width": 10.0,
+      "min_height": 4.5,
+      "floor": 0
+    }
+  },
+  "first": {
+    "room": {
+      "area": 100,
+      "room_type": "guest_room",
+      "min_width": 5.0,
+      "min_height": 3.0,
+      "floor": 1
+    }
+  },
+  "circulation": {
+    "main_core": {
+      "area": 64,
+      "room_type": "vertical_circulation",
+      "min_width": 8.0,
+      "min_height": 20.0,
+      "floor": -2,
+      "metadata": {
+        "original_name": "Main Circulation Core",
+        "is_core": true
+      }
+    }
+  }
+}

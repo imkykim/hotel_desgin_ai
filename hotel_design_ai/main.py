@@ -30,7 +30,8 @@ from hotel_design_ai.visualization.renderer import LayoutRenderer
 from hotel_design_ai.visualization.export import (
     export_to_json,
     export_to_csv,
-    export_to_revit,
+    export_to_blender,
+    export_to_rhino,
     export_for_three_js,
 )
 from hotel_design_ai.utils.metrics import LayoutMetrics
@@ -594,6 +595,7 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
     building_config = get_building_envelope(args.building_config)
 
     # Determine export formats
+    # Determine export formats
     export_formats = [f.strip().lower() for f in args.export_formats.split(",")]
 
     # Export to requested formats
@@ -603,26 +605,25 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
             export_to_json(layout, json_file)
             print(f"  Saved JSON to {json_file}")
 
-            # Also save metrics
-            metrics_file = os.path.join(output_subfolder, f"{prefix}_metrics.json")
-            with open(metrics_file, "w") as f:
-                json.dump(metrics, f, indent=2)
-            print(f"  Saved metrics to {metrics_file}")
-
         elif export_format == "csv":
             csv_file = os.path.join(output_subfolder, f"{prefix}.csv")
             export_to_csv(layout, csv_file)
             print(f"  Saved CSV to {csv_file}")
 
-        elif export_format == "revit":
-            revit_file = os.path.join(output_subfolder, f"{prefix}_revit.csv")
-            export_to_revit(layout, revit_file, building_config=building_config)
-            print(f"  Saved Revit CSV to {revit_file}")
-
         elif export_format == "threejs":
             threejs_file = os.path.join(output_subfolder, f"{prefix}_threejs.json")
             export_for_three_js(layout, threejs_file)
             print(f"  Saved Three.js JSON to {threejs_file}")
+
+        elif export_format == "blender":
+            blender_file = os.path.join(output_subfolder, f"{prefix}_blender.py")
+            export_to_blender(layout, blender_file)
+            print(f"  Saved Blender Python script to {blender_file}")
+
+        elif export_format == "rhino":
+            rhino_file = os.path.join(output_subfolder, f"{prefix}_rhino.py")
+            export_to_rhino(layout, rhino_file)
+            print(f"  Saved Rhino Python script to {rhino_file}")
 
     # Create visualizations
     renderer = LayoutRenderer(layout, building_config=building_config)
