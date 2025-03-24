@@ -1289,6 +1289,100 @@ class RLEngine:
         floors = int(self.height / self.floor_height)
         return grid_cells_x * grid_cells_y * floors
 
+    def set_standard_floor_zones(self, floor_zones):
+        """Set standard floor zones for the hotel tower portion.
+
+        Args:
+            floor_zones: List of dicts with x, y, width, height defining standard floor areas
+        """
+        self.standard_floor_zones = floor_zones
+
+        # Create a mask for standard floor areas
+        self.standard_floor_mask = np.zeros(
+            (int(self.width), int(self.length)), dtype=bool
+        )
+
+        # Mark standard floor zones in the mask
+        for zone in floor_zones:
+            x1 = int(zone["x"] / self.grid_size)
+            y1 = int(zone["y"] / self.grid_size)
+            x2 = int((zone["x"] + zone["width"]) / self.grid_size)
+            y2 = int((zone["y"] + zone["height"]) / self.grid_size)
+
+            # Ensure within bounds
+            x1 = max(0, min(x1, self.spatial_grid.width_cells - 1))
+            y1 = max(0, min(y1, self.spatial_grid.length_cells - 1))
+            x2 = max(0, min(x2, self.spatial_grid.width_cells - 1))
+            y2 = max(0, min(y2, self.spatial_grid.length_cells - 1))
+
+            self.standard_floor_mask[x1:x2, y1:y2] = True
+
+        print(f"Set {len(floor_zones)} standard floor zones")
+
+    def place_room_by_constraints(
+        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
+    ) -> bool:
+        """Place a room according to architectural constraints and standard floor zones."""
+        # Add check for standard floors
+        if hasattr(self, "standard_floor_mask") and room.room_type == "guest_room":
+            # For guest rooms on higher floors, require them to be in standard floor zones
+            if hasattr(room, "floor") and room.floor is not None and room.floor > 0:
+                return self._place_in_standard_floor_zone(room, placed_rooms_by_type)
+
+        # Original implementation for other rooms
+        # ... rest of your existing method ...
+
+    def _place_in_standard_floor_zone(
+        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
+    ) -> bool:
+        """Place a room within the standard floor zones."""
+        if not hasattr(self, "standard_floor_mask"):
+            # If no standard floor zones defined, use regular placement
+            return super().place_room_by_constraints(room, placed_rooms_by_type)
+
+        # Get floor and z coordinate
+        floor = room.floor if hasattr(room, "floor") and room.floor is not None else 1
+        z = floor * self.floor_height
+
+        # Try positions within standard floor zones
+        for x in range(0, int(self.width - room.width) + 1, int(self.grid_size)):
+            for y in range(0, int(self.length - room.length) + 1, int(self.grid_size)):
+                # Check if position is within standard floor zone
+                grid_x = int(x / self.grid_size)
+                grid_y = int(y / self.grid_size)
+                room_width_cells = int(room.width / self.grid_size)
+                room_length_cells = int(room.length / self.grid_size)
+
+                # Skip if any part of room would be outside standard zone
+                if not np.all(
+                    self.standard_floor_mask[
+                        grid_x : grid_x + room_width_cells,
+                        grid_y : grid_y + room_length_cells,
+                    ]
+                ):
+                    continue
+
+                # Check if position is valid
+                if self._is_valid_position(
+                    x, y, z, room.width, room.length, room.height
+                ):
+                    success = self.spatial_grid.place_room(
+                        room_id=room.id,
+                        x=x,
+                        y=y,
+                        z=z,
+                        width=room.width,
+                        length=room.length,
+                        height=room.height,
+                        room_type=room.room_type,
+                        metadata=room.metadata,
+                    )
+                    if success:
+                        return True
+
+        # If no position found in standard zones
+        return False
+
     def update_fixed_elements(
         self, fixed_elements: Dict[int, Tuple[float, float, float]]
     ):

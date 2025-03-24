@@ -131,6 +131,20 @@ def parse_arguments():
         action="store_true",
         help="Simulate user feedback for RL training",
     )
+    parser.add_argument(
+        "--standard-floor-zones",
+        type=str,
+        help="Path to standard floor zones JSON file",
+    )
+    parser.add_argument(
+        "--modified-layout", type=str, help="Path to user-modified layout JSON file"
+    )
+    parser.add_argument(
+        "--user-rating", type=float, help="User rating for the layout (0-10)"
+    )
+    parser.add_argument(
+        "--reference-layout", type=str, help="Path to reference layout JSON file"
+    )
 
     return parser.parse_args()
 
@@ -676,6 +690,44 @@ def main():
 
         random.seed(args.seed)
         np.random.seed(args.seed)
+
+    if args.standard_floor_zones and os.path.exists(args.standard_floor_zones):
+        print(f"Loading standard floor zones from: {args.standard_floor_zones}")
+        with open(args.standard_floor_zones, "r") as f:
+            standard_floor_zones = json.load(f)
+
+        # If using rule_engine:
+        RuleEngine.set_standard_floor_zones(standard_floor_zones["floor_zones"])
+        # If using rl_engine:
+        RLEngine.set_standard_floor_zones(standard_floor_zones["floor_zones"])
+
+    # Handle modified layout
+    fixed_positions = {}
+    if args.modified_layout and os.path.exists(args.modified_layout):
+        print(f"Loading modified layout from: {args.modified_layout}")
+        with open(args.modified_layout, "r") as f:
+            modified_layout = json.load(f)
+
+        # Extract fixed positions from modified layout
+        if "rooms" in modified_layout:
+            for room_id, room_data in modified_layout["rooms"].items():
+                if "position" in room_data:
+                    fixed_positions[int(room_id)] = tuple(room_data["position"])
+
+        # Update RL engine with fixed positions
+        if args.mode in ["rl", "hybrid"] and fixed_positions:
+            RLEngine.update_fixed_elements(fixed_positions)
+
+    # Handle user rating for RL
+    if args.user_rating is not None and args.mode == "rl":
+        print(f"Using user rating: {args.user_rating}")
+        # After generating layout, update the model with user feedback
+        layout = RLEngine.generate_layout(rooms)
+        RLEngine.update_model(args.user_rating)
+        # Save the model for future use
+        model_path = os.path.join(args.output, "rl_model.pt")
+        RLEngine.save_model(model_path)
+        print(f"RL model saved to: {model_path}")
 
     # Create rooms from program requirements with the specified config
     from hotel_design_ai.config.config_loader import create_room_objects_from_program
