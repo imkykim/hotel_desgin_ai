@@ -25,6 +25,73 @@ class LayoutMetrics:
         """
         self.layout = layout
         self.building_config = building_config or {"floor_height": 4.0}
+        self.floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Room types that typically need natural light
+        self.natural_light_types = [
+            "guest_room",
+            "restaurant",
+            "meeting_room",
+            "lobby",
+            "office",
+            "ballroom",
+            "retail",
+        ]
+
+    # Helper methods
+    def _get_room_floor(self, room_data):
+        """Get the floor number for a room based on z-coordinate."""
+        z = room_data["position"][2]
+        return int(z / self.floor_height)
+
+    def _get_room_center(self, room_data):
+        """Calculate the center point of a room."""
+        x, y, z = room_data["position"]
+        w, l, h = room_data["dimensions"]
+        return (x + w / 2, y + l / 2, z + h / 2)
+
+    def _iterate_rooms(self, filter_func=None):
+        """
+        Helper to iterate through rooms with optional filtering.
+
+        Args:
+            filter_func: Optional function taking room_id and room_data
+                         and returning a boolean
+
+        Yields:
+            (room_id, room_data)
+        """
+        for room_id, room_data in self.layout.rooms.items():
+            if filter_func is None or filter_func(room_id, room_data):
+                yield room_id, room_data
+
+    def _iterate_rooms_by_type(self, room_types=None):
+        """
+        Helper to iterate through rooms of specific types.
+
+        Args:
+            room_types: List of room types to include, or None for all
+
+        Yields:
+            (room_id, room_data, room_type)
+        """
+        for room_id, room_data in self.layout.rooms.items():
+            room_type = room_data["type"]
+            if room_types is None or room_type in room_types:
+                yield room_id, room_data, room_type
+
+    def _calculate_weighted_score(self, metrics, weights):
+        """Calculate weighted average of metrics."""
+        weighted_sum = 0.0
+        total_weight = 0.0
+
+        for metric, value in metrics.items():
+            if metric in weights:
+                weight = weights.get(metric, 0)
+                weighted_sum += value * weight
+                total_weight += weight
+
+        return weighted_sum / total_weight if total_weight > 0 else 0.0
 
     def space_utilization(self) -> float:
         """
@@ -43,19 +110,16 @@ class LayoutMetrics:
             float: Floor Area Ratio
         """
         # Calculate total floor area
-        total_floor_area = 0.0
-
-        for _, room_data in self.layout.rooms.items():
-            width, length, _ = room_data["dimensions"]
-            total_floor_area += width * length
+        total_floor_area = sum(
+            room_data["dimensions"][0] * room_data["dimensions"][1]
+            for room_data in self.layout.rooms.values()
+        )
 
         # Site area
         site_area = self.layout.width * self.layout.length
 
         # FAR
-        if site_area > 0:
-            return total_floor_area / site_area
-        return 0.0
+        return total_floor_area / site_area if site_area > 0 else 0.0
 
     def circulation_efficiency(self) -> Dict[str, float]:
         """
@@ -67,27 +131,26 @@ class LayoutMetrics:
                 - circulation_ratio: Ratio of circulation to total area
         """
         # Identify circulation spaces
-        circulation_rooms = []
+        circulation_rooms = [
+            room_data
+            for room_id, room_data in self._iterate_rooms()
+            if room_data["type"] in ["vertical_circulation", "circulation"]
+        ]
 
-        for room_id, room_data in self.layout.rooms.items():
-            if room_data["type"] in ["vertical_circulation", "circulation"]:
-                circulation_rooms.append(room_data)
-
-        # Calculate circulation area
+        # Calculate circulation area and total floor area
         circulation_area = sum(
             room["dimensions"][0] * room["dimensions"][1] for room in circulation_rooms
         )
 
-        # Calculate total floor area
         total_floor_area = sum(
             room["dimensions"][0] * room["dimensions"][1]
             for room in self.layout.rooms.values()
         )
 
         # Calculate circulation ratio
-        circulation_ratio = 0.0
-        if total_floor_area > 0:
-            circulation_ratio = circulation_area / total_floor_area
+        circulation_ratio = (
+            circulation_area / total_floor_area if total_floor_area > 0 else 0.0
+        )
 
         # Calculate corridor metrics if we have vertical circulation
         vertical_circulation_rooms = [
@@ -96,30 +159,24 @@ class LayoutMetrics:
 
         avg_corridor_length = 0.0
         if vertical_circulation_rooms:
-            # Get all room centers and calculate distances
-            vertical_circulation_centers = []
-            for room in vertical_circulation_rooms:
-                x, y, z = room["position"]
-                w, l, h = room["dimensions"]
-                center = (x + w / 2, y + l / 2, z + h / 2)
-                vertical_circulation_centers.append(center)
+            # Get circulation centers
+            vertical_circulation_centers = [
+                self._get_room_center(room) for room in vertical_circulation_rooms
+            ]
 
             if vertical_circulation_centers:
                 # Calculate average distance from each room to nearest circulation
-                total_distance = 0.0
-                room_count = 0
+                distances = []
 
-                for room_id, room_data in self.layout.rooms.items():
+                for room_id, room_data in self._iterate_rooms():
                     # Skip circulation rooms themselves
                     if room_data["type"] in ["vertical_circulation", "circulation"]:
                         continue
 
                     # Calculate room center
-                    x, y, z = room_data["position"]
-                    w, l, h = room_data["dimensions"]
-                    room_center = (x + w / 2, y + l / 2, z + h / 2)
+                    room_center = self._get_room_center(room_data)
 
-                    # Find closest circulation
+                    # Find closest circulation on same floor
                     min_dist = float("inf")
                     for circ_center in vertical_circulation_centers:
                         # Only consider distance within same floor
@@ -131,11 +188,10 @@ class LayoutMetrics:
                             min_dist = min(min_dist, dist)
 
                     if min_dist < float("inf"):
-                        total_distance += min_dist
-                        room_count += 1
+                        distances.append(min_dist)
 
-                if room_count > 0:
-                    avg_corridor_length = total_distance / room_count
+                if distances:
+                    avg_corridor_length = sum(distances) / len(distances)
 
         return {
             "circulation_ratio": circulation_ratio,
@@ -154,48 +210,30 @@ class LayoutMetrics:
         Returns:
             float: Ratio of satisfied adjacencies (0.0 to 1.0)
         """
-        # Track satisfied and total adjacency requirements
-        satisfied = 0
-        total = 0
+        satisfied_count = 0
+        total_count = 0
 
         # For each room type with adjacency preferences
         for room_type, preferred_adjacencies in adjacency_preferences.items():
-            # Find all rooms of this type
-            rooms_of_type = []
-
-            for room_id, room_data in self.layout.rooms.items():
-                if room_data["type"] == room_type:
-                    rooms_of_type.append(room_id)
-
-            # Skip if no rooms of this type
-            if not rooms_of_type:
-                continue
-
-            # For each room of this type
-            for room_id in rooms_of_type:
+            # Get all rooms of this type
+            for room_id, room_data, _ in self._iterate_rooms_by_type([room_type]):
                 # Get neighbors
                 neighbors = self.layout.get_room_neighbors(room_id)
 
-                # Check if neighbors include the preferred types
+                # Check preferred types
                 for preferred_type in preferred_adjacencies:
-                    # Increment total requirements
-                    total += 1
+                    total_count += 1
 
                     # Check if any neighbor is of the preferred type
-                    satisfied_for_this_room = False
-                    for neighbor_id in neighbors:
-                        if neighbor_id in self.layout.rooms:
-                            if self.layout.rooms[neighbor_id]["type"] == preferred_type:
-                                satisfied_for_this_room = True
-                                break
-
-                    if satisfied_for_this_room:
-                        satisfied += 1
+                    if any(
+                        neighbor_id in self.layout.rooms
+                        and self.layout.rooms[neighbor_id]["type"] == preferred_type
+                        for neighbor_id in neighbors
+                    ):
+                        satisfied_count += 1
 
         # Calculate ratio of satisfied adjacencies
-        if total > 0:
-            return satisfied / total
-        return 1.0  # No adjacency requirements to satisfy
+        return satisfied_count / total_count if total_count > 0 else 1.0
 
     def natural_light_access(self) -> float:
         """
@@ -207,28 +245,22 @@ class LayoutMetrics:
         # Get all exterior rooms
         exterior_rooms = set(self.layout.get_exterior_rooms())
 
-        # Count rooms that need natural light
+        # Count rooms needing light and those that have it
         rooms_needing_light = []
+        rooms_with_light = []
 
-        natural_light_types = [
-            "guest_room",
-            "restaurant",
-            "meeting_room",
-            "lobby",
-            "office",
-            "ballroom",
-        ]
-
-        for room_id, room_data in self.layout.rooms.items():
-            if room_data["type"] in natural_light_types:
-                rooms_needing_light.append(room_id)
+        for room_id, _, room_type in self._iterate_rooms_by_type(
+            self.natural_light_types
+        ):
+            rooms_needing_light.append(room_id)
+            if room_id in exterior_rooms:
+                rooms_with_light.append(room_id)
 
         # Calculate ratio
         if not rooms_needing_light:
             return 1.0  # No rooms need light
 
-        rooms_with_light = len([r for r in rooms_needing_light if r in exterior_rooms])
-        return rooms_with_light / len(rooms_needing_light)
+        return len(rooms_with_light) / len(rooms_needing_light)
 
     def structural_alignment(self, structural_grid: Tuple[float, float]) -> float:
         """
@@ -240,19 +272,18 @@ class LayoutMetrics:
         Returns:
             float: Ratio of rooms aligned with grid (0.0 to 1.0)
         """
+        grid_x, grid_y = structural_grid
         aligned_rooms = 0
         total_rooms = len(self.layout.rooms)
 
         if total_rooms == 0:
             return 1.0  # No rooms to check
 
-        grid_x, grid_y = structural_grid
-
         # Define tolerance as a percentage of grid spacing
         tolerance_x = 0.05 * grid_x
         tolerance_y = 0.05 * grid_y
 
-        for room_id, room_data in self.layout.rooms.items():
+        for _, room_data in self._iterate_rooms():
             x, y, _ = room_data["position"]
 
             # Check if room position aligns with grid lines
@@ -281,7 +312,7 @@ class LayoutMetrics:
         # Group rooms by department
         departments = {}
 
-        for room_id, room_data in self.layout.rooms.items():
+        for room_id, room_data in self._iterate_rooms():
             if room_id in room_departments:
                 dept = room_departments[room_id]
                 if dept not in departments:
@@ -298,60 +329,62 @@ class LayoutMetrics:
                 continue
 
             # Calculate room centers
-            centers = []
-            for room_id in room_ids:
-                room_data = self.layout.rooms[room_id]
-                pos = room_data["position"]
-                dim = room_data["dimensions"]
-                center = room_centroid(pos, dim)
-                centers.append(center)
+            centers = [
+                self._get_room_center(self.layout.rooms[room_id])
+                for room_id in room_ids
+            ]
 
-            # Calculate average distance between all pairs in this department
-            total_distance = 0.0
-            pair_count = 0
+            # Calculate average internal distance (within department)
+            internal_distances = [
+                manhattan_distance(centers[i], centers[j])
+                for i in range(len(centers))
+                for j in range(i + 1, len(centers))
+            ]
 
-            for i in range(len(centers)):
-                for j in range(i + 1, len(centers)):
-                    dist = manhattan_distance(centers[i], centers[j])
-                    total_distance += dist
-                    pair_count += 1
-
-            avg_distance = total_distance / pair_count if pair_count > 0 else 0
+            avg_internal_distance = (
+                sum(internal_distances) / len(internal_distances)
+                if internal_distances
+                else 0
+            )
 
             # Calculate average distance to other departments
             other_centers = []
             for other_dept, other_room_ids in departments.items():
                 if other_dept != dept:
-                    for room_id in other_room_ids:
-                        room_data = self.layout.rooms[room_id]
-                        pos = room_data["position"]
-                        dim = room_data["dimensions"]
-                        center = room_centroid(pos, dim)
-                        other_centers.append(center)
+                    other_centers.extend(
+                        [
+                            self._get_room_center(self.layout.rooms[room_id])
+                            for room_id in other_room_ids
+                        ]
+                    )
 
             # Calculate min distance from each room in this dept to any room in other depts
-            min_distances = []
-
-            for center in centers:
-                if other_centers:
-                    min_dist = min(
+            if other_centers:
+                min_external_distances = [
+                    min(
                         manhattan_distance(center, other_center)
                         for other_center in other_centers
                     )
-                    min_distances.append(min_dist)
+                    for center in centers
+                ]
 
-            avg_min_distance = (
-                sum(min_distances) / len(min_distances) if min_distances else 0
-            )
+                avg_external_distance = (
+                    sum(min_external_distances) / len(min_external_distances)
+                    if min_external_distances
+                    else 0
+                )
 
-            # Score is ratio of external to internal distances (capped at 1.0)
-            dept_score = min(1.0, avg_min_distance / (avg_distance + 0.1))
+                # Score is ratio of external to internal distances (capped at 1.0)
+                dept_score = min(
+                    1.0, avg_external_distance / (avg_internal_distance + 0.1)
+                )
+            else:
+                dept_score = 1.0  # No other departments to compare with
+
             dept_scores.append(dept_score)
 
         # Overall score is average of department scores
-        if dept_scores:
-            return sum(dept_scores) / len(dept_scores)
-        return 1.0  # No departments to check
+        return sum(dept_scores) / len(dept_scores) if dept_scores else 1.0
 
     def vertical_stacking(self) -> float:
         """
@@ -363,15 +396,13 @@ class LayoutMetrics:
         # Group rooms by type
         rooms_by_type = {}
 
-        for room_id, room_data in self.layout.rooms.items():
-            room_type = room_data["type"]
+        for room_id, room_data, room_type in self._iterate_rooms_by_type():
             if room_type not in rooms_by_type:
                 rooms_by_type[room_type] = []
             rooms_by_type[room_type].append(room_data)
 
-        # Only consider guest rooms and similar repeating room types
+        # Only consider room types that should typically be stacked
         stacking_types = ["guest_room", "meeting_room", "office"]
-
         stacking_scores = []
 
         for room_type in stacking_types:
@@ -409,9 +440,7 @@ class LayoutMetrics:
                 stacking_scores.append(stacked_rooms / total_rooms)
 
         # Overall score is average of stacking scores
-        if stacking_scores:
-            return sum(stacking_scores) / len(stacking_scores)
-        return 1.0  # No rooms to check for stacking
+        return sum(stacking_scores) / len(stacking_scores) if stacking_scores else 1.0
 
     def evaluate_all(
         self,
@@ -475,12 +504,8 @@ class LayoutMetrics:
         total_weight = 0.0
 
         for metric, value in metrics.items():
-            # Skip circulation efficiency dict
-            if metric == "circulation_efficiency":
-                continue
-
-            # Skip metrics not in weights
-            if metric not in metric_weights:
+            # Skip circulation efficiency dict and metrics not in weights
+            if metric == "circulation_efficiency" or metric not in metric_weights:
                 continue
 
             weight = metric_weights[metric]
@@ -510,6 +535,7 @@ class LayoutMetrics:
             # Add to weighted sum
             weighted_sum += circ_ratio_score * circ_weight * 0.5
             weighted_sum += corridor_score * circ_weight * 0.5
+            total_weight += circ_weight
 
         # Calculate overall score
         overall_score = weighted_sum / total_weight if total_weight > 0 else 0.0
@@ -584,6 +610,7 @@ def calculate_egress_capacity(
     """
     # Set default building config if not provided
     building_config = building_config or {"floor_height": 4.0}
+    floor_height = building_config.get("floor_height", 4.0)
 
     # Calculate occupant loads
     occupant_loads = calculate_occupant_loads(layout)
@@ -599,7 +626,7 @@ def calculate_egress_capacity(
         z = room_data["position"][2]
 
         # Determine floor using floor height from building config
-        floor = int(z / building_config["floor_height"])
+        floor = int(z / floor_height)
 
         if floor not in occupants_by_floor:
             occupants_by_floor[floor] = 0
@@ -701,9 +728,6 @@ def calculate_energy_efficiency(layout: SpatialGrid) -> Dict[str, float]:
         Dict: Energy efficiency metrics
     """
     # Calculate exterior surface area
-    exterior_area = 0.0
-
-    # Calculate the surfaces of the building that are exterior
     building_surfaces = [
         # Bottom surface (z=0)
         (0, 0, 0, layout.width, layout.length),
@@ -720,14 +744,7 @@ def calculate_energy_efficiency(layout: SpatialGrid) -> Dict[str, float]:
     ]
 
     # Calculate areas of each surface
-    for surface in building_surfaces:
-        if surface[2] == 0:  # Bottom surface
-            area = surface[3] * surface[4]
-        elif surface[1] == 0 or surface[1] == layout.length:  # Front or back
-            area = surface[3] * surface[4]
-        else:  # Left or right
-            area = surface[3] * surface[4]
-        exterior_area += area
+    exterior_area = sum(surface[3] * surface[4] for surface in building_surfaces)
 
     # Calculate total volume
     total_volume = layout.width * layout.length * layout.height
@@ -739,7 +756,6 @@ def calculate_energy_efficiency(layout: SpatialGrid) -> Dict[str, float]:
     exterior_rooms = layout.get_exterior_rooms()
 
     # Estimate windows as 40% of exterior wall area for exterior rooms
-    window_area = 0.0
     wall_area = 0.0
 
     for room_id in exterior_rooms:
@@ -786,34 +802,31 @@ def calculate_program_compliance(
     Returns:
         Dict: Program compliance metrics
     """
-    # Group rooms by type
-    rooms_by_type = {}
+    # Group rooms by type and calculate areas
+    total_area_by_type = {}
 
     for room_id, room_data in layout.rooms.items():
         room_type = room_data["type"]
-        if room_type not in rooms_by_type:
-            rooms_by_type[room_type] = []
-        rooms_by_type[room_type].append(room_data)
+        w, l, _ = room_data["dimensions"]
+        area = w * l
 
-    # Calculate metrics
-    total_area_by_type = {}
+        if room_type not in total_area_by_type:
+            total_area_by_type[room_type] = 0
+
+        total_area_by_type[room_type] += area
+
+    # Calculate compliance for each room type
     compliance_by_type = {}
     actual_vs_required = {}
 
-    # Calculate total area for each room type
-    for room_type, rooms in rooms_by_type.items():
-        total_area = sum(
-            room["dimensions"][0] * room["dimensions"][1] for room in rooms
-        )
-        total_area_by_type[room_type] = total_area
-
-    # Calculate compliance for each room type
     for room_type, required in program_requirements.items():
+        # Extract required area
         if isinstance(required, dict) and "area" in required:
             required_area = required["area"]
         else:
-            required_area = required  # If just a number is provided
+            required_area = required
 
+        # Get actual area
         actual_area = total_area_by_type.get(room_type, 0)
 
         # Calculate compliance percentage
@@ -834,8 +847,8 @@ def calculate_program_compliance(
         for req in program_requirements.values()
     )
 
+    # Calculate weighted compliance
     weighted_compliance = 0.0
-
     for room_type, required in program_requirements.items():
         required_area = required["area"] if isinstance(required, dict) else required
         compliance = compliance_by_type.get(room_type, 0)

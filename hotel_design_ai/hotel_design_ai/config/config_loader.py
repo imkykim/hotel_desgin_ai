@@ -11,16 +11,23 @@ import math
 from typing import Dict, List, Any, Optional, Tuple, Union
 
 # Define paths to data directories
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+# Move up two directories from this file to get to project root
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+USER_DATA_DIR = os.path.join(BASE_DIR, "user_data")
 
-# Sub-directories
+# Sub-directories for configuration data
 BUILDING_DIR = os.path.join(DATA_DIR, "building")
 CONSTRAINTS_DIR = os.path.join(DATA_DIR, "constraints")
 PROGRAM_DIR = os.path.join(DATA_DIR, "program")
 ROOM_TYPES_DIR = os.path.join(DATA_DIR, "room_types")
 TEMPLATES_DIR = os.path.join(DATA_DIR, "templates")
 RL_DIR = os.path.join(DATA_DIR, "rl")
+
+# Sub-directories for user data
+LAYOUTS_DIR = os.path.join(USER_DATA_DIR, "layouts")
+FEEDBACK_DIR = os.path.join(USER_DATA_DIR, "feedback")
+MODELS_DIR = os.path.join(USER_DATA_DIR, "models")
 
 # Create directories if they don't exist
 for directory in [
@@ -31,6 +38,10 @@ for directory in [
     ROOM_TYPES_DIR,
     TEMPLATES_DIR,
     RL_DIR,
+    USER_DATA_DIR,
+    LAYOUTS_DIR,
+    FEEDBACK_DIR,
+    MODELS_DIR,
 ]:
     os.makedirs(directory, exist_ok=True)
 

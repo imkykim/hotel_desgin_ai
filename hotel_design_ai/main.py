@@ -36,7 +36,7 @@ from hotel_design_ai.visualization.export import (
 )
 from hotel_design_ai.utils.metrics import LayoutMetrics
 
-# Import the config loader instead of ENV.py
+# Import the config loader with updated paths
 from hotel_design_ai.config.config_loader import (
     get_building_envelope,
     get_program_requirements,
@@ -45,6 +45,11 @@ from hotel_design_ai.config.config_loader import (
     get_rl_parameters,
     create_room_objects_from_program,
     get_all_constraints,
+    # Import the directory paths
+    DATA_DIR,
+    USER_DATA_DIR,
+    LAYOUTS_DIR,
+    MODELS_DIR,
 )
 
 
@@ -593,15 +598,17 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
     """Save layout to various output formats"""
     print("\nSaving outputs...")
 
-    # Create output directory if needed
-    os.makedirs(args.output, exist_ok=True)
-
-    # Create timestamp for unique filenames and subfolder
+    # Create output directory within user_data/layouts if needed
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    # Create timestamped subfolder
-    output_subfolder = os.path.join(args.output, timestamp)
+    output_subfolder = os.path.join(USER_DATA_DIR, "layouts", timestamp)
     os.makedirs(output_subfolder, exist_ok=True)
+
+    # # Create output directory if needed
+    # os.makedirs(args.output, exist_ok=True)
+
+    # # Create timestamped subfolder
+    # output_subfolder = os.path.join(args.output, timestamp)
+    # os.makedirs(output_subfolder, exist_ok=True)
 
     prefix = f"hotel_layout"
 
