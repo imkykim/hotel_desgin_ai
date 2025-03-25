@@ -5,12 +5,14 @@ Rule-based layout generation engine that uses architectural principles to create
 from typing import Dict, List, Tuple, Optional, Set, Any, Union
 import numpy as np
 import random
+
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 from hotel_design_ai.models.room import Room
+from hotel_design_ai.core.base_engine import BaseEngine
 from hotel_design_ai.core.constraints import create_default_constraints
 
 
-class RuleEngine:
+class RuleEngine(BaseEngine):
     """
     Rule-based layout generation engine that uses architectural principles
     to create hotel layouts.
@@ -32,31 +34,8 @@ class RuleEngine:
             structural_grid: (x_spacing, y_spacing) of structural grid in meters
             building_config: Building configuration parameters
         """
-        self.width, self.length, self.height = bounding_box
-        self.grid_size = grid_size
-        self.structural_grid = structural_grid
-
-        # Store building configuration
-        self.building_config = building_config or {
-            "floor_height": 5.0,
-            "min_floor": -1,
-            "max_floor": 3,
-        }
-
-        # Initialize spatial grid
-        self.spatial_grid = SpatialGrid(
-            width=self.width,
-            length=self.length,
-            height=self.height,
-            grid_size=self.grid_size,
-            min_floor=self.building_config.get("min_floor", -1),
-            floor_height=self.building_config.get("floor_height", 5.0),
-        )
-
-        # Floor range
-        self.min_floor = self.building_config.get("min_floor", -1)
-        self.max_floor = self.building_config.get("max_floor", 3)
-        self.floor_height = self.building_config.get("floor_height", 5.0)
+        # Initialize the base engine
+        super().__init__(bounding_box, grid_size, structural_grid, building_config)
 
         # Initialize room placement priorities from configuration instead of hardcoding
         self._init_placement_priorities()
@@ -219,100 +198,6 @@ class RuleEngine:
                 "retail": 1,  # Preferred
             }
 
-    def set_standard_floor_zones(self, floor_zones):
-        """Set standard floor zones for the hotel tower portion.
-
-        Args:
-            floor_zones: List of dicts with x, y, width, height defining standard floor areas
-        """
-        self.standard_floor_zones = floor_zones
-
-        # Create a mask for standard floor areas
-        self.standard_floor_mask = np.zeros(
-            (int(self.width), int(self.length)), dtype=bool
-        )
-
-        # Mark standard floor zones in the mask
-        for zone in floor_zones:
-            x1 = int(zone["x"] / self.grid_size)
-            y1 = int(zone["y"] / self.grid_size)
-            x2 = int((zone["x"] + zone["width"]) / self.grid_size)
-            y2 = int((zone["y"] + zone["height"]) / self.grid_size)
-
-            # Ensure within bounds
-            x1 = max(0, min(x1, self.spatial_grid.width_cells - 1))
-            y1 = max(0, min(y1, self.spatial_grid.length_cells - 1))
-            x2 = max(0, min(x2, self.spatial_grid.width_cells - 1))
-            y2 = max(0, min(y2, self.spatial_grid.length_cells - 1))
-
-            self.standard_floor_mask[x1:x2, y1:y2] = True
-
-        print(f"Set {len(floor_zones)} standard floor zones")
-
-    def place_room_by_constraints(
-        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
-    ) -> bool:
-        """Place a room according to architectural constraints and standard floor zones."""
-        # Add check for standard floors
-        if hasattr(self, "standard_floor_mask") and room.room_type == "guest_room":
-            # For guest rooms on higher floors, require them to be in standard floor zones
-            if hasattr(room, "floor") and room.floor is not None and room.floor > 0:
-                return self._place_in_standard_floor_zone(room, placed_rooms_by_type)
-
-        # Original implementation for other rooms
-        # ... rest of your existing method ...
-
-    def _place_in_standard_floor_zone(
-        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
-    ) -> bool:
-        """Place a room within the standard floor zones."""
-        if not hasattr(self, "standard_floor_mask"):
-            # If no standard floor zones defined, use regular placement
-            return super().place_room_by_constraints(room, placed_rooms_by_type)
-
-        # Get floor and z coordinate
-        floor = room.floor if hasattr(room, "floor") and room.floor is not None else 1
-        z = floor * self.floor_height
-
-        # Try positions within standard floor zones
-        for x in range(0, int(self.width - room.width) + 1, int(self.grid_size)):
-            for y in range(0, int(self.length - room.length) + 1, int(self.grid_size)):
-                # Check if position is within standard floor zone
-                grid_x = int(x / self.grid_size)
-                grid_y = int(y / self.grid_size)
-                room_width_cells = int(room.width / self.grid_size)
-                room_length_cells = int(room.length / self.grid_size)
-
-                # Skip if any part of room would be outside standard zone
-                if not np.all(
-                    self.standard_floor_mask[
-                        grid_x : grid_x + room_width_cells,
-                        grid_y : grid_y + room_length_cells,
-                    ]
-                ):
-                    continue
-
-                # Check if position is valid
-                if self._is_valid_position(
-                    x, y, z, room.width, room.length, room.height
-                ):
-                    success = self.spatial_grid.place_room(
-                        room_id=room.id,
-                        x=x,
-                        y=y,
-                        z=z,
-                        width=room.width,
-                        length=room.length,
-                        height=room.height,
-                        room_type=room.room_type,
-                        metadata=room.metadata,
-                    )
-                    if success:
-                        return True
-
-        # If no position found in standard zones
-        return False
-
     def generate_layout(self, rooms: List[Room]) -> SpatialGrid:
         """
         Generate a hotel layout based on architectural constraints.
@@ -385,7 +270,6 @@ class RuleEngine:
     ) -> bool:
         """
         Place a room according to architectural constraints.
-        Enhanced to support a list of preferred floors.
 
         Args:
             room: Room to place
@@ -394,84 +278,27 @@ class RuleEngine:
         Returns:
             bool: True if placed successfully
         """
+        # Add check for standard floors
+        if hasattr(self, "standard_floor_mask") and room.room_type == "guest_room":
+            # For guest rooms on higher floors, require them to be in standard floor zones
+            if hasattr(room, "floor") and room.floor is not None and room.floor > 0:
+                return self._place_in_standard_floor_zone(room, placed_rooms_by_type)
+
         # First try to extract preferred floors from the room's attributes
-        # Check different sources in order of precedence
+        preferred_floors = self._get_preferred_floors(room)
 
-        # 1. Check for preferred_floors attribute
-        preferred_floors = None
-        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
-            # Use the preferred_floors attribute directly if available
-            preferred_floors = room.preferred_floors
-
-        # 2. Check for preferred_floors in metadata
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            preferred_floors = room.metadata["preferred_floors"]
-
-        # 3. Check for a single floor attribute on the room
-        elif hasattr(room, "floor") and room.floor is not None:
-            # If it's a single floor value, convert to a list
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-
-        # 4. Check for a single floor in metadata
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            if isinstance(room.metadata["floor"], list):
-                preferred_floors = room.metadata["floor"]
-            else:
-                preferred_floors = [room.metadata["floor"]]
-
-        # 5. Use default floor preferences by room type
-        if preferred_floors is None:
-            default_floor = self.floor_preferences.get(room.room_type)
-            if default_floor is not None:
-                # Convert single floor to list
-                preferred_floors = [default_floor]
-            else:
-                # Handle special case for guest rooms distribution
-                if room.room_type == "guest_room":
-                    # Distribute guest rooms across upper floors starting from 1 or min habitable floor
-                    start_floor = (
-                        max(1, self.min_floor) if self.max_floor > 0 else self.min_floor
-                    )
-                    floor = start_floor + (
-                        len(placed_rooms_by_type.get("guest_room", []))
-                        % max(1, self.max_floor - start_floor + 1)
-                    )
-                    preferred_floors = [floor]
-                else:
-                    # Default to ground floor or min habitable floor
-                    preferred_floors = [max(0, self.min_floor)]
+        # Handle special room types
+        if self._needs_special_handling(room.room_type):
+            success = self._handle_special_room_type(
+                room, placed_rooms_by_type, preferred_floors
+            )
+            if success:
+                return True
 
         # Try each preferred floor in order
         for floor_value in preferred_floors:
-            # Ensure floor_value is an integer
-            try:
-                floor_value = int(floor_value)
-                # Calculate z coordinate for this floor
-                z = floor_value * self.floor_height
-
-                # Handle special room types
-                if self._needs_special_handling(room.room_type):
-                    success = self._handle_special_room_type(
-                        room, placed_rooms_by_type, z
-                    )
-                    if success:
-                        return True
-                    else:
-                        # Continue to next floor if this floor failed for special handling
-                        continue
-            except (ValueError, TypeError):
-                # Skip this floor value if it can't be converted to an integer
-                print(
-                    f"Warning: Invalid floor value {floor_value} for room {room.name}, skipping"
-                )
-                continue
+            # Calculate z coordinate for this floor
+            z = floor_value * self.floor_height
 
             # Try to place based on adjacency requirements
             if room.room_type in self.adjacency_preferences:
@@ -591,7 +418,10 @@ class RuleEngine:
         return room_type in special_types
 
     def _handle_special_room_type(
-        self, room: Room, placed_rooms_by_type: Dict[str, List[int]], z: float
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
     ) -> bool:
         """
         Handle placement for room types that need special processing.
@@ -600,7 +430,7 @@ class RuleEngine:
         Args:
             room: The room to place
             placed_rooms_by_type: Dictionary of already placed rooms by type
-            z: Z-coordinate for placement
+            preferred_floors: List of preferred floor numbers
 
         Returns:
             bool: True if room was placed successfully
@@ -608,9 +438,9 @@ class RuleEngine:
         if room.room_type == "vertical_circulation":
             return self._place_vertical_circulation(room)
         elif room.room_type == "entrance":
-            return self._place_entrance(room, z)
+            return self._place_entrance(room, preferred_floors)
         elif room.room_type == "parking":
-            return self._place_parking(room, z, placed_rooms_by_type)
+            return self._place_parking(room, preferred_floors, placed_rooms_by_type)
 
         # If we reach here, there's a configuration error - we said the room type
         # needs special handling but didn't provide a method
@@ -619,7 +449,9 @@ class RuleEngine:
         )
 
         # Fall back to standard placement
-        position = self._find_position_on_floor(room, int(z / self.floor_height))
+        position = self._find_position_on_floor(
+            room, preferred_floors[0] if preferred_floors else 0
+        )
         if position:
             x, y, z_pos = position
             success = self.spatial_grid.place_room(
@@ -638,8 +470,12 @@ class RuleEngine:
 
         return False
 
-    def _place_entrance(self, room: Room, z: float) -> bool:
+    def _place_entrance(self, room: Room, preferred_floors: List[int]) -> bool:
         """Place entrance on perimeter with preference for front facade."""
+        # Use the first preferred floor
+        floor = preferred_floors[0] if preferred_floors else 0
+        z = floor * self.floor_height
+
         # Try front edge first (y = 0)
         center_x = (self.width - room.width) / 2
         center_x = round(center_x / self.structural_grid[0]) * self.structural_grid[0]
@@ -697,7 +533,7 @@ class RuleEngine:
                 )
 
         # Try side and back edges if front fails
-        position = self._find_perimeter_position(room, int(z / self.floor_height))
+        position = self._find_perimeter_position(room, floor)
         if position:
             x, y, z_pos = position
             return self.spatial_grid.place_room(
@@ -832,23 +668,30 @@ class RuleEngine:
         return False
 
     def _place_parking(
-        self, room: Room, z: float, placed_rooms_by_type: Dict[str, List[int]]
+        self,
+        room: Room,
+        preferred_floors: List[int],
+        placed_rooms_by_type: Dict[str, List[int]],
     ) -> bool:
         """
         Special placement logic for parking areas that can overlap with vertical circulation.
 
         Args:
             room: Parking room to place
-            z: Z-coordinate (height) for the room
+            preferred_floors: List of preferred floor numbers
             placed_rooms_by_type: Dictionary of already placed rooms by type
 
         Returns:
             bool: True if placed successfully, False otherwise
         """
+        # Use the first preferred floor
+        floor = preferred_floors[0] if preferred_floors else self.min_floor
+        z = floor * self.floor_height
+
         print(f"Placing parking area {room.id} at z={z}")
 
         # Try standard placement first
-        position = self._find_position_on_floor(room, int(z / self.floor_height))
+        position = self._find_position_on_floor(room, floor)
         if position:
             x, y, z_pos = position
             success = self.spatial_grid.place_room(
@@ -1122,64 +965,3 @@ class RuleEngine:
         else:
             # For other types, no particular ordering
             return candidate_floors
-
-    def _is_valid_position(
-        self, x: float, y: float, z: float, width: float, length: float, height: float
-    ) -> bool:
-        """Check if a position is valid for room placement."""
-        # Check building bounds
-        if x < 0 or y < 0 or x + width > self.width or y + length > self.length:
-            return False
-
-        # Check floor range
-        min_floor = self.building_config.get("min_floor", -1)
-        max_floor = self.building_config.get("max_floor", 3)
-        floor_height = self.building_config.get("floor_height", 5.0)
-
-        min_z = min_floor * floor_height
-        max_z = (max_floor + 1) * floor_height
-
-        if z < min_z or z + height > max_z:
-            return False
-
-        # Convert to grid coordinates using SpatialGrid's helper method if available
-        if hasattr(self.spatial_grid, "_convert_to_grid_indices"):
-            grid_x, grid_y, grid_z = self.spatial_grid._convert_to_grid_indices(x, y, z)
-        else:
-            # Fallback to manual conversion
-            grid_x = int(x / self.grid_size)
-            grid_y = int(y / self.grid_size)
-            grid_z = int(z / self.grid_size)
-
-            # Apply z-offset manually if SpatialGrid has one
-            if hasattr(self.spatial_grid, "z_offset"):
-                grid_z += self.spatial_grid.z_offset
-
-        grid_width = int(width / self.grid_size)
-        grid_length = int(length / self.grid_size)
-        grid_height = int(height / self.grid_size)
-
-        # Check grid bounds
-        if (
-            grid_x < 0
-            or grid_y < 0
-            or grid_z < 0
-            or grid_x + grid_width > self.spatial_grid.width_cells
-            or grid_y + grid_length > self.spatial_grid.length_cells
-            or grid_z + grid_height > self.spatial_grid.height_cells
-        ):
-            return False
-
-        # Check for collisions
-        try:
-            # Get the region where the room would be placed
-            target_region = self.spatial_grid.grid[
-                grid_x : grid_x + grid_width,
-                grid_y : grid_y + grid_length,
-                grid_z : grid_z + grid_height,
-            ]
-
-            # If any cell is non-zero, there's a collision
-            return np.all(target_region == 0)
-        except IndexError:
-            return False  # Grid indices out of bounds

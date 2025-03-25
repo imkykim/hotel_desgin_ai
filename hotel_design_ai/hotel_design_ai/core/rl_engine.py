@@ -1,6 +1,6 @@
 """
-Simplified RL engine architecture for hotel room placement.
-This refactored architecture focuses on modularity, simplicity, and effectiveness.
+Reinforcement Learning engine for hotel layout generation.
+Inherits from BaseEngine to leverage common functionality.
 """
 
 import numpy as np
@@ -9,21 +9,17 @@ import torch.nn as nn
 import torch.optim as optim
 import random
 from collections import deque, defaultdict
-from typing import List, Dict, Tuple, Any, Optional, Union, Set, Callable
+from typing import List, Dict, Tuple, Any, Optional, Union, Set
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 from hotel_design_ai.models.room import Room
-
-
-# ---------------------------------------------------------
-# Core RL Components (remain largely the same)
-# ---------------------------------------------------------
+from hotel_design_ai.core.base_engine import BaseEngine
 
 
 class RLPolicyNetwork(nn.Module):
     """Neural network that represents the policy for the RL agent."""
 
-    def __init__(self, state_dim: int, action_dim: int, hidden_dim: int = 256):
+    def __init__(self, state_dim: int, hidden_dim: int = 256, action_dim: int = 256):
         super(RLPolicyNetwork, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(state_dim, hidden_dim),
@@ -37,1120 +33,10 @@ class RLPolicyNetwork(nn.Module):
         return self.network(state)
 
 
-# ---------------------------------------------------------
-# Room Placement Strategy Classes
-# ---------------------------------------------------------
-
-
-class PlacementStrategy:
-    """Base class for room placement strategies."""
-
-    def __init__(self, spatial_grid, building_config):
-        self.spatial_grid = spatial_grid
-        self.building_config = building_config
-        self.min_floor = building_config.get("min_floor", -1)
-        self.max_floor = building_config.get("max_floor", 3)
-        self.floor_height = building_config.get("floor_height", 4.0)
-        self.structural_grid = (
-            building_config.get("structural_grid_x", 8.0),
-            building_config.get("structural_grid_y", 8.0),
-        )
-
-    def place(self, room: Room) -> bool:
-        """Attempt to place a room using this strategy.
-
-        Args:
-            room: The room to place
-
-        Returns:
-            bool: True if placement was successful
-        """
-        raise NotImplementedError("Subclasses must implement place()")
-
-    def is_applicable(self, room: Room) -> bool:
-        """Check if this strategy applies to the given room.
-
-        Args:
-            room: The room to check
-
-        Returns:
-            bool: True if this strategy applies to this room
-        """
-        raise NotImplementedError("Subclasses must implement is_applicable()")
-
-    def _is_valid_position(self, x, y, z, width, length, height) -> bool:
-        """Check if a position is valid for room placement."""
-        # Convert to grid coordinates
-        grid_x = int(x / self.spatial_grid.grid_size)
-        grid_y = int(y / self.spatial_grid.grid_size)
-        grid_z = int(z / self.spatial_grid.grid_size)
-        grid_width = int(width / self.spatial_grid.grid_size)
-        grid_length = int(length / self.spatial_grid.grid_size)
-        grid_height = int(height / self.spatial_grid.grid_size)
-
-        # Check bounds
-        if (
-            grid_x < 0
-            or grid_y < 0
-            or grid_z < 0
-            or grid_x + grid_width > self.spatial_grid.width_cells
-            or grid_y + grid_length > self.spatial_grid.length_cells
-            or grid_z + grid_height > self.spatial_grid.height_cells
-        ):
-            return False
-
-        # Check for collisions with existing rooms
-        target_region = self.spatial_grid.grid[
-            grid_x : grid_x + grid_width,
-            grid_y : grid_y + grid_length,
-            grid_z : grid_z + grid_height,
-        ]
-
-        return np.all(target_region == 0)
-
-
-class DefaultPlacementStrategy(PlacementStrategy):
-    """Default placement strategy for most room types."""
-
-    def is_applicable(self, room: Room) -> bool:
-        """This is the default strategy applicable to all room types."""
-        return True
-
-    def place(self, room: Room) -> bool:
-        """Standard room placement on preferred floors."""
-        preferred_floors = self._get_preferred_floors(room)
-
-        # Try center positions on preferred floors
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-
-            # Try center position
-            center_x = max(0, (self.spatial_grid.width - room.width) / 2)
-            center_y = max(0, (self.spatial_grid.length - room.length) / 2)
-            center_x = (
-                round(center_x / self.structural_grid[0]) * self.structural_grid[0]
-            )
-            center_y = (
-                round(center_y / self.structural_grid[1]) * self.structural_grid[1]
-            )
-
-            if self._is_valid_position(
-                center_x, center_y, z, room.width, room.length, room.height
-            ):
-                success = self.spatial_grid.place_room(
-                    room_id=room.id,
-                    x=center_x,
-                    y=center_y,
-                    z=z,
-                    width=room.width,
-                    length=room.length,
-                    height=room.height,
-                    room_type=room.room_type,
-                    metadata=room.metadata,
-                )
-                if success:
-                    return True
-
-            # Try grid-aligned positions
-            grid_x, grid_y = self.structural_grid
-            for x in range(
-                0, int(self.spatial_grid.width - room.width) + 1, int(grid_x)
-            ):
-                for y in range(
-                    0, int(self.spatial_grid.length - room.length) + 1, int(grid_y)
-                ):
-                    if self._is_valid_position(
-                        x, y, z, room.width, room.length, room.height
-                    ):
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=x,
-                            y=y,
-                            z=z,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
-                        )
-                        if success:
-                            return True
-
-        # Try other floors if preferred floors fail
-        other_floors = [
-            f
-            for f in range(self.min_floor, self.max_floor + 1)
-            if f not in preferred_floors
-        ]
-
-        for floor in other_floors:
-            z = floor * self.floor_height
-            grid_x, grid_y = self.structural_grid
-
-            for x in range(
-                0, int(self.spatial_grid.width - room.width) + 1, int(grid_x)
-            ):
-                for y in range(
-                    0, int(self.spatial_grid.length - room.length) + 1, int(grid_y)
-                ):
-                    if self._is_valid_position(
-                        x, y, z, room.width, room.length, room.height
-                    ):
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=x,
-                            y=y,
-                            z=z,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
-                        )
-                        if success:
-                            return True
-
-        return False
-
-    def _get_preferred_floors(self, room: Room) -> List[int]:
-        """Get preferred floors for a room, searching multiple sources."""
-        preferred_floors = []
-
-        # 1. Check for preferred_floors attribute
-        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
-            if isinstance(room.preferred_floors, list):
-                preferred_floors = room.preferred_floors
-            else:
-                preferred_floors = [room.preferred_floors]
-
-        # 2. Or check metadata for preferred_floors
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            floors = room.metadata["preferred_floors"]
-            if isinstance(floors, list):
-                preferred_floors = floors
-            else:
-                preferred_floors = [floors]
-
-        # 3. Or check for a floor attribute
-        elif hasattr(room, "floor") and room.floor is not None:
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-
-        # 4. Or check floor in metadata
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
-            if isinstance(floor, list):
-                preferred_floors = floor
-            else:
-                preferred_floors = [floor]
-
-        # 5. Default to all floors if nothing is specified
-        if not preferred_floors:
-            preferred_floors = list(range(self.min_floor, self.max_floor + 1))
-
-        # Ensure all floor values are integers
-        return [int(floor) for floor in preferred_floors if floor is not None]
-
-
-class PerimeterPlacementStrategy(PlacementStrategy):
-    """Strategy for rooms that should be placed on the perimeter."""
-
-    def is_applicable(self, room: Room) -> bool:
-        """Check if this room needs exterior access."""
-        exterior_room_types = [
-            "entrance",
-            "lobby",
-            "restaurant",
-            "retail",
-            "guest_room",
-        ]
-        return room.room_type in exterior_room_types
-
-    def place(self, room: Room) -> bool:
-        """Place room on the perimeter."""
-        preferred_floors = self._get_preferred_floors(room)
-
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-
-            # For entrance, prefer front perimeter
-            if room.room_type == "entrance":
-                # Try front edge first (y = 0)
-                for x in range(
-                    0,
-                    int(self.spatial_grid.width - room.width) + 1,
-                    int(self.structural_grid[0]),
-                ):
-                    if self._is_valid_position(
-                        x, 0, z, room.width, room.length, room.height
-                    ):
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=x,
-                            y=0,
-                            z=z,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
-                        )
-                        if success:
-                            return True
-
-            # Try all perimeter positions
-            perimeter_positions = []
-
-            # Back edge
-            back_y = self.spatial_grid.length - room.length
-            for x in range(
-                0,
-                int(self.spatial_grid.width - room.width) + 1,
-                int(self.structural_grid[0]),
-            ):
-                perimeter_positions.append((x, back_y))
-
-            # Front edge (for non-entrance types)
-            if room.room_type != "entrance":
-                for x in range(
-                    0,
-                    int(self.spatial_grid.width - room.width) + 1,
-                    int(self.structural_grid[0]),
-                ):
-                    perimeter_positions.append((x, 0))
-
-            # Left edge
-            for y in range(
-                0,
-                int(self.spatial_grid.length - room.length) + 1,
-                int(self.structural_grid[1]),
-            ):
-                perimeter_positions.append((0, y))
-
-            # Right edge
-            right_x = self.spatial_grid.width - room.width
-            for y in range(
-                0,
-                int(self.spatial_grid.length - room.length) + 1,
-                int(self.structural_grid[1]),
-            ):
-                perimeter_positions.append((right_x, y))
-
-            # Try all perimeter positions
-            random.shuffle(perimeter_positions)
-            for x, y in perimeter_positions:
-                if self._is_valid_position(
-                    x, y, z, room.width, room.length, room.height
-                ):
-                    success = self.spatial_grid.place_room(
-                        room_id=room.id,
-                        x=x,
-                        y=y,
-                        z=z,
-                        width=room.width,
-                        length=room.length,
-                        height=room.height,
-                        room_type=room.room_type,
-                        metadata=room.metadata,
-                    )
-                    if success:
-                        return True
-
-        return False
-
-    def _get_preferred_floors(self, room: Room) -> List[int]:
-        """Get preferred floors for a room, searching multiple sources."""
-        preferred_floors = []
-
-        # 1. Check for preferred_floors attribute
-        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
-            if isinstance(room.preferred_floors, list):
-                preferred_floors = room.preferred_floors
-            else:
-                preferred_floors = [room.preferred_floors]
-
-        # 2. Or check metadata for preferred_floors
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            floors = room.metadata["preferred_floors"]
-            if isinstance(floors, list):
-                preferred_floors = floors
-            else:
-                preferred_floors = [floors]
-
-        # 3. Or check for a floor attribute
-        elif hasattr(room, "floor") and room.floor is not None:
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-
-        # 4. Or check floor in metadata
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
-            if isinstance(floor, list):
-                preferred_floors = floor
-            else:
-                preferred_floors = [floor]
-
-        # 5. Default to all floors if nothing is specified
-        if not preferred_floors:
-            if room.room_type == "entrance":
-                preferred_floors = [
-                    max(0, self.min_floor)
-                ]  # Entrance usually on ground floor
-            else:
-                preferred_floors = list(range(self.min_floor, self.max_floor + 1))
-
-        # Ensure all floor values are integers
-        return [int(floor) for floor in preferred_floors if floor is not None]
-
-
-class LargeRoomStrategy(PlacementStrategy):
-    """Strategy for large rooms (like ballrooms, meeting spaces, parking)."""
-
-    def is_applicable(self, room: Room) -> bool:
-        """Check if this is a large room (> 300 m²)."""
-        large_area = room.width * room.length > 300
-        large_types = ["ballroom", "meeting_room", "parking", "pool"]
-        return large_area or room.room_type in large_types
-
-    def place(self, room: Room) -> bool:
-        """Place large room with adaptive sizing if needed."""
-        if room.room_type == "parking" and room.width * room.length > 1000:
-            return self._place_parking_sections(room)
-
-        preferred_floors = self._get_preferred_floors(room)
-        original_width, original_length = room.width, room.length
-
-        # Try with original dimensions on preferred floors
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-
-            # Try center first (architecturally preferable)
-            center_x = max(0, (self.spatial_grid.width - room.width) / 2)
-            center_y = max(0, (self.spatial_grid.length - room.length) / 2)
-            center_x = (
-                round(center_x / self.structural_grid[0]) * self.structural_grid[0]
-            )
-            center_y = (
-                round(center_y / self.structural_grid[1]) * self.structural_grid[1]
-            )
-
-            if self._is_valid_position(
-                center_x, center_y, z, room.width, room.length, room.height
-            ):
-                success = self.spatial_grid.place_room(
-                    room_id=room.id,
-                    x=center_x,
-                    y=center_y,
-                    z=z,
-                    width=room.width,
-                    length=room.length,
-                    height=room.height,
-                    room_type=room.room_type,
-                    metadata=room.metadata,
-                    allow_overlap=(
-                        ["vertical_circulation"]
-                        if room.room_type == "parking"
-                        else None
-                    ),
-                )
-                if success:
-                    return True
-
-            # Try grid search
-            grid_x, grid_y = self.structural_grid
-            for x in range(
-                0, int(self.spatial_grid.width - room.width) + 1, int(grid_x)
-            ):
-                for y in range(
-                    0, int(self.spatial_grid.length - room.length) + 1, int(grid_y)
-                ):
-                    if self._is_valid_position(
-                        x, y, z, room.width, room.length, room.height
-                    ):
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=x,
-                            y=y,
-                            z=z,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
-                            allow_overlap=(
-                                ["vertical_circulation"]
-                                if room.room_type == "parking"
-                                else None
-                            ),
-                        )
-                        if success:
-                            return True
-
-        # If original dimensions don't work, try alternative shapes with same area
-        area = original_width * original_length
-        grid_x, grid_y = self.structural_grid
-
-        alternative_shapes = []
-
-        # More square shape
-        side = np.sqrt(area)
-        width1 = round(side / grid_x) * grid_x
-        length1 = round(area / width1 / grid_y) * grid_y
-        alternative_shapes.append((width1, length1))
-
-        # Wide shape
-        width2 = round(side * 1.5 / grid_x) * grid_x
-        length2 = round(area / width2 / grid_y) * grid_y
-        alternative_shapes.append((width2, length2))
-
-        # Tall shape
-        width3 = round(side / 1.5 / grid_x) * grid_x
-        length3 = round(area / width3 / grid_y) * grid_y
-        alternative_shapes.append((width3, length3))
-
-        # Filter shapes that fit within building
-        valid_shapes = [
-            (w, l)
-            for w, l in alternative_shapes
-            if w > 0
-            and l > 0
-            and w <= self.spatial_grid.width
-            and l <= self.spatial_grid.length
-        ]
-
-        # Try each alternative shape
-        for width, length in valid_shapes:
-            # Temporarily update room dimensions
-            room.width, room.length = width, length
-
-            for floor in preferred_floors:
-                z = floor * self.floor_height
-
-                for x in range(
-                    0, int(self.spatial_grid.width - width) + 1, int(grid_x)
-                ):
-                    for y in range(
-                        0, int(self.spatial_grid.length - length) + 1, int(grid_y)
-                    ):
-                        if self._is_valid_position(x, y, z, width, length, room.height):
-                            success = self.spatial_grid.place_room(
-                                room_id=room.id,
-                                x=x,
-                                y=y,
-                                z=z,
-                                width=width,
-                                length=length,
-                                height=room.height,
-                                room_type=room.room_type,
-                                metadata=room.metadata,
-                                allow_overlap=(
-                                    ["vertical_circulation"]
-                                    if room.room_type == "parking"
-                                    else None
-                                ),
-                            )
-                            if success:
-                                return True
-
-        # Reset dimensions
-        room.width, room.length = original_width, original_length
-
-        # Last resort: force placement
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-            x = self.structural_grid[0]
-            y = self.structural_grid[1]
-
-            success = self.spatial_grid.place_room(
-                room_id=room.id,
-                x=x,
-                y=y,
-                z=z,
-                width=room.width,
-                length=room.length,
-                height=room.height,
-                room_type=room.room_type,
-                metadata=room.metadata,
-                allow_overlap=["vertical_circulation"],
-                force_placement=True,
-            )
-            if success:
-                return True
-
-        return False
-
-    def _place_parking_sections(self, room: Room) -> bool:
-        """Place large parking as multiple sections."""
-        preferred_floors = self._get_preferred_floors(room)
-
-        # Calculate section sizes
-        total_area = room.width * room.length
-        grid_x, grid_y = self.structural_grid
-
-        # More sections for large areas
-        num_sections = min(6, max(2, int(total_area / 800)))
-        area_per_section = total_area / num_sections
-
-        # Calculate section dimensions
-        section_width = round(np.sqrt(area_per_section) / grid_x) * grid_x
-        section_length = round(area_per_section / section_width / grid_y) * grid_y
-
-        # Distribute sections across floors
-        sections_per_floor = {}
-        for i, floor in enumerate(preferred_floors):
-            sections_this_floor = max(1, num_sections // len(preferred_floors))
-            if i == len(preferred_floors) - 1:
-                remaining = num_sections - sum(sections_per_floor.values())
-                sections_this_floor = remaining
-            sections_per_floor[floor] = sections_this_floor
-
-        # Place sections
-        sections_placed = 0
-
-        for floor, num_to_place in sections_per_floor.items():
-            z = floor * self.floor_height
-
-            # Build positions for this floor
-            positions = []
-            for x in range(
-                0, int(self.spatial_grid.width - section_width) + 1, int(grid_x)
-            ):
-                for y in range(
-                    0, int(self.spatial_grid.length - section_length) + 1, int(grid_y)
-                ):
-                    positions.append((x, y))
-
-            # Shuffle positions
-            random.shuffle(positions)
-
-            # Place sections on this floor
-            for i in range(num_to_place):
-                section_id = room.id * 100 + sections_placed + 1
-
-                # Create section metadata
-                section_metadata = room.metadata.copy() if room.metadata else {}
-                section_metadata["parent_room_id"] = room.id
-                section_metadata["is_parking_section"] = True
-                section_metadata["section_number"] = sections_placed + 1
-                section_metadata["of_sections"] = num_sections
-
-                # Try positions
-                placed = False
-                for x, y in positions:
-                    success = self.spatial_grid.place_room(
-                        room_id=section_id,
-                        x=x,
-                        y=y,
-                        z=z,
-                        width=section_width,
-                        length=section_length,
-                        height=room.height,
-                        room_type=room.room_type,
-                        metadata=section_metadata,
-                        allow_overlap=["vertical_circulation"],
-                    )
-
-                    if success:
-                        sections_placed += 1
-                        placed = True
-                        break
-
-                # If normal placement failed, try force placement
-                if not placed:
-                    x = grid_x
-                    y = grid_y * (sections_placed + 1)
-                    y = min(y, self.spatial_grid.length - section_length)
-
-                    success = self.spatial_grid.place_room(
-                        room_id=section_id,
-                        x=x,
-                        y=y,
-                        z=z,
-                        width=section_width,
-                        length=section_length,
-                        height=room.height,
-                        room_type=room.room_type,
-                        metadata=section_metadata,
-                        allow_overlap=["vertical_circulation"],
-                        force_placement=True,
-                    )
-
-                    if success:
-                        sections_placed += 1
-
-        return sections_placed > 0
-
-    def _get_preferred_floors(self, room: Room) -> List[int]:
-        """Get preferred floors for large rooms."""
-        preferred_floors = []
-
-        # 1. Check for preferred_floors attribute
-        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
-            if isinstance(room.preferred_floors, list):
-                preferred_floors = room.preferred_floors
-            else:
-                preferred_floors = [room.preferred_floors]
-
-        # 2. Or check metadata for preferred_floors
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            floors = room.metadata["preferred_floors"]
-            if isinstance(floors, list):
-                preferred_floors = floors
-            else:
-                preferred_floors = [floors]
-
-        # 3. Or check for a floor attribute
-        elif hasattr(room, "floor") and room.floor is not None:
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-
-        # 4. Or check floor in metadata
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
-            if isinstance(floor, list):
-                preferred_floors = floor
-            else:
-                preferred_floors = [floor]
-
-        # 5. Default to room-type specific floors if nothing is specified
-        if not preferred_floors:
-            if room.room_type == "parking":
-                preferred_floors = list(
-                    range(self.min_floor, min(0, self.max_floor) + 1)
-                )  # Basement floors
-            elif room.room_type == "ballroom" or room.room_type == "meeting_room":
-                preferred_floors = [max(0, self.min_floor)]  # Ground floor
-            else:
-                preferred_floors = list(range(self.min_floor, self.max_floor + 1))
-
-        # Ensure all floor values are integers
-        return [int(floor) for floor in preferred_floors if floor is not None]
-
-
-class CirculationStrategy(PlacementStrategy):
-    """Special strategy for vertical circulation that spans all floors."""
-
-    def is_applicable(self, room: Room) -> bool:
-        """Check if this is a vertical circulation room."""
-        return room.room_type == "vertical_circulation"
-
-    def place(self, room: Room) -> bool:
-        """Place vertical circulation spanning all floors."""
-        # Calculate height to span all floors
-        total_floors = self.max_floor - self.min_floor + 1
-        total_height = total_floors * self.floor_height
-
-        # Start z at lowest floor
-        z = self.min_floor * self.floor_height
-
-        # Update metadata
-        if not room.metadata:
-            room.metadata = {}
-        room.metadata["is_core"] = True
-        room.metadata["spans_floors"] = list(range(self.min_floor, self.max_floor + 1))
-
-        # Try center position first
-        center_x = (self.spatial_grid.width - room.width) / 2
-        center_y = (self.spatial_grid.length - room.length) / 2
-        center_x = round(center_x / self.structural_grid[0]) * self.structural_grid[0]
-        center_y = round(center_y / self.structural_grid[1]) * self.structural_grid[1]
-
-        if self._is_valid_position(
-            center_x, center_y, z, room.width, room.length, total_height
-        ):
-            success = self.spatial_grid.place_room(
-                room_id=room.id,
-                x=center_x,
-                y=center_y,
-                z=z,
-                width=room.width,
-                length=room.length,
-                height=total_height,
-                room_type=room.room_type,
-                metadata=room.metadata,
-            )
-            if success:
-                return True
-
-        # Try grid search
-        grid_x, grid_y = self.structural_grid
-        for x in range(0, int(self.spatial_grid.width - room.width) + 1, int(grid_x)):
-            for y in range(
-                0, int(self.spatial_grid.length - room.length) + 1, int(grid_y)
-            ):
-                if self._is_valid_position(
-                    x, y, z, room.width, room.length, total_height
-                ):
-                    success = self.spatial_grid.place_room(
-                        room_id=room.id,
-                        x=x,
-                        y=y,
-                        z=z,
-                        width=room.width,
-                        length=room.length,
-                        height=total_height,
-                        room_type=room.room_type,
-                        metadata=room.metadata,
-                    )
-                    if success:
-                        return True
-
-        # Force placement as last resort
-        success = self.spatial_grid.place_room(
-            room_id=room.id,
-            x=grid_x,
-            y=grid_y,
-            z=z,
-            width=room.width,
-            length=room.length,
-            height=total_height,
-            room_type=room.room_type,
-            metadata=room.metadata,
-            force_placement=True,
-        )
-        return success
-
-
-class AdjacencyPlacementStrategy(PlacementStrategy):
-    """Strategy that places rooms adjacent to existing rooms of specific types."""
-
-    def __init__(self, spatial_grid, building_config):
-        super().__init__(spatial_grid, building_config)
-        # Define adjacency requirements
-        self.adjacency_requirements = {
-            "kitchen": ["restaurant"],
-            "restaurant": ["lobby", "kitchen"],
-            "meeting_room": ["pre_function", "lobby"],
-            "pre_function": ["meeting_room", "ballroom"],
-            "ballroom": ["pre_function"],
-            "lounge": ["lobby", "ballroom"],
-            "food_service": ["restaurant"],
-            "retail": ["lobby"],
-            "service_area": ["lobby", "back_of_house"],
-            "back_of_house": ["service_area"],
-        }
-
-    def is_applicable(self, room: Room) -> bool:
-        """Check if this room has adjacency requirements."""
-        return room.room_type in self.adjacency_requirements
-
-    def place(self, room: Room) -> bool:
-        """Place room adjacent to its required neighbors."""
-        required_adjacencies = self.adjacency_requirements.get(room.room_type, [])
-        if not required_adjacencies:
-            return False
-
-        preferred_floors = self._get_preferred_floors(room)
-
-        # For each adjacency requirement, find rooms of that type
-        for adj_type in required_adjacencies:
-            adj_rooms = []
-            for room_id, room_data in self.spatial_grid.rooms.items():
-                if room_data["type"] == adj_type:
-                    adj_rooms.append(room_data)
-
-            # For each adjacent room, try to place next to it
-            for adj_room in adj_rooms:
-                x, y, z = adj_room["position"]
-                w, l, h = adj_room["dimensions"]
-
-                # Calculate what floor this room is on
-                floor = int(z / self.floor_height)
-
-                # Skip if not on a preferred floor
-                if floor not in preferred_floors:
-                    continue
-
-                # Try positions around the adjacent room
-                positions = [
-                    (x + w, y, z),  # Right
-                    (x - room.width, y, z),  # Left
-                    (x, y + l, z),  # Behind
-                    (x, y - room.length, z),  # In front
-                ]
-
-                for pos_x, pos_y, pos_z in positions:
-                    if self._is_valid_position(
-                        pos_x, pos_y, pos_z, room.width, room.length, room.height
-                    ):
-                        success = self.spatial_grid.place_room(
-                            room_id=room.id,
-                            x=pos_x,
-                            y=pos_y,
-                            z=pos_z,
-                            width=room.width,
-                            length=room.length,
-                            height=room.height,
-                            room_type=room.room_type,
-                            metadata=room.metadata,
-                        )
-                        if success:
-                            return True
-
-        # If adjacency placement fails, fall back to default placement
-        return DefaultPlacementStrategy(self.spatial_grid, self.building_config).place(
-            room
-        )
-
-    def _get_preferred_floors(self, room: Room) -> List[int]:
-        """Get preferred floors for adjacent placement."""
-        preferred_floors = []
-
-        # 1. Check for preferred_floors attribute
-        if hasattr(room, "preferred_floors") and room.preferred_floors is not None:
-            if isinstance(room.preferred_floors, list):
-                preferred_floors = room.preferred_floors
-            else:
-                preferred_floors = [room.preferred_floors]
-
-        # 2. Or check metadata for preferred_floors
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            floors = room.metadata["preferred_floors"]
-            if isinstance(floors, list):
-                preferred_floors = floors
-            else:
-                preferred_floors = [floors]
-
-        # 3. Or check for a floor attribute
-        elif hasattr(room, "floor") and room.floor is not None:
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-
-        # 4. Or check floor in metadata
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
-            if isinstance(floor, list):
-                preferred_floors = floor
-            else:
-                preferred_floors = [floor]
-
-        # 5. If still no preferred floors, check existing rooms of required types
-        if not preferred_floors:
-            required_adjacencies = self.adjacency_requirements.get(room.room_type, [])
-
-            found_floors = set()
-            for adj_type in required_adjacencies:
-                for room_id, room_data in self.spatial_grid.rooms.items():
-                    if room_data["type"] == adj_type:
-                        z = room_data["position"][2]
-                        found_floors.add(int(z / self.floor_height))
-
-            if found_floors:
-                preferred_floors = list(found_floors)
-            else:
-                preferred_floors = list(range(self.min_floor, self.max_floor + 1))
-
-        # Ensure all floor values are integers
-        return [int(floor) for floor in preferred_floors if floor is not None]
-
-
-class ForcePlacementStrategy(PlacementStrategy):
-    """Last resort strategy that forces placement even if it overlaps."""
-
-    def is_applicable(self, room: Room) -> bool:
-        """This strategy applies to all rooms as a last resort."""
-        return True
-
-    def place(self, room: Room) -> bool:
-        """Force placement of a room."""
-        preferred_floors = self._get_preferred_floors(room)
-        grid_x, grid_y = self.structural_grid
-
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-
-            # Try several positions
-            positions = [
-                (grid_x, grid_y),  # Corner
-                (self.spatial_grid.width / 2 - room.width / 2, grid_y),  # Top center
-                (grid_x, self.spatial_grid.length / 2 - room.length / 2),  # Left center
-            ]
-
-            for x, y in positions:
-                success = self.spatial_grid.place_room(
-                    room_id=room.id,
-                    x=x,
-                    y=y,
-                    z=z,
-                    width=room.width,
-                    length=room.length,
-                    height=room.height,
-                    room_type=room.room_type,
-                    metadata=room.metadata,
-                    force_placement=True,
-                )
-                if success:
-                    return True
-
-        # If all else fails, try a reduced size version
-        original_width, original_length = room.width, room.length
-        reduced_width = original_width * 0.8
-        reduced_length = original_length * 0.8
-
-        # Update room dimensions
-        room.width, room.length = reduced_width, reduced_length
-
-        for floor in preferred_floors:
-            z = floor * self.floor_height
-
-            success = self.spatial_grid.place_room(
-                room_id=room.id,
-                x=grid_x,
-                y=grid_y,
-                z=z,
-                width=reduced_width,
-                length=reduced_length,
-                height=room.height,
-                room_type=room.room_type,
-                metadata=room.metadata,
-                force_placement=True,
-            )
-            if success:
-                return True
-
-        # Reset dimensions
-        room.width, room.length = original_width, original_length
-
-        return False
-
-    def _get_preferred_floors(self, room: Room) -> List[int]:
-        """Get preferred floors, with fallbacks."""
-        preferred_floors = []
-
-        # Check all possible sources
-        if hasattr(room, "preferred_floors") and room.preferred_floors:
-            if isinstance(room.preferred_floors, list):
-                preferred_floors = room.preferred_floors
-            else:
-                preferred_floors = [room.preferred_floors]
-        elif (
-            hasattr(room, "metadata")
-            and room.metadata
-            and "preferred_floors" in room.metadata
-        ):
-            floors = room.metadata["preferred_floors"]
-            if isinstance(floors, list):
-                preferred_floors = floors
-            else:
-                preferred_floors = [floors]
-        elif hasattr(room, "floor") and room.floor is not None:
-            if isinstance(room.floor, list):
-                preferred_floors = room.floor
-            else:
-                preferred_floors = [room.floor]
-        elif hasattr(room, "metadata") and room.metadata and "floor" in room.metadata:
-            floor = room.metadata["floor"]
-            if isinstance(floor, list):
-                preferred_floors = floor
-            else:
-                preferred_floors = [floor]
-
-        # If still no preferred floors, use defaults
-        if not preferred_floors:
-            # Prioritize ground floor for most public rooms
-            public_types = ["lobby", "entrance", "restaurant", "retail"]
-            service_types = [
-                "back_of_house",
-                "mechanical",
-                "maintenance",
-                "service_area",
-                "parking",
-            ]
-
-            if room.room_type in public_types:
-                preferred_floors = [max(0, self.min_floor)]
-            elif room.room_type in service_types:
-                if self.min_floor < 0:
-                    preferred_floors = [self.min_floor]  # Basement
-                else:
-                    preferred_floors = [self.min_floor]  # Ground floor
-            else:
-                # Try all floors with preference for ground floor
-                preferred_floors = [max(0, self.min_floor)] + [
-                    f
-                    for f in range(self.min_floor, self.max_floor + 1)
-                    if f != max(0, self.min_floor)
-                ]
-
-        # Ensure all floor values are integers
-        return [int(floor) for floor in preferred_floors if floor is not None]
-
-
-# ---------------------------------------------------------
-# Room Placement Manager
-# ---------------------------------------------------------
-
-
-class RoomPlacementManager:
-    """Manages room placement using a chain of strategies."""
-
-    def __init__(self, spatial_grid, building_config):
-        self.spatial_grid = spatial_grid
-        self.building_config = building_config
-
-        # Initialize placement strategies
-        self.strategies = [
-            CirculationStrategy(spatial_grid, building_config),
-            PerimeterPlacementStrategy(spatial_grid, building_config),
-            AdjacencyPlacementStrategy(spatial_grid, building_config),
-            LargeRoomStrategy(spatial_grid, building_config),
-            DefaultPlacementStrategy(spatial_grid, building_config),
-            ForcePlacementStrategy(spatial_grid, building_config),
-        ]
-
-    def place_room(self, room: Room) -> bool:
-        """
-        Place a room using the appropriate strategy.
-
-        Args:
-            room: Room to place
-
-        Returns:
-            bool: True if placement was successful
-        """
-        # Try each strategy in order
-        for strategy in self.strategies:
-            if strategy.is_applicable(room):
-                success = strategy.place(room)
-                if success:
-                    return True
-
-        return False
-
-
-# ---------------------------------------------------------
-# Main RL Engine Class
-# ---------------------------------------------------------
-
-
-class RLEngine:
+class RLEngine(BaseEngine):
     """
     Reinforcement Learning engine for hotel layout generation.
-    Simplified architecture for better maintainability.
+    Uses the BaseEngine abstract class for common functionality.
     """
 
     def __init__(
@@ -1181,41 +67,8 @@ class RLEngine:
             memory_size: Size of experience replay buffer
             building_config: Building configuration parameters
         """
-        self.width, self.length, self.height = bounding_box
-        self.grid_size = grid_size
-        self.structural_grid = structural_grid
-        self.building_config = building_config or {
-            "floor_height": 4.0,
-            "min_floor": -1,
-            "max_floor": int(self.height / 4.0),
-            "structural_grid_x": structural_grid[0],
-            "structural_grid_y": structural_grid[1],
-        }
-
-        # Initialize spatial grid
-        self.spatial_grid = SpatialGrid(
-            width=self.width,
-            length=self.length,
-            height=self.height,
-            grid_size=self.grid_size,
-            min_floor=self.building_config.get("min_floor", -1),
-            floor_height=self.building_config.get("floor_height", 5.0),
-        )
-
-        # Floor range properties
-        self.min_floor = self.building_config.get("min_floor", -1)
-        self.max_floor = self.building_config.get("max_floor", 3)
-        self.floor_height = self.building_config.get("floor_height", 4.0)
-
-        # RL parameters
-        self.learning_rate = learning_rate
-        self.discount_factor = discount_factor
-        self.exploration_rate = exploration_rate
-        self.exploration_min = exploration_min
-        self.exploration_decay = exploration_decay
-
-        # Memory buffer for experience replay
-        self.memory = deque(maxlen=memory_size)
+        # Initialize the BaseEngine
+        super().__init__(bounding_box, grid_size, structural_grid, building_config)
 
         # Room type info
         self.room_types = [
@@ -1246,29 +99,66 @@ class RLEngine:
             "storage",
         ]
 
+        # Initialize room placement priorities
+        self.placement_priorities = {
+            "entrance": 10,
+            "lobby": 9,
+            "vertical_circulation": 8,
+            "restaurant": 7,
+            "kitchen": 7,
+            "meeting_room": 6,
+            "guest_room": 5,
+            "service_area": 4,
+            "back_of_house": 3,
+            "mechanical": 2,
+            "parking": 3,
+        }
+
+        # Initialize adjacency preferences
+        self.adjacency_preferences = {
+            "entrance": ["lobby", "vertical_circulation"],
+            "lobby": ["entrance", "restaurant", "vertical_circulation"],
+            "vertical_circulation": ["lobby", "guest_room"],
+            "restaurant": ["lobby", "kitchen"],
+            "kitchen": ["restaurant", "service_area"],
+            "meeting_room": ["lobby", "vertical_circulation"],
+            "guest_room": ["vertical_circulation"],
+            "service_area": ["vertical_circulation", "back_of_house"],
+            "back_of_house": ["service_area", "kitchen"],
+        }
+
+        # RL parameters
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+        self.exploration_min = exploration_min
+        self.exploration_decay = exploration_decay
+
+        # Memory buffer for experience replay
+        self.memory = deque(maxlen=memory_size)
+
         # State and action dimensions
         self.state_dim = self._calculate_state_dim()
         self.action_dim = self._calculate_action_dim()
 
         # Neural networks
-        self.policy_network = RLPolicyNetwork(self.state_dim, self.action_dim)
-        self.target_network = RLPolicyNetwork(self.state_dim, self.action_dim)
+        self.policy_network = RLPolicyNetwork(
+            self.state_dim, hidden_dim=256, action_dim=self.action_dim
+        )
+        self.target_network = RLPolicyNetwork(
+            self.state_dim, hidden_dim=256, action_dim=self.action_dim
+        )
         self.target_network.load_state_dict(self.policy_network.state_dict())
 
         # Optimizer
         self.optimizer = optim.Adam(self.policy_network.parameters(), lr=learning_rate)
 
-        # Fixed elements (set by user)
-        self.fixed_elements = {}  # room_id -> position
-
         # Training metrics
         self.training_iterations = 0
         self.average_reward = 0
 
-        # Create room placement manager
-        self.placement_manager = RoomPlacementManager(
-            self.spatial_grid, self.building_config
-        )
+        # Create placement strategies
+        self.placement_strategies = self._initialize_placement_strategies()
 
     def _calculate_state_dim(self) -> int:
         """Calculate the dimension of the state representation"""
@@ -1289,80 +179,436 @@ class RLEngine:
         floors = int(self.height / self.floor_height)
         return grid_cells_x * grid_cells_y * floors
 
-    def set_standard_floor_zones(self, floor_zones):
-        """Set standard floor zones for the hotel tower portion.
-
-        Args:
-            floor_zones: List of dicts with x, y, width, height defining standard floor areas
-        """
-        self.standard_floor_zones = floor_zones
-
-        # Create a mask for standard floor areas
-        self.standard_floor_mask = np.zeros(
-            (int(self.width), int(self.length)), dtype=bool
-        )
-
-        # Mark standard floor zones in the mask
-        for zone in floor_zones:
-            x1 = int(zone["x"] / self.grid_size)
-            y1 = int(zone["y"] / self.grid_size)
-            x2 = int((zone["x"] + zone["width"]) / self.grid_size)
-            y2 = int((zone["y"] + zone["height"]) / self.grid_size)
-
-            # Ensure within bounds
-            x1 = max(0, min(x1, self.spatial_grid.width_cells - 1))
-            y1 = max(0, min(y1, self.spatial_grid.length_cells - 1))
-            x2 = max(0, min(x2, self.spatial_grid.width_cells - 1))
-            y2 = max(0, min(y2, self.spatial_grid.length_cells - 1))
-
-            self.standard_floor_mask[x1:x2, y1:y2] = True
-
-        print(f"Set {len(floor_zones)} standard floor zones")
+    def _initialize_placement_strategies(self) -> Dict[str, callable]:
+        """Initialize room placement strategies"""
+        strategies = {
+            "vertical_circulation": self._place_vertical_circulation,
+            "entrance": self._place_entrance,
+            "parking": self._place_parking,
+            "guest_room": self._place_guest_room,
+            "exterior": self._place_exterior_room,
+            "default": self._place_default,
+        }
+        return strategies
 
     def place_room_by_constraints(
         self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
     ) -> bool:
-        """Place a room according to architectural constraints and standard floor zones."""
-        # Add check for standard floors
+        """
+        Place a room according to architectural constraints.
+        Implementation of the abstract method from BaseEngine.
+
+        Args:
+            room: Room to place
+            placed_rooms_by_type: Dictionary of already placed rooms by type
+
+        Returns:
+            bool: True if placed successfully
+        """
+        # Check for standard floor zones for guest rooms on upper floors
         if hasattr(self, "standard_floor_mask") and room.room_type == "guest_room":
             # For guest rooms on higher floors, require them to be in standard floor zones
             if hasattr(room, "floor") and room.floor is not None and room.floor > 0:
-                return self._place_in_standard_floor_zone(room, placed_rooms_by_type)
+                success = self._place_in_standard_floor_zone(room, placed_rooms_by_type)
+                if success:
+                    return True
 
-        # Original implementation for other rooms
-        # ... rest of your existing method ...
+        # Get preferred floors for this room
+        preferred_floors = self._get_preferred_floors(room)
 
-    def _place_in_standard_floor_zone(
-        self, room: Room, placed_rooms_by_type: Dict[str, List[int]]
+        # Select placement strategy based on room type or characteristics
+        if room.room_type in self.placement_strategies:
+            strategy = self.placement_strategies[room.room_type]
+        elif self._needs_exterior_placement(room):
+            strategy = self.placement_strategies["exterior"]
+        else:
+            strategy = self.placement_strategies["default"]
+
+        # Try to place using the selected strategy
+        return strategy(room, placed_rooms_by_type, preferred_floors)
+
+    def _place_vertical_circulation(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
     ) -> bool:
-        """Place a room within the standard floor zones."""
-        if not hasattr(self, "standard_floor_mask"):
-            # If no standard floor zones defined, use regular placement
-            return super().place_room_by_constraints(room, placed_rooms_by_type)
+        """Special placement for vertical circulation elements"""
+        # Calculate full height from min to max floor
+        total_floors = self.max_floor - self.min_floor + 1
+        total_height = total_floors * self.floor_height
 
-        # Get floor and z coordinate
-        floor = room.floor if hasattr(room, "floor") and room.floor is not None else 1
+        # Starting z-coordinate from the lowest floor
+        start_z = self.min_floor * self.floor_height
+
+        # Update the metadata
+        if not room.metadata:
+            room.metadata = {}
+        room.metadata["is_core"] = True
+        room.metadata["spans_floors"] = list(range(self.min_floor, self.max_floor + 1))
+
+        # Try positions near the center first
+        center_x = self.width / 2 - room.width / 2
+        center_y = self.length / 2 - room.length / 2
+
+        positions = [(center_x, center_y)]
+
+        # Add grid-aligned positions in a spiral
+        grid_x, grid_y = self.structural_grid
+        max_radius = min(self.width, self.length) / 4
+
+        for radius in range(int(grid_x), int(max_radius), int(grid_x)):
+            for angle in range(0, 360, 45):
+                angle_rad = angle * np.pi / 180
+                x = center_x + radius * np.cos(angle_rad)
+                y = center_y + radius * np.sin(angle_rad)
+                x = round(x / grid_x) * grid_x
+                y = round(y / grid_y) * grid_y
+                x = max(0, min(x, self.width - room.width))
+                y = max(0, min(y, self.length - room.length))
+                positions.append((x, y))
+
+        # Remove duplicates
+        positions = list(set(positions))
+
+        # Try each position
+        for x, y in positions:
+            if self._is_valid_position(
+                x, y, start_z, room.width, room.length, total_height
+            ):
+                success = self.spatial_grid.place_room(
+                    room_id=room.id,
+                    x=x,
+                    y=y,
+                    z=start_z,
+                    width=room.width,
+                    length=room.length,
+                    height=total_height,
+                    room_type=room.room_type,
+                    metadata=room.metadata,
+                    allow_overlap=["parking"],
+                )
+                if success:
+                    return True
+
+        # Force placement as last resort
+        x, y = self.structural_grid
+        success = self.spatial_grid.place_room(
+            room_id=room.id,
+            x=x,
+            y=y,
+            z=start_z,
+            width=room.width,
+            length=room.length,
+            height=total_height,
+            room_type=room.room_type,
+            metadata=room.metadata,
+            allow_overlap=["parking"],
+            force_placement=True,
+        )
+        return success
+
+    def _place_entrance(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
+    ) -> bool:
+        """Place entrance on front perimeter"""
+        # Use the first preferred floor
+        floor = preferred_floors[0] if preferred_floors else 0
         z = floor * self.floor_height
 
-        # Try positions within standard floor zones
-        for x in range(0, int(self.width - room.width) + 1, int(self.grid_size)):
-            for y in range(0, int(self.length - room.length) + 1, int(self.grid_size)):
-                # Check if position is within standard floor zone
-                grid_x = int(x / self.grid_size)
-                grid_y = int(y / self.grid_size)
-                room_width_cells = int(room.width / self.grid_size)
-                room_length_cells = int(room.length / self.grid_size)
+        # Try front edge (y=0) with preference for center
+        center_x = (self.width - room.width) / 2
+        center_x = round(center_x / self.structural_grid[0]) * self.structural_grid[0]
 
-                # Skip if any part of room would be outside standard zone
-                if not np.all(
-                    self.standard_floor_mask[
-                        grid_x : grid_x + room_width_cells,
-                        grid_y : grid_y + room_length_cells,
-                    ]
+        # Try center position
+        if self._is_valid_position(
+            center_x, 0, z, room.width, room.length, room.height
+        ):
+            return self.spatial_grid.place_room(
+                room_id=room.id,
+                x=center_x,
+                y=0,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+            )
+
+        # Try other positions along front edge
+        for offset in range(1, 10):
+            for direction in [-1, 1]:  # Try both left and right of center
+                x = center_x + direction * offset * self.structural_grid[0]
+                if 0 <= x <= self.width - room.width:
+                    if self._is_valid_position(
+                        x, 0, z, room.width, room.length, room.height
+                    ):
+                        return self.spatial_grid.place_room(
+                            room_id=room.id,
+                            x=x,
+                            y=0,
+                            z=z,
+                            width=room.width,
+                            length=room.length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=room.metadata,
+                        )
+
+        # Try other perimeter positions if front fails
+        perimeter_positions = []
+
+        # Add side edges
+        for y in range(
+            0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+        ):
+            perimeter_positions.append((0, y))  # Left edge
+            perimeter_positions.append((self.width - room.width, y))  # Right edge
+
+        # Add back edge
+        for x in range(
+            0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+        ):
+            perimeter_positions.append((x, self.length - room.length))  # Back edge
+
+        random.shuffle(perimeter_positions)
+
+        for x, y in perimeter_positions:
+            if self._is_valid_position(x, y, z, room.width, room.length, room.height):
+                return self.spatial_grid.place_room(
+                    room_id=room.id,
+                    x=x,
+                    y=y,
+                    z=z,
+                    width=room.width,
+                    length=room.length,
+                    height=room.height,
+                    room_type=room.room_type,
+                    metadata=room.metadata,
+                )
+
+        return False
+
+    def _place_parking(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
+    ) -> bool:
+        """Special placement for parking areas"""
+        # Use the first preferred floor (usually basement)
+        floor = preferred_floors[0] if preferred_floors else self.min_floor
+        z = floor * self.floor_height
+
+        # For very large parking areas, consider splitting into sections
+        if room.width * room.length > 1000:
+            return self._place_parking_in_sections(room, z)
+
+        # Try standard placement on structural grid
+        for x in range(
+            0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+        ):
+            for y in range(
+                0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+            ):
+                if self._is_valid_position(
+                    x, y, z, room.width, room.length, room.height
                 ):
-                    continue
+                    success = self.spatial_grid.place_room(
+                        room_id=room.id,
+                        x=x,
+                        y=y,
+                        z=z,
+                        width=room.width,
+                        length=room.length,
+                        height=room.height,
+                        room_type=room.room_type,
+                        metadata=room.metadata,
+                        allow_overlap=["vertical_circulation"],
+                    )
+                    if success:
+                        return True
 
-                # Check if position is valid
+        # Force placement as last resort
+        return self.spatial_grid.place_room(
+            room_id=room.id,
+            x=self.structural_grid[0],
+            y=self.structural_grid[1],
+            z=z,
+            width=room.width,
+            length=room.length,
+            height=room.height,
+            room_type=room.room_type,
+            metadata=room.metadata,
+            allow_overlap=["vertical_circulation"],
+            force_placement=True,
+        )
+
+    def _place_parking_in_sections(self, room: Room, z: float) -> bool:
+        """Place large parking areas as multiple sections"""
+        total_area = room.width * room.length
+        num_sections = min(6, max(2, int(total_area / 800)))
+        area_per_section = total_area / num_sections
+
+        # Calculate section dimensions aligned to structural grid
+        grid_x, grid_y = self.structural_grid
+        section_width = round(np.sqrt(area_per_section) / grid_x) * grid_x
+        section_length = round(area_per_section / section_width / grid_y) * grid_y
+
+        # Ensure minimum dimensions
+        section_width = max(section_width, 2 * grid_x)
+        section_length = max(section_length, 2 * grid_y)
+
+        sections_placed = 0
+
+        # Try to place each section
+        for i in range(num_sections):
+            section_id = room.id * 100 + i + 1
+
+            # Try various positions
+            for x in range(0, int(self.width - section_width) + 1, int(grid_x)):
+                for y in range(0, int(self.length - section_length) + 1, int(grid_y)):
+                    if self._is_valid_position(
+                        x, y, z, section_width, section_length, room.height
+                    ):
+                        # Create section metadata
+                        section_metadata = room.metadata.copy() if room.metadata else {}
+                        section_metadata["parent_room_id"] = room.id
+                        section_metadata["is_parking_section"] = True
+                        section_metadata["section_number"] = i + 1
+                        section_metadata["of_sections"] = num_sections
+
+                        success = self.spatial_grid.place_room(
+                            room_id=section_id,
+                            x=x,
+                            y=y,
+                            z=z,
+                            width=section_width,
+                            length=section_length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=section_metadata,
+                            allow_overlap=["vertical_circulation"],
+                        )
+
+                        if success:
+                            sections_placed += 1
+                            break
+
+                if sections_placed > i:
+                    break
+
+        return sections_placed > 0
+
+    def _place_guest_room(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
+    ) -> bool:
+        """Place guest rooms with preference for exterior walls and standard zones"""
+        if hasattr(self, "standard_floor_mask"):
+            for floor in preferred_floors:
+                z = floor * self.floor_height
+
+                # Try perimeter positions within standard zones
+                for x in range(
+                    0, int(self.width - room.width) + 1, int(self.grid_size)
+                ):
+                    for y in range(
+                        0, int(self.length - room.length) + 1, int(self.grid_size)
+                    ):
+                        # Check if on perimeter
+                        is_perimeter = (
+                            x < 0.1
+                            or y < 0.1
+                            or x + room.width > self.width - 0.1
+                            or y + room.length > self.length - 0.1
+                        )
+
+                        if not is_perimeter:
+                            continue
+
+                        # Check if in standard zone
+                        grid_x = int(x / self.grid_size)
+                        grid_y = int(y / self.grid_size)
+                        room_width_cells = int(room.width / self.grid_size)
+                        room_length_cells = int(room.length / self.grid_size)
+
+                        if not np.all(
+                            self.standard_floor_mask[
+                                grid_x : grid_x + room_width_cells,
+                                grid_y : grid_y + room_length_cells,
+                            ]
+                        ):
+                            continue
+
+                        if self._is_valid_position(
+                            x, y, z, room.width, room.length, room.height
+                        ):
+                            success = self.spatial_grid.place_room(
+                                room_id=room.id,
+                                x=x,
+                                y=y,
+                                z=z,
+                                width=room.width,
+                                length=room.length,
+                                height=room.height,
+                                room_type=room.room_type,
+                                metadata=room.metadata,
+                            )
+                            if success:
+                                return True
+
+        # Fall back to regular exterior placement
+        return self._place_exterior_room(room, placed_rooms_by_type, preferred_floors)
+
+    def _place_exterior_room(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
+    ) -> bool:
+        """Place a room on the building perimeter"""
+        for floor in preferred_floors:
+            z = floor * self.floor_height
+
+            # Generate perimeter positions
+            perimeter_positions = []
+
+            # Top edge (y=0)
+            for x in range(
+                0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+            ):
+                perimeter_positions.append((x, 0))
+
+            # Bottom edge
+            for x in range(
+                0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+            ):
+                perimeter_positions.append((x, self.length - room.length))
+
+            # Left edge
+            for y in range(
+                0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+            ):
+                perimeter_positions.append((0, y))
+
+            # Right edge
+            for y in range(
+                0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+            ):
+                perimeter_positions.append((self.width - room.width, y))
+
+            # Shuffle to avoid patterns
+            random.shuffle(perimeter_positions)
+
+            # Try each position
+            for x, y in perimeter_positions:
                 if self._is_valid_position(
                     x, y, z, room.width, room.length, room.height
                 ):
@@ -1380,30 +626,156 @@ class RLEngine:
                     if success:
                         return True
 
-        # If no position found in standard zones
+        # Fall back to default placement
+        return self._place_default(room, placed_rooms_by_type, preferred_floors)
+
+    def _place_default(
+        self,
+        room: Room,
+        placed_rooms_by_type: Dict[str, List[int]],
+        preferred_floors: List[int],
+    ) -> bool:
+        """Default placement strategy for rooms with no special requirements"""
+        for floor in preferred_floors:
+            z = floor * self.floor_height
+
+            # Try adjacency-based placement if applicable
+            if room.room_type in self.adjacency_preferences:
+                success = self._try_adjacency_placement(
+                    room, placed_rooms_by_type, floor
+                )
+                if success:
+                    return True
+
+            # Otherwise try grid-aligned positions
+            for x in range(
+                0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+            ):
+                for y in range(
+                    0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+                ):
+                    if self._is_valid_position(
+                        x, y, z, room.width, room.length, room.height
+                    ):
+                        success = self.spatial_grid.place_room(
+                            room_id=room.id,
+                            x=x,
+                            y=y,
+                            z=z,
+                            width=room.width,
+                            length=room.length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=room.metadata,
+                        )
+                        if success:
+                            return True
+
+        # If no placement found on preferred floors, try others
+        other_floors = [
+            f
+            for f in range(self.min_floor, self.max_floor + 1)
+            if f not in preferred_floors
+        ]
+
+        for floor in other_floors:
+            z = floor * self.floor_height
+
+            for x in range(
+                0, int(self.width - room.width) + 1, int(self.structural_grid[0])
+            ):
+                for y in range(
+                    0, int(self.length - room.length) + 1, int(self.structural_grid[1])
+                ):
+                    if self._is_valid_position(
+                        x, y, z, room.width, room.length, room.height
+                    ):
+                        success = self.spatial_grid.place_room(
+                            room_id=room.id,
+                            x=x,
+                            y=y,
+                            z=z,
+                            width=room.width,
+                            length=room.length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=room.metadata,
+                        )
+                        if success:
+                            return True
+
         return False
 
-    def update_fixed_elements(
-        self, fixed_elements: Dict[int, Tuple[float, float, float]]
-    ):
-        """
-        Update the fixed elements (user placed/modified rooms).
+    def _try_adjacency_placement(
+        self, room: Room, placed_rooms_by_type: Dict[str, List[int]], floor: int
+    ) -> bool:
+        """Try to place a room adjacent to preferred room types"""
+        z = floor * self.floor_height
 
-        Args:
-            fixed_elements: Dictionary mapping room IDs to positions
-        """
-        self.fixed_elements = fixed_elements.copy()
+        # Get adjacency preferences for this room type
+        preferred_types = self.adjacency_preferences.get(room.room_type, [])
 
-    def clear_non_fixed_elements(self):
-        """Remove all non-fixed elements from the spatial grid"""
-        all_room_ids = list(self.spatial_grid.rooms.keys())
-        for room_id in all_room_ids:
-            if room_id not in self.fixed_elements:
-                self.spatial_grid.remove_room(room_id)
+        for adj_type in preferred_types:
+            if adj_type not in placed_rooms_by_type:
+                continue
+
+            # Try adjacent to each placed room of this type
+            for adj_room_id in placed_rooms_by_type[adj_type]:
+                if adj_room_id not in self.spatial_grid.rooms:
+                    continue
+
+                adj_room = self.spatial_grid.rooms[adj_room_id]
+                adj_x, adj_y, adj_z = adj_room["position"]
+                adj_w, adj_l, adj_h = adj_room["dimensions"]
+
+                # Skip if not on same floor
+                adj_floor = int(adj_z / self.floor_height)
+                if adj_floor != floor:
+                    continue
+
+                # Try positions adjacent to this room
+                positions = [
+                    (adj_x + adj_w, adj_y, z),  # Right
+                    (adj_x - room.width, adj_y, z),  # Left
+                    (adj_x, adj_y + adj_l, z),  # Bottom
+                    (adj_x, adj_y - room.length, z),  # Top
+                ]
+
+                for x, y, z_pos in positions:
+                    if self._is_valid_position(
+                        x, y, z_pos, room.width, room.length, room.height
+                    ):
+                        success = self.spatial_grid.place_room(
+                            room_id=room.id,
+                            x=x,
+                            y=y,
+                            z=z_pos,
+                            width=room.width,
+                            length=room.length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=room.metadata,
+                        )
+                        if success:
+                            return True
+
+        return False
+
+    def _needs_exterior_placement(self, room: Room) -> bool:
+        """Determine if a room needs exterior placement based on type"""
+        exterior_room_types = [
+            "entrance",
+            "lobby",
+            "restaurant",
+            "guest_room",
+            "retail",
+        ]
+        return room.room_type in exterior_room_types
 
     def generate_layout(self, rooms: List[Room]) -> SpatialGrid:
         """
-        Generate a hotel layout.
+        Generate a hotel layout using reinforcement learning.
+        Implementation of the abstract method from BaseEngine.
 
         Args:
             rooms: List of Room objects to place
@@ -1432,31 +804,15 @@ class RLEngine:
                     metadata=room.metadata,
                 )
 
-        # Set up room priorities
-        room_type_priority = {
-            "entrance": 10,
-            "lobby": 9,
-            "vertical_circulation": 8,
-            "restaurant": 7,
-            "kitchen": 7,
-            "meeting_room": 6,
-            "ballroom": 6,
-            "guest_room": 5,
-            "service_area": 4,
-            "back_of_house": 3,
-            "mechanical": 2,
-            "parking": 3,
-        }
-
-        # Sort rooms by priority and size
+        # Sort rooms by priority
         sorted_rooms = sorted(
             rooms,
             key=lambda r: (
                 # Fixed rooms first
                 r.id not in self.fixed_elements,
-                # Then by architectural priority
-                -room_type_priority.get(r.room_type, 0),
-                # Then by size (large rooms first)
+                # Then by priority
+                -self.placement_priorities.get(r.room_type, 0),
+                # Then by size (larger rooms first)
                 -(r.width * r.length),
             ),
         )
@@ -1472,57 +828,49 @@ class RLEngine:
             "by_type": defaultdict(lambda: {"total": 0, "placed": 0, "failed": 0}),
         }
 
+        # Tracking placed rooms by type
+        placed_rooms_by_type = defaultdict(list)
+        for room_id, room_data in self.spatial_grid.rooms.items():
+            room_type = room_data["type"]
+            placed_rooms_by_type[room_type].append(room_id)
+
         # Place each room
         for room in rooms_to_place:
-            # Track stats by room type
+            # Track statistics
             placement_stats["by_type"][room.room_type]["total"] += 1
 
-            # Place room using the placement manager
-            success = self.placement_manager.place_room(room)
+            # Place room
+            success = self.place_room_by_constraints(room, placed_rooms_by_type)
 
             # Update statistics
             if success:
                 placement_stats["placed"] += 1
                 placement_stats["by_type"][room.room_type]["placed"] += 1
+                placed_rooms_by_type[room.room_type].append(room.id)
             else:
                 placement_stats["failed"] += 1
                 placement_stats["by_type"][room.room_type]["failed"] += 1
-                print(
-                    f"Failed to place {room.room_type} (id={room.id}, area={room.width * room.length:.1f}m²)"
-                )
+                print(f"Failed to place {room.room_type} (id={room.id})")
 
         # Print statistics
-        print("\nRoom placement statistics:")
-        print(f"Total rooms: {placement_stats['total']}")
-
+        success_rate = 0
         if placement_stats["total"] > 0:
             success_rate = placement_stats["placed"] / placement_stats["total"] * 100
             print(
                 f"Successfully placed: {placement_stats['placed']} ({success_rate:.1f}%)"
             )
-            print(
-                f"Failed to place: {placement_stats['failed']} ({placement_stats['failed']/placement_stats['total']*100:.1f}%)"
-            )
-
-        print("\nPlacement by room type:")
-        for room_type, stats in placement_stats["by_type"].items():
-            if stats["total"] > 0:
-                success_rate = stats["placed"] / stats["total"] * 100
-                print(
-                    f"  {room_type}: {stats['placed']}/{stats['total']} ({success_rate:.1f}%)"
-                )
 
         return self.spatial_grid
 
     def calculate_reward(self, layout: SpatialGrid) -> float:
         """
-        Calculate a reward for a layout based on architectural principles.
+        Calculate reward for a layout based on architectural principles.
 
         Args:
-            layout: The layout to evaluate
+            layout: Layout to evaluate
 
         Returns:
-            float: Reward value
+            float: Reward value (0 to 1)
         """
         # Space utilization
         space_util = layout.calculate_space_utilization()
@@ -1537,10 +885,10 @@ class RLEngine:
         # Structural alignment
         alignment_reward = self._calculate_alignment_reward(layout) * 1.0
 
-        # Total reward
+        # Total reward normalized
         total_reward = (
             utilization_reward + adjacency_reward + floor_reward + alignment_reward
-        ) / 11.0  # Normalize
+        ) / 11.0
 
         return total_reward
 
@@ -1549,28 +897,10 @@ class RLEngine:
         adjacency_score = 0.0
         total_relationships = 0
 
-        # Desired adjacency relationships
-        adjacency_preferences = {
-            "entrance": ["lobby", "vertical_circulation"],
-            "lobby": ["entrance", "restaurant", "vertical_circulation", "meeting_room"],
-            "vertical_circulation": ["lobby", "guest_room", "service_area"],
-            "restaurant": ["lobby", "kitchen"],
-            "kitchen": ["restaurant", "service_area"],
-            "meeting_room": ["lobby", "pre_function", "vertical_circulation"],
-            "pre_function": ["meeting_room", "ballroom"],
-            "ballroom": ["pre_function", "lobby"],
-            "lounge": ["lobby", "ballroom"],
-            "guest_room": ["vertical_circulation"],
-            "service_area": ["vertical_circulation", "back_of_house"],
-            "back_of_house": ["service_area", "kitchen"],
-            "food_service": ["restaurant", "lobby"],
-            "retail": ["lobby"],
-        }
-
         # Check each room's adjacencies
         for room_id, room_data in layout.rooms.items():
             room_type = room_data["type"]
-            preferred = adjacency_preferences.get(room_type, [])
+            preferred = self.adjacency_preferences.get(room_type, [])
             if not preferred:
                 continue
 
@@ -1596,7 +926,7 @@ class RLEngine:
         floor_score = 0.0
         total_rooms = 0
 
-        # Floor preferences
+        # Floor preferences mapping
         floor_preferences = {
             "entrance": [0],
             "lobby": [0],
@@ -1604,8 +934,6 @@ class RLEngine:
             "kitchen": [0],
             "meeting_room": [0],
             "ballroom": [0],
-            "pre_function": [0],
-            "lounge": [0],
             "guest_room": list(range(1, self.max_floor + 1)),
             "service_area": list(range(self.min_floor, 1)),
             "back_of_house": list(range(self.min_floor, 1)),
