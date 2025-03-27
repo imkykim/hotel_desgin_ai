@@ -17,8 +17,12 @@ from datetime import datetime
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
-from hotel_design_ai.core.rule_engine import RuleEngine
-from hotel_design_ai.core.rl_engine import RLEngine
+from hotel_design_ai.core.grid_rule_engine import RuleEngine
+
+# from hotel_design_ai.core.rule_engine import RuleEngine
+from hotel_design_ai.core.grid_rl_engine import RLEngine
+
+# from hotel_design_ai.core.rl_engine import RLEngine
 from hotel_design_ai.core.constraints import (
     Constraint,
     ConstraintSystem,
@@ -860,6 +864,27 @@ def main():
     # Simply pass the program config directly
     room_dicts = create_room_objects_from_program(args.program_config)
     rooms = convert_room_dicts_to_room_objects(room_dicts)
+
+    """
+    room_dicts = create_room_objects_from_program(args.program_config)
+    building_config = get_building_envelope(args.building_config)
+
+    from hotel_design_ai.config.config_loader_grid import adjust_room_list_to_grid
+
+    grid_x = building_config["structural_grid_x"]
+    grid_y = building_config["structural_grid_y"]
+
+    # This adjusts all room dimensions to align with the grid
+    adjusted_room_dicts = adjust_room_list_to_grid(
+        room_dicts,
+        grid_x,
+        grid_y,
+        grid_fraction=0.5,  # You can adjust this - lower for tighter grid alignment
+    )
+
+    # Convert to Room objects using the grid-aligned dimensions
+    rooms = convert_room_dicts_to_room_objects(adjusted_room_dicts)"
+    """
 
     # Load fixed room positions if specified
     fixed_positions = None

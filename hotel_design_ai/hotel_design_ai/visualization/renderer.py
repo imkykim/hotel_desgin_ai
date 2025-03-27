@@ -385,7 +385,7 @@ class LayoutRenderer:
             if is_front:
                 # Front entrance (bottom of building)
                 ax.annotate(
-                    "ENTRANCE",
+                    "MAIN ENTRANCE",
                     xy=(center_x, y),
                     xytext=(center_x, y - arrow_length),
                     arrowprops=dict(arrowstyle="->", color="red", lw=2),
@@ -399,7 +399,7 @@ class LayoutRenderer:
             elif is_back:
                 # Back entrance (top of building)
                 ax.annotate(
-                    "ENTRANCE",
+                    "MAIN ENTRANCE",
                     xy=(center_x, y + l),
                     xytext=(center_x, y + l + arrow_length),
                     arrowprops=dict(arrowstyle="->", color="red", lw=2),
@@ -413,7 +413,7 @@ class LayoutRenderer:
             elif is_left:
                 # Left entrance
                 ax.annotate(
-                    "ENTRANCE",
+                    "MAIN ENTRANCE",
                     xy=(x, center_y),
                     xytext=(x - arrow_length, center_y),
                     arrowprops=dict(arrowstyle="->", color="red", lw=2),
@@ -427,7 +427,7 @@ class LayoutRenderer:
             elif is_right:
                 # Right entrance
                 ax.annotate(
-                    "ENTRANCE",
+                    "MAIN ENTRANCE",
                     xy=(x + w, center_y),
                     xytext=(x + w + arrow_length, center_y),
                     arrowprops=dict(arrowstyle="->", color="red", lw=2),
