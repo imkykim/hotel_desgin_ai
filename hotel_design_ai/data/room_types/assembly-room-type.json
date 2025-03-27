@@ -72,7 +72,7 @@
   },
   "attributes": {
     "occupancy": {
-      "theater": 1.0,  // m² per person
+      "theater": 1.0,
       "banquet": 1.5,
       "classroom": 2.0,
       "reception": 0.8

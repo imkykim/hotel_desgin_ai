@@ -2,10 +2,6 @@
   "public": {
     "reception": {
       "area": 160,
-      "details": {
-        "front_desk": 120,
-        "luggage_room": 40
-      },
       "room_type": "lobby",
       "min_width": 12.0,
       "min_height": 4.5,

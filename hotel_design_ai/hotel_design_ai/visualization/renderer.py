@@ -370,6 +370,73 @@ class LayoutRenderer:
             )
 
         ax.add_patch(rect)
+        if room_data["type"] == "lobby":
+            # Determine which side of the building this entrance is on
+            is_front = abs(y) < 0.1
+            is_back = abs(y + l - self.layout.length) < 0.1
+            is_left = abs(x) < 0.1
+            is_right = abs(x + w - self.layout.width) < 0.1
+
+            # Calculate arrow parameters
+            center_x = x + w / 2
+            center_y = y + l / 2
+            arrow_length = max(w, l) * 0.3  # Arrow length depends on lobby size
+
+            if is_front:
+                # Front entrance (bottom of building)
+                ax.annotate(
+                    "ENTRANCE",
+                    xy=(center_x, y),
+                    xytext=(center_x, y - arrow_length),
+                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
+                    ha="center",
+                    va="top",
+                    fontsize=10,
+                    fontweight="bold",
+                    color="red",
+                )
+
+            elif is_back:
+                # Back entrance (top of building)
+                ax.annotate(
+                    "ENTRANCE",
+                    xy=(center_x, y + l),
+                    xytext=(center_x, y + l + arrow_length),
+                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                    fontweight="bold",
+                    color="red",
+                )
+
+            elif is_left:
+                # Left entrance
+                ax.annotate(
+                    "ENTRANCE",
+                    xy=(x, center_y),
+                    xytext=(x - arrow_length, center_y),
+                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
+                    ha="right",
+                    va="center",
+                    fontsize=10,
+                    fontweight="bold",
+                    color="red",
+                )
+
+            elif is_right:
+                # Right entrance
+                ax.annotate(
+                    "ENTRANCE",
+                    xy=(x + w, center_y),
+                    xytext=(x + w + arrow_length, center_y),
+                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
+                    ha="left",
+                    va="center",
+                    fontsize=10,
+                    fontweight="bold",
+                    color="red",
+                )
 
     def _get_room_geometry(self, room_data: Dict[str, Any]):
         """

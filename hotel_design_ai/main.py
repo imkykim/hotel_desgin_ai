@@ -10,7 +10,7 @@ import sys
 import argparse
 import time
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 # Add the parent directory to path to ensure imports work correctly
@@ -155,16 +155,134 @@ def parse_arguments():
 
 
 def load_fixed_rooms(filepath: str) -> Dict[int, Any]:
-    """Load fixed room positions from a JSON file"""
+    """
+    Load fixed room positions from a JSON file.
+    Supports both formats:
+    1. Simple format: {room_id: position}
+    2. Enhanced format: {"fixed_rooms": [{identifier, position}]}
+
+    Args:
+        filepath: Path to the JSON file
+
+    Returns:
+        Dictionary mapping room IDs to positions
+    """
     with open(filepath, "r") as f:
         data = json.load(f)
 
-    # Convert positions from lists to tuples
+    # Check if this is the enhanced format with identifiers
+    if isinstance(data, dict) and "fixed_rooms" in data:
+        print("Detected enhanced fixed_rooms format with identifiers")
+        # This will be processed later by match_fixed_rooms_to_actual
+        return data["fixed_rooms"]
+
+    # Original format with room IDs
+    print("Detected original fixed_rooms format with direct room IDs")
     fixed_positions = {}
     for room_id, position in data.items():
         fixed_positions[int(room_id)] = tuple(position)
 
     return fixed_positions
+
+
+def match_fixed_rooms_to_actual(
+    fixed_data: Any, rooms: List[Room]
+) -> Dict[int, Tuple[float, float, float]]:
+    """
+    Match fixed rooms to actual rooms using various identifier types.
+
+    Args:
+        fixed_data: Either a dictionary mapping room IDs to positions,
+                    or a list of fixed room configurations with identifiers
+        rooms: List of Room objects
+
+    Returns:
+        Dictionary mapping room IDs to positions
+    """
+    # If already in simple format (direct ID to position mapping), return as is
+    if isinstance(fixed_data, dict):
+        return fixed_data
+
+    result = {}
+    matched_room_ids = set()
+    matched_count = 0
+
+    for fixed_room in fixed_data:
+        try:
+            identifier = fixed_room["identifier"]
+            position = tuple(fixed_room["position"])
+
+            # Find matching room based on identifier type
+            matching_room = None
+
+            if identifier["type"] == "department_with_name":
+                # Match by department and name
+                department = identifier["department"]
+                name = identifier["name"]
+
+                for room in rooms:
+                    if room.id in matched_room_ids:
+                        continue
+
+                    # Check department (either in metadata or direct attribute)
+                    has_dept = (
+                        hasattr(room, "metadata")
+                        and room.metadata
+                        and room.metadata.get("department") == department
+                    ) or (hasattr(room, "department") and room.department == department)
+
+                    # Check name matches directly or in metadata
+                    has_name = room.name == name or (
+                        hasattr(room, "metadata")
+                        and room.metadata
+                        and room.metadata.get("subspace_name") == name
+                    )
+
+                    if has_dept and has_name:
+                        matching_room = room
+                        break
+
+            elif identifier["type"] == "room_type_with_name":
+                # Match by room type and name
+                room_type = identifier["room_type"]
+                name = identifier["name"]
+
+                for room in rooms:
+                    if room.id in matched_room_ids:
+                        continue
+
+                    if room.room_type == room_type and room.name == name:
+                        matching_room = room
+                        break
+
+            elif identifier["type"] == "room_type" and "value" in identifier:
+                # Match by room type only
+                room_type = identifier["value"]
+
+                for room in rooms:
+                    if room.id in matched_room_ids and room.room_type == room_type:
+                        matching_room = room
+                        break
+
+            # If found a match, add to results
+            if matching_room:
+                result[matching_room.id] = position
+                matched_room_ids.add(matching_room.id)
+                matched_count += 1
+                print(
+                    f"  ✓ Matched room: id={matching_room.id}, name={matching_room.name}"
+                )
+            else:
+                # Simplified error message
+                print(f"  ✗ No match found for {identifier['type']} identifier")
+
+        except (KeyError, TypeError) as e:
+            print(f"  ✗ Error with fixed room definition: {e}")
+
+    print(
+        f"Successfully fixed positions for {matched_count} out of {len(fixed_data)} rooms"
+    )
+    return result
 
 
 def convert_room_dicts_to_room_objects(room_dicts: List[Dict[str, Any]]) -> List[Room]:
@@ -747,8 +865,16 @@ def main():
     fixed_positions = None
     if args.fixed_rooms:
         try:
-            fixed_positions = load_fixed_rooms(args.fixed_rooms)
-            print(f"Loaded {len(fixed_positions)} fixed room positions")
+            fixed_data = load_fixed_rooms(args.fixed_rooms)
+
+            # If using the enhanced format, match to actual rooms
+            if not isinstance(fixed_data, dict):
+                fixed_positions = match_fixed_rooms_to_actual(fixed_data, rooms)
+            else:
+                # Original format already gives us a room_id -> position mapping
+                fixed_positions = fixed_data
+
+            print(f"Fixed {len(fixed_positions)} room positions")
         except Exception as e:
             print(f"Error loading fixed rooms: {e}")
 
