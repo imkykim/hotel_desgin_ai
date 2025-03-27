@@ -12,7 +12,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 
 # Define paths to data directories
 # Move up two directories from this file to get to project root
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 USER_DATA_DIR = os.path.join(BASE_DIR, "user_data")
 

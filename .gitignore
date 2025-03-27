@@ -1,2 +1,4 @@
 *.md
 *.pyc
+/hotel_design_ai/hotel_design_ai/web/frontend/node_modules
+/hotel_design_ai/output
