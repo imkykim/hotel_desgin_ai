@@ -1,4 +1,5 @@
 # python main.py --mode hybrid --visualize
+# python main.py --mode rule  --program-config hotel_requirements_2 --visualize --fixed-rooms data/fix/fixed_rooms.json
 """
 Main application for Hotel Design AI.
 This integrates all components (rule engine, RL engine, constraints, visualization)
