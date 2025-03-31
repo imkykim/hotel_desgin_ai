@@ -1666,3 +1666,528 @@ class RuleEngine(BaseEngine):
         else:
             # For other types, no particular ordering
             return candidate_floors
+
+    """
+    Extension to RuleEngine class to support standard floor generation.
+
+    This should be integrated into the hotel_design_ai/core/rule_engine.py file.
+    """
+
+    # Add these methods to the RuleEngine class
+
+    def set_standard_floor_zone(self, floor_zone):
+        """
+        Set the standard floor zone (tower footprint area).
+
+        Args:
+            floor_zone: Dictionary with position_x, position_y, width, length
+        """
+        self.standard_floor_zone = floor_zone
+        print(f"Set standard floor zone: {floor_zone}")
+
+        # Create a mask for the standard floor area
+        import numpy as np
+
+        self.standard_floor_mask = np.zeros(
+            (int(self.width / self.grid_size), int(self.length / self.grid_size)),
+            dtype=bool,
+        )
+
+        # Get zone parameters
+        x = floor_zone.get("position_x", 0)
+        y = floor_zone.get("position_y", 0)
+        width = floor_zone.get("width", 40.0)
+        length = floor_zone.get("length", 20.0)
+
+        # Convert to grid coordinates
+        grid_x = int(x / self.grid_size)
+        grid_y = int(y / self.grid_size)
+        grid_width = int(width / self.grid_size)
+        grid_length = int(length / self.grid_size)
+
+        # Mark zone in the mask
+        self.standard_floor_mask[
+            grid_x : grid_x + grid_width, grid_y : grid_y + grid_length
+        ] = True
+
+        print(f"Created standard floor mask with dimensions {grid_width}x{grid_length}")
+
+    def generate_standard_floor(self, floor_number):
+        """
+        Generate a standard floor with the specified number.
+
+        Args:
+            floor_number: Floor number to generate
+
+        Returns:
+            List[Room]: List of rooms generated for this floor
+        """
+        if not hasattr(self, "standard_floor_zone"):
+            # If zone not set, use parameters from building_config
+            std_floor_config = self.building_config.get("standard_floor", {})
+            self.set_standard_floor_zone(
+                {
+                    "position_x": std_floor_config.get("position_x", 10.0),
+                    "position_y": std_floor_config.get("position_y", 30.0),
+                    "width": std_floor_config.get("width", 40.0),
+                    "length": std_floor_config.get("length", 20.0),
+                }
+            )
+
+        # Get parameters from building_config
+        std_floor_config = self.building_config.get("standard_floor", {})
+        floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Calculate z-coordinate for this floor
+        z_position = floor_number * floor_height
+
+        # Get zone parameters
+        x = self.standard_floor_zone.get("position_x", 0)
+        y = self.standard_floor_zone.get("position_y", 0)
+        width = self.standard_floor_zone.get("width", 40.0)
+        length = self.standard_floor_zone.get("length", 20.0)
+
+        # Parameters for room layout
+        corridor_width = std_floor_config.get("corridor_width", 2.4)
+        room_depth = std_floor_config.get("room_depth", 8.0)
+
+        # Create list for room objects
+        from hotel_design_ai.models.room import Room
+
+        rooms = []
+
+        # Place corridor
+        corridor_y = y + length / 2 - corridor_width / 2
+        corridor_id = 10000 + floor_number * 100
+
+        self.spatial_grid.place_room(
+            room_id=corridor_id,
+            x=x,
+            y=corridor_y,
+            z=z_position,
+            width=width,
+            length=corridor_width,
+            height=floor_height,
+            room_type="circulation",
+            metadata={"name": f"Corridor Floor {floor_number}", "is_corridor": True},
+        )
+
+        # Create corridor room object
+        corridor_room = Room(
+            width=width,
+            length=corridor_width,
+            height=floor_height,
+            room_type="circulation",
+            name=f"Corridor Floor {floor_number}",
+            floor=floor_number,
+            id=corridor_id,
+            metadata={"is_corridor": True},
+        )
+        corridor_room.position = (x, corridor_y, z_position)
+        rooms.append(corridor_room)
+
+        # Place vertical circulation (elevator and stairs)
+        # Place in the middle of the floor
+        elevator_width = 4.0
+        elevator_length = 4.0
+        stairs_width = 4.0
+        stairs_length = 4.0
+
+        elevator_x = x + width / 2 - elevator_width / 2
+        elevator_y = corridor_y - elevator_length / 2  # Center relative to corridor
+
+        elevator_id = 10001 + floor_number * 100
+        self.spatial_grid.place_room(
+            room_id=elevator_id,
+            x=elevator_x,
+            y=elevator_y,
+            z=z_position,
+            width=elevator_width,
+            length=elevator_length,
+            height=floor_height,
+            room_type="vertical_circulation",
+            metadata={
+                "name": f"Elevator Core Floor {floor_number}",
+                "is_elevator": True,
+            },
+        )
+
+        # Create elevator room object
+        elevator_room = Room(
+            width=elevator_width,
+            length=elevator_length,
+            height=floor_height,
+            room_type="vertical_circulation",
+            name=f"Elevator Core Floor {floor_number}",
+            floor=floor_number,
+            id=elevator_id,
+            metadata={"is_elevator": True},
+        )
+        elevator_room.position = (elevator_x, elevator_y, z_position)
+        rooms.append(elevator_room)
+
+        # Place stairs next to elevator
+        stairs_x = elevator_x - stairs_width - 1.0  # 1m gap between elevator and stairs
+        stairs_y = elevator_y
+
+        stairs_id = 10002 + floor_number * 100
+        self.spatial_grid.place_room(
+            room_id=stairs_id,
+            x=stairs_x,
+            y=stairs_y,
+            z=z_position,
+            width=stairs_width,
+            length=stairs_length,
+            height=floor_height,
+            room_type="vertical_circulation",
+            metadata={
+                "name": f"Emergency Stairs Floor {floor_number}",
+                "is_stairs": True,
+            },
+        )
+
+        # Create stairs room object
+        stairs_room = Room(
+            width=stairs_width,
+            length=stairs_length,
+            height=floor_height,
+            room_type="vertical_circulation",
+            name=f"Emergency Stairs Floor {floor_number}",
+            floor=floor_number,
+            id=stairs_id,
+            metadata={"is_stairs": True},
+        )
+        stairs_room.position = (stairs_x, stairs_y, z_position)
+        rooms.append(stairs_room)
+
+        # Calculate number of rooms that can fit on each side of corridor
+        # Standard room parameters
+        room_width = 4.0  # Standard module width
+
+        # Number of standard rooms that can fit
+        num_rooms_per_side = int(width / room_width)
+
+        # Place rooms on north side of corridor
+        for i in range(num_rooms_per_side):
+            room_id = 10100 + floor_number * 100 + i
+            room_x = x + i * room_width
+            room_y = corridor_y + corridor_width  # North of corridor
+
+            # Determine if this should be a corner/special room
+            is_corner = i == 0 or i == num_rooms_per_side - 1
+            room_type = "guest_room"
+            room_name = f"Room {floor_number}{i+1:02d}"
+
+            # Corner rooms might be larger
+            actual_room_width = room_width * 1.5 if is_corner else room_width
+
+            # Skip if we'd exceed the floor width
+            if room_x + actual_room_width > x + width:
+                continue
+
+            # Place room in spatial grid
+            self.spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=actual_room_width,
+                length=room_depth,
+                height=floor_height,
+                room_type=room_type,
+                metadata={"name": room_name, "is_corner": is_corner, "side": "north"},
+            )
+
+            # Create room object
+            guest_room = Room(
+                width=actual_room_width,
+                length=room_depth,
+                height=floor_height,
+                room_type=room_type,
+                name=room_name,
+                floor=floor_number,
+                id=room_id,
+                metadata={"is_corner": is_corner, "side": "north"},
+            )
+            guest_room.position = (room_x, room_y, z_position)
+            rooms.append(guest_room)
+
+        # Place rooms on south side of corridor
+        for i in range(num_rooms_per_side):
+            room_id = 10200 + floor_number * 100 + i
+            room_x = x + i * room_width
+            room_y = corridor_y - room_depth  # South of corridor
+
+            # Determine if this should be a corner/special room
+            is_corner = i == 0 or i == num_rooms_per_side - 1
+            room_type = "guest_room"
+            room_name = f"Room {floor_number}{num_rooms_per_side+i+1:02d}"
+
+            # Corner rooms might be larger
+            actual_room_width = room_width * 1.5 if is_corner else room_width
+
+            # Skip if we'd exceed the floor width
+            if room_x + actual_room_width > x + width:
+                continue
+
+            # Place room in spatial grid
+            self.spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=actual_room_width,
+                length=room_depth,
+                height=floor_height,
+                room_type=room_type,
+                metadata={"name": room_name, "is_corner": is_corner, "side": "south"},
+            )
+
+            # Create room object
+            guest_room = Room(
+                width=actual_room_width,
+                length=room_depth,
+                height=floor_height,
+                room_type=room_type,
+                name=room_name,
+                floor=floor_number,
+                id=room_id,
+                metadata={"is_corner": is_corner, "side": "south"},
+            )
+            guest_room.position = (room_x, room_y, z_position)
+            rooms.append(guest_room)
+
+        return rooms
+
+    def generate_all_standard_floors(self):
+        """
+        Generate all standard floors as specified in the building configuration.
+
+        Returns:
+            List[Room]: List of all rooms generated
+        """
+        # Get standard floor range
+        std_floor_config = self.building_config.get("standard_floor", {})
+        start_floor = std_floor_config.get("start_floor", 5)
+        end_floor = std_floor_config.get("end_floor", 20)
+
+        all_rooms = []
+
+        # Generate each floor
+        for floor in range(start_floor, end_floor + 1):
+            floor_rooms = self.generate_standard_floor(floor)
+            all_rooms.extend(floor_rooms)
+
+        return all_rooms
+
+    """
+    Updates to RuleEngine to respect floor constraints between podium and standard floors.
+    Add these methods to your RuleEngine class.
+    """
+
+    def _check_floor_constraints(self, room: Room) -> List[int]:
+        """
+        Check if a room's floor preference is valid and return only valid floors.
+
+        Args:
+            room: Room to check
+
+        Returns:
+            List of valid floor numbers for this room
+        """
+        # Get all preferred floors for this room
+        preferred_floors = self._get_preferred_floors(room)
+
+        # If no specific preference, return all valid floors
+        if not preferred_floors:
+            return list(range(self.min_floor, self.max_floor + 1))
+
+        # Check if room is meant for podium or standard floor section
+        # based on the building configuration
+        podium_config = self.building_config.get("podium", {})
+        podium_min = podium_config.get("min_floor", self.min_floor)
+        podium_max = podium_config.get("max_floor", 4)
+
+        std_floor_config = self.building_config.get("standard_floor", {})
+        std_min = std_floor_config.get("start_floor", 5)
+        std_max = std_floor_config.get("end_floor", 20)
+
+        # For standard floor room types (mainly guest rooms),
+        # enforce placement in standard floor section
+        if (
+            room.room_type == "guest_room"
+            and hasattr(room, "metadata")
+            and room.metadata
+        ):
+            # Check if this is a tower/standard floor guest room
+            if room.metadata.get("is_standard_floor_room", False):
+                # Only allow placement in standard floor section
+                valid_floors = [f for f in preferred_floors if std_min <= f <= std_max]
+                if valid_floors:
+                    return valid_floors
+                # If no valid standard floors, return the lowest standard floor
+                return [std_min]
+
+        # For other room types (mainly in the program),
+        # try to respect their floor preferences while keeping them in podium
+        valid_floors = []
+
+        for floor in preferred_floors:
+            # Check if floor is within building's overall range
+            if self.min_floor <= floor <= self.max_floor:
+                # For program rooms, keep them in podium section
+                if not (
+                    room.room_type == "guest_room"
+                    and hasattr(room, "metadata")
+                    and room.metadata
+                    and room.metadata.get("is_standard_floor_room", False)
+                ):
+                    if podium_min <= floor <= podium_max:
+                        valid_floors.append(floor)
+                else:
+                    # For standard floor rooms, allow their preferred floors
+                    valid_floors.append(floor)
+
+        # If no valid floors found, return default based on room type
+        if not valid_floors:
+            if room.room_type == "guest_room":
+                # Default guest rooms to standard floors
+                return [std_min]
+            else:
+                # Default program rooms to podium
+                return [max(0, podium_min)]  # Ground floor or first non-basement
+
+        return valid_floors
+
+    def place_room_by_constraints(self, room, placed_rooms_by_type):
+        """
+        Place a room according to architectural constraints.
+        Enhanced to enforce floor section constraints.
+
+        Args:
+            room: Room to place
+            placed_rooms_by_type: Dictionary of already placed rooms by type
+
+        Returns:
+            bool: True if placed successfully
+        """
+        # Get valid floors for this room
+        valid_floors = self._check_floor_constraints(room)
+
+        # Use existing placement logic, just with the filtered floor list
+        # First adjust dimensions to align with grid
+        original_width = room.width
+        original_length = room.length
+
+        # Apply grid alignment to dimensions
+        width, length = self.adjust_room_dimensions_to_grid(room)
+
+        # Temporarily update room dimensions for placement
+        room.width = width
+        room.length = length
+
+        # Check for standard floor zones for guest rooms on upper floors
+        if hasattr(self, "standard_floor_mask") and room.room_type == "guest_room":
+            # For guest rooms on higher floors, require them to be in standard floor zones
+            if (
+                hasattr(room, "floor")
+                and room.floor is not None
+                and room.floor
+                >= self.building_config.get("standard_floor", {}).get("start_floor", 5)
+            ):
+                success = self._place_in_standard_floor_zone(room, placed_rooms_by_type)
+                if success:
+                    # Restore original dimensions
+                    room.width = original_width
+                    room.length = original_length
+                    return True
+
+        # Try each valid floor
+        for floor in valid_floors:
+            # Calculate z coordinate for this floor
+            z = floor * self.floor_height
+
+            # Try adjacency-based placement
+            if room.room_type in self.adjacency_preferences:
+                # (existing adjacency code)
+                # But snap the final position to grid
+                position = self._find_position_adjacent_to(
+                    room, room.room_type, placed_rooms_by_type, z
+                )
+                if position:
+                    x, y, z_pos = position
+                    # Snap position to grid
+                    x, y, z_pos = self.snap_position_to_grid(x, y, z_pos)
+
+                    # Check if snapped position is still valid
+                    if self._is_valid_position(x, y, z_pos, width, length, room.height):
+                        success = self.spatial_grid.place_room(
+                            room_id=room.id,
+                            x=x,
+                            y=y,
+                            z=z_pos,
+                            width=width,
+                            length=length,
+                            height=room.height,
+                            room_type=room.room_type,
+                            metadata=room.metadata,
+                        )
+                        if success:
+                            # Restore original dimensions
+                            room.width = original_width
+                            room.length = original_length
+                            return True
+
+            # Check if room needs exterior access
+            exterior_pref = self.exterior_preferences.get(room.room_type, 0)
+            if exterior_pref > 0:
+                # Try perimeter position
+                position = self._find_perimeter_position(room, floor)
+                if position:
+                    x, y, z_pos = position
+                    success = self.spatial_grid.place_room(
+                        room_id=room.id,
+                        x=x,
+                        y=y,
+                        z=z_pos,
+                        width=room.width,
+                        length=room.length,
+                        height=room.height,
+                        room_type=room.room_type,
+                        metadata=room.metadata,
+                    )
+                    if success:
+                        # Restore original dimensions
+                        room.width = original_width
+                        room.length = original_length
+                        return True
+
+                # If exterior is required but no position found, try next floor
+                if exterior_pref == 2:
+                    continue
+
+            # Try any position on this floor
+            position = self._find_position_on_floor(room, floor)
+            if position:
+                x, y, z_pos = position
+                success = self.spatial_grid.place_room(
+                    room_id=room.id,
+                    x=x,
+                    y=y,
+                    z=z_pos,
+                    width=room.width,
+                    length=room.length,
+                    height=room.height,
+                    room_type=room.room_type,
+                    metadata=room.metadata,
+                )
+                if success:
+                    # Restore original dimensions
+                    room.width = original_width
+                    room.length = original_length
+                    return True
+
+        # If all valid floors failed, restore original dimensions and return failure
+        room.width = original_width
+        room.length = original_length
+        return False

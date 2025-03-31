@@ -1,14 +1,27 @@
 {
-  "width": 64.0,
+  "width": 60.0,
   "length": 80.0,
-  "height": 20.0,
+  "height": 100.0,
   "min_floor": -2,
-  "max_floor": 1,
+  "max_floor": 20,
   "floor_height": 5.0,
   "structural_grid_x": 8.0,
   "structural_grid_y": 8.0,
   "grid_size": 1.0,
-  "main_entry": "flexible",
-  "description": "Standard hotel building envelope",
-  "units": "meters"
+  "podium": {
+    "min_floor": -2,
+    "max_floor": 1,
+    "description": "Podium section (裙房) of the building"
+  },
+  "standard_floor": {
+    "start_floor": 2,
+    "end_floor": 20,
+    "width": 40.0,
+    "length": 20.0,
+    "position_x": 10.0,
+    "position_y": 30.0,
+    "corridor_width": 2.4,
+    "room_depth": 8.0,
+    "description": "Standard guest room floors in tower portion"
+  }
 }

@@ -19,9 +19,11 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 
 # from hotel_design_ai.core.grid_rule_engine import RuleEngine
+
 from hotel_design_ai.core.rule_engine import RuleEngine
 
 # from hotel_design_ai.core.grid_rl_engine import RLEngine
+
 from hotel_design_ai.core.rl_engine import RLEngine
 from hotel_design_ai.core.constraints import (
     Constraint,
@@ -39,8 +41,9 @@ from hotel_design_ai.visualization.export import (
     export_for_three_js,
 )
 
-# from hotel_design_ai.utils.metrics import LayoutMetrics
-from hotel_design_ai.utils.diagram_metrics import LayoutMetrics
+from hotel_design_ai.utils.metrics import LayoutMetrics
+
+# from hotel_design_ai.utils.diagram_metrics import LayoutMetrics
 
 from hotel_design_ai.config.config_loader import (
     get_building_envelope,
@@ -154,6 +157,11 @@ def parse_arguments():
     )
     parser.add_argument(
         "--reference-layout", type=str, help="Path to reference layout JSON file"
+    )
+    parser.add_argument(
+        "--complete",
+        action="store_true",
+        help="Generate complete hotel with podium and standard floors",
     )
 
     return parser.parse_args()
@@ -800,6 +808,95 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
         print(f"  Error saving visualizations: {e}")
 
     print(f"\nOutputs saved to: {output_subfolder}")
+
+
+def generate_complete_hotel_layout(args):
+    """
+    Generate a complete hotel layout with both podium and standard floor sections.
+
+    Args:
+        args: Command line arguments
+
+    Returns:
+        Tuple of (combined_layout, all_rooms)
+    """
+    print("\nGenerating complete hotel layout...")
+
+    # Get building configuration
+    building_config = get_building_envelope(args.building_config)
+
+    # Step 1: Generate podium section
+    print("Step 1: Generating podium (裙房) section...")
+
+    # Filter rooms for podium section
+    from hotel_design_ai.config.config_loader import create_room_objects_for_section
+
+    podium_room_dicts = create_room_objects_for_section(
+        args.program_config, building_config, section="podium"
+    )
+
+    # Convert to Room objects
+    podium_rooms = convert_room_dicts_to_room_objects(podium_room_dicts)
+
+    # Tag rooms with section info
+    from hotel_design_ai.config.building_config_compatibility import (
+        tag_rooms_with_section,
+    )
+
+    podium_rooms = tag_rooms_with_section(podium_rooms, building_config)
+
+    # Generate podium layout with rule engine
+    podium_layout = generate_rule_based_layout(args, podium_rooms)
+
+    # Step 2: Generate standard floor section
+    print("\nStep 2: Generating standard floor (tower) section...")
+
+    # Determine which floors need standard floor layouts
+    std_floor_config = building_config.get("standard_floor", {})
+    start_floor = std_floor_config.get("start_floor", 5)
+    end_floor = std_floor_config.get("end_floor", 20)
+
+    # Create a spatial grid that will hold the complete layout
+    width = building_config["width"]
+    length = building_config["length"]
+    height = building_config["height"]
+    grid_size = building_config["grid_size"]
+    min_floor = building_config.get("min_floor", -2)
+    floor_height = building_config["floor_height"]
+
+    complete_layout = SpatialGrid(
+        width=width,
+        length=length,
+        height=height,
+        grid_size=grid_size,
+        min_floor=min_floor,
+        floor_height=floor_height,
+    )
+
+    # Copy all rooms from podium layout to complete layout
+    for room_id, room_data in podium_layout.rooms.items():
+        complete_layout.rooms[room_id] = room_data.copy()
+
+    # Generate standard floors
+    from hotel_design_ai.core.standard_floor_generator import (
+        generate_all_standard_floors,
+    )
+
+    standard_layout, standard_rooms = generate_all_standard_floors(
+        building_config=building_config, spatial_grid=complete_layout
+    )
+
+    # Tag standard floor rooms
+    standard_rooms = tag_rooms_with_section(standard_rooms, building_config)
+
+    # Combine all rooms
+    all_rooms = podium_rooms + standard_rooms
+
+    print(f"\nComplete layout generated with {len(complete_layout.rooms)} rooms:")
+    print(f"  - Podium section: {len(podium_layout.rooms)} rooms")
+    print(f"  - Standard floor section: {len(standard_rooms)} rooms")
+
+    return complete_layout, all_rooms
 
 
 def main():

@@ -179,3 +179,88 @@ def calculate_room_dimensions_grid_aligned(
     return calculate_grid_aligned_dimensions(
         area, structural_grid_x, structural_grid_y, min_width, grid_fraction
     )
+
+
+"""
+Extension to config_loader.py to handle podium/standard floor separation.
+This ensures rooms are placed in the correct section of the building.
+"""
+
+
+def filter_rooms_by_section(room_dicts, building_config, section="podium"):
+    """
+    Filter room dictionaries to include only those in the specified section.
+
+    Args:
+        room_dicts: List of room dictionaries
+        building_config: Building configuration
+        section: 'podium' or 'standard_floor'
+
+    Returns:
+        List of filtered room dictionaries
+    """
+    # Get floor ranges for the specified section
+    if section == "podium":
+        podium_config = building_config.get("podium", {})
+        min_floor = podium_config.get("min_floor", building_config.get("min_floor", -2))
+        max_floor = podium_config.get("max_floor", 4)
+    elif section == "standard_floor":
+        std_floor_config = building_config.get("standard_floor", {})
+        min_floor = std_floor_config.get("start_floor", 5)
+        max_floor = std_floor_config.get("end_floor", 20)
+    else:
+        # If unknown section, return all rooms
+        return room_dicts
+
+    # Filter rooms based on floor range
+    filtered_rooms = []
+    for room_dict in room_dicts:
+        # Check if room is in the specified floor range
+        floor = room_dict.get("floor")
+
+        if isinstance(floor, list):
+            # If list of floors, check if any are in the specified range
+            floors_in_range = [f for f in floor if min_floor <= f <= max_floor]
+            if floors_in_range:
+                # Clone room_dict and set floor to first match
+                room = room_dict.copy()
+                room["floor"] = floors_in_range[0]
+                filtered_rooms.append(room)
+        elif floor is not None and min_floor <= floor <= max_floor:
+            # Single floor value in range
+            filtered_rooms.append(room_dict)
+        elif floor is None:
+            # For rooms without a specified floor that can go anywhere,
+            # only include them in the podium section
+            if section == "podium":
+                # Clone and assign to middle of podium by default
+                room = room_dict.copy()
+                room["floor"] = (min_floor + max_floor) // 2
+                filtered_rooms.append(room)
+
+    return filtered_rooms
+
+
+def create_room_objects_for_section(program_config, building_config, section="podium"):
+    """
+    Create room objects for a specific section of the building.
+
+    Args:
+        program_config: Program configuration name
+        building_config: Building configuration
+        section: 'podium' or 'standard_floor'
+
+    Returns:
+        List of room dictionaries filtered for the specified section
+    """
+    # Get all room dicts from program
+    from hotel_design_ai.config.config_loader import create_room_objects_from_program
+
+    all_room_dicts = create_room_objects_from_program(program_config)
+
+    # Filter for the specified section
+    section_room_dicts = filter_rooms_by_section(
+        all_room_dicts, building_config, section
+    )
+
+    return section_room_dicts

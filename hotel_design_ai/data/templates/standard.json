@@ -1,0 +1,120 @@
+{
+  "name": "Standard Guest Room Floor",
+  "description": "Typical floor layout with guest rooms and corridor",
+  "metadata": {
+    "author": "Hotel Design AI",
+    "version": "1.0",
+    "tags": ["guest_room", "typical", "double-loaded"]
+  },
+  "parameters": {
+    "floor_width": 40.0,
+    "floor_length": 20.0,
+    "corridor_width": 2.4,
+    "room_depth": 8.0,
+    "room_width_standard": 4.0,
+    "room_width_corner": 6.0,
+    "floor_height": 4.0,
+    "corridor_type": "double-loaded"
+  },
+  "room_types": [
+    {
+      "type": "standard",
+      "width": 4.0,
+      "length": 8.0,
+      "description": "Standard guest room"
+    },
+    {
+      "type": "corner_suite",
+      "width": 6.0,
+      "length": 8.0,
+      "description": "Corner suite"
+    },
+    {
+      "type": "accessible",
+      "width": 5.0,
+      "length": 8.0,
+      "description": "Accessible guest room"
+    }
+  ],
+  "fixed_elements": [
+    {
+      "type": "vertical_circulation",
+      "position_type": "absolute",
+      "position": [18.0, 9.0, 0.0],
+      "dimensions": [4.0, 2.0, 4.0],
+      "name": "Elevator Core",
+      "required": true
+    },
+    {
+      "type": "vertical_circulation",
+      "position_type": "absolute",
+      "position": [14.0, 9.0, 0.0],
+      "dimensions": [3.0, 2.0, 4.0],
+      "name": "Emergency Stairs",
+      "required": true
+    },
+    {
+      "type": "circulation",
+      "position_type": "absolute",
+      "position": [0.0, 8.8, 0.0],
+      "dimensions": [40.0, 2.4, 4.0],
+      "name": "Main Corridor",
+      "required": true
+    }
+  ],
+  "room_arrangements": [
+    {
+      "type": "double_loaded_corridor",
+      "reference_element": "Main Corridor",
+      "room_type": "guest_room",
+      "north_side": {
+        "room_count": 8,
+        "room_types": [
+          "standard",
+          "standard",
+          "accessible",
+          "standard",
+          "standard",
+          "standard",
+          "standard",
+          "corner_suite"
+        ]
+      },
+      "south_side": {
+        "room_count": 8,
+        "room_types": [
+          "corner_suite",
+          "standard",
+          "standard",
+          "standard",
+          "accessible",
+          "standard",
+          "standard",
+          "standard"
+        ]
+      },
+      "spacing": 0.0
+    }
+  ],
+  "constraints": [
+    {
+      "type": "maximum_distance",
+      "from_any": "guest_room",
+      "to_type": "vertical_circulation",
+      "distance": 45.0,
+      "description": "Maximum travel distance from any guest room to exit"
+    }
+  ],
+  "variations": [
+    {
+      "name": "L-Shaped Floor",
+      "description": "L-shaped variation with rooms along two wings",
+      "corridor_shape": "L"
+    },
+    {
+      "name": "Double-Loaded Linear",
+      "description": "Simple double-loaded corridor layout",
+      "corridor_shape": "linear"
+    }
+  ]
+}

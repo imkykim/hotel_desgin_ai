@@ -98,11 +98,29 @@ class LayoutRenderer:
     def _init_floor_range(self):
         """
         Determine the floor range by analyzing the layout and building_config.
+        Add this method to your renderer class.
         """
         # Start with defaults from building_config
         self.min_floor = self.building_config.get("min_floor", -1)
         self.max_floor = self.building_config.get("max_floor", 3)
         self.floor_height = self.building_config.get("floor_height", 4.0)
+
+        # Extract standard floor range
+        std_floor_config = self.building_config.get("standard_floor", {})
+        self.std_floor_start = std_floor_config.get("start_floor", 5)
+        self.std_floor_end = std_floor_config.get("end_floor", 20)
+
+        # Extract podium floor range
+        podium_config = self.building_config.get("podium", {})
+        self.podium_min = podium_config.get("min_floor", self.min_floor)
+        self.podium_max = podium_config.get("max_floor", 4)
+
+        # Check for floor range consistency
+        if self.std_floor_start <= self.podium_max:
+            print(
+                f"Warning: Standard floor start ({self.std_floor_start}) overlaps with podium max ({self.podium_max})"
+            )
+            self.podium_max = self.std_floor_start - 1
 
         # Validate floor range
         if self.min_floor > self.max_floor:
@@ -216,6 +234,7 @@ class LayoutRenderer:
         # Draw structural grid
         self._draw_structural_grid(ax)
 
+        self._add_floor_type_annotation(ax, floor)
         # Set equal aspect ratio
         ax.set_aspect("equal")
 
@@ -739,6 +758,7 @@ class LayoutRenderer:
         include_floor_plans: bool = True,
         num_floors: int = None,
         min_floor: int = None,
+        sample_standard: bool = True,
     ):
         """
         Save renders to disk.
@@ -760,7 +780,9 @@ class LayoutRenderer:
 
         # Save floor plans
         if include_floor_plans:
-            self._save_floor_plans(output_dir, prefix, num_floors, min_floor)
+            self._save_floor_plans(
+                output_dir, prefix, num_floors, min_floor, sample_standard
+            )
 
     def _save_3d_render(self, output_dir: str, prefix: str):
         """
@@ -781,34 +803,44 @@ class LayoutRenderer:
         prefix: str,
         num_floors: Optional[int] = None,
         min_floor: Optional[int] = None,
+        sample_standard: bool = True,  # Add this parameter
     ):
         """
         Save floor plans to disk.
-
-        Args:
-            output_dir: Directory to save renders in
-            prefix: Filename prefix
-            num_floors: Number of floors to render
-            min_floor: Minimum floor to render
+        Enhanced to handle standard floors.
         """
-        # Use instance min_floor if not provided
-        if min_floor is None:
-            min_floor = self.min_floor
+        # Initialize floor ranges if needed
+        if not hasattr(self, "std_floor_start"):
+            self._init_floor_range()
 
-        # Determine max_floor if num_floors is not specified
-        if num_floors is None:
-            max_floor = self.max_floor
-        else:
-            # If num_floors is specified, calculate max_floor
+        # Determine floors to render
+        if num_floors is not None and min_floor is not None:
+            # Use explicit range
             max_floor = min_floor + num_floors - 1
+            floors_to_render = list(range(min_floor, max_floor + 1))
+        else:
+            # Use intelligent selection - only returns occupied floors
+            floors_to_render = self.get_floors_to_render(sample_standard)
 
-        # Render each floor, including basement floors
-        for floor in range(min_floor, max_floor + 1):
+            # If no floors are occupied based on rooms, don't try to render anything
+            if not floors_to_render:
+                print("No occupied floors found to render")
+                return
+
+        print(f"Rendering floor plans for floors: {floors_to_render}")
+
+        # Render each floor
+        for floor in floors_to_render:
             fig, ax = self.render_floor_plan(floor=floor)
 
-            # Name for basement floors should be clear
+            # Generate appropriate name
             if floor < 0:
                 floor_name = f"basement{abs(floor)}"
+            elif self.is_standard_floor(floor):
+                floor_name = f"standard_floor"
+                if len([f for f in floors_to_render if self.is_standard_floor(f)]) > 1:
+                    # If rendering multiple standard floors, add floor number
+                    floor_name += f"_{floor}"
             else:
                 floor_name = f"floor{floor}"
 
@@ -848,3 +880,116 @@ class LayoutRenderer:
         ax.axis("off")
 
         return fig, ax
+
+    def is_standard_floor(self, floor):
+        """
+        Check if a floor is a standard floor.
+        Add this method to your renderer class.
+
+        Args:
+            floor: Floor number
+
+        Returns:
+            bool: True if it's a standard floor
+        """
+        if not hasattr(self, "std_floor_start"):
+            # Initialize floor ranges if not done yet
+            self._init_floor_range()
+
+        return self.std_floor_start <= floor <= self.std_floor_end
+
+    def is_podium_floor(self, floor):
+        """
+        Check if a floor is a podium floor.
+        Add this method to your renderer class.
+
+        Args:
+            floor: Floor number
+
+        Returns:
+            bool: True if it's a podium floor
+        """
+        if not hasattr(self, "podium_min"):
+            # Initialize floor ranges if not done yet
+            self._init_floor_range()
+
+        return self.podium_min <= floor <= self.podium_max
+
+    def get_floors_to_render(self, sample_standard: bool = True):
+        """
+        Get the list of floors that should be rendered.
+        Add this method to your renderer class.
+
+        Args:
+            sample_standard: If True, only include one sample standard floor
+
+        Returns:
+            List of floor numbers to render
+        """
+        if not hasattr(self, "std_floor_start"):
+            # Initialize floor ranges if not done yet
+            self._init_floor_range()
+
+        # Find floors that actually have rooms in the layout
+        occupied_floors = set()
+        for room_id, room_data in self.layout.rooms.items():
+            z = room_data["position"][2]
+            floor = int(z / self.floor_height)
+            occupied_floors.add(floor)
+
+        # Always include all podium floors
+        podium_floors = [
+            f for f in occupied_floors if self.podium_min <= f <= self.podium_max
+        ]
+
+        # For standard floors, either include all or just a sample
+        standard_floors = [
+            f
+            for f in occupied_floors
+            if self.std_floor_start <= f <= self.std_floor_end
+        ]
+
+        if sample_standard and standard_floors:
+            # Just render one representative standard floor
+            # Choose the lowest occupied standard floor
+            standard_floors = [min(standard_floors)]
+
+        # Combine and sort
+        floors_to_render = sorted(podium_floors + standard_floors)
+
+        return floors_to_render
+
+    # This function is an extension of the existing _save_floor_plans method
+    # You may need to adapt it to match your exact implementation
+
+    # This function adds a floor type annotation to the rendered floor plan
+    # It can be called from your render_floor_plan method
+    def _add_floor_type_annotation(self, ax, floor):
+        """
+        Add floor type annotation to the floor plan.
+        Call this from your render_floor_plan method to show floor type.
+
+        Args:
+            ax: Matplotlib axis
+            floor: Floor number
+        """
+        if not hasattr(self, "std_floor_start"):
+            self._init_floor_range()
+
+        floor_type = (
+            "Standard Floor" if self.is_standard_floor(floor) else "Podium Floor"
+        )
+        floor_position = (
+            "Tower Section" if self.is_standard_floor(floor) else "裙房 Section"
+        )
+        ax.annotate(
+            f"{floor_type} (Floor {floor})\n{floor_position}",
+            xy=(0.98, 0.02),
+            xycoords="axes fraction",
+            fontsize=10,
+            ha="right",
+            va="bottom",
+            bbox=dict(
+                boxstyle="round,pad=0.3", fc="lightyellow", ec="orange", alpha=0.8
+            ),
+        )
