@@ -38,15 +38,8 @@ class LayoutMetrics:
             "ballroom",
             "retail",
         ]
-        # Initialize min and max floor based on layout
-        self.min_floor = min(
-            int(room_data["position"][2] / self.floor_height)
-            for room_data in self.layout.rooms.values()
-        )
-        self.max_floor = max(
-            int(room_data["position"][2] / self.floor_height)
-            for room_data in self.layout.rooms.values()
-        )
+        self.min_floor = self.building_config.get("min_floor", -1)
+        self.max_floor = self.building_config.get("max_floor", 3)
 
     # Helper methods
     def _get_room_floor(self, room_data):

@@ -14,16 +14,15 @@ import json
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
-# Add the parent directory to path to ensure imports work correctly
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
-from hotel_design_ai.core.grid_rule_engine import RuleEngine
 
-# from hotel_design_ai.core.rule_engine import RuleEngine
-from hotel_design_ai.core.grid_rl_engine import RLEngine
+# from hotel_design_ai.core.grid_rule_engine import RuleEngine
+from hotel_design_ai.core.rule_engine import RuleEngine
 
-# from hotel_design_ai.core.rl_engine import RLEngine
+# from hotel_design_ai.core.grid_rl_engine import RLEngine
+from hotel_design_ai.core.rl_engine import RLEngine
 from hotel_design_ai.core.constraints import (
     Constraint,
     ConstraintSystem,
@@ -39,9 +38,10 @@ from hotel_design_ai.visualization.export import (
     export_to_rhino,
     export_for_three_js,
 )
-from hotel_design_ai.utils.metrics import LayoutMetrics
 
-# Import the config loader with updated paths
+# from hotel_design_ai.utils.metrics import LayoutMetrics
+from hotel_design_ai.utils.diagram_metrics import LayoutMetrics
+
 from hotel_design_ai.config.config_loader import (
     get_building_envelope,
     get_program_requirements,
