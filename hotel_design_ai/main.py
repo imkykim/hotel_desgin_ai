@@ -921,7 +921,9 @@ def generate_complete_hotel_layout(args, fixed_positions=None):
     # Generate standard floors with explicit parameters
     print("Generating standard floors with explicit parameters...")
     standard_layout, standard_rooms = generate_all_standard_floors(
-        building_config=building_config, spatial_grid=complete_layout
+        building_config=building_config,
+        spatial_grid=complete_layout,
+        target_room_count=380,
     )
 
     # Print debug info after standard floor generation

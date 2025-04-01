@@ -16,7 +16,7 @@
   "standard_floor": {
     "start_floor": 2,
     "end_floor": 20,
-    "width": 40.0,
+    "width": 60.0,
     "length": 20.0,
     "position_x": 10.0,
     "position_y": 30.0,
