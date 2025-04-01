@@ -18,9 +18,9 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 
-# from hotel_design_ai.core.grid_rule_engine import RuleEngine
+from hotel_design_ai.core.grid_rule_engine import RuleEngine
 
-from hotel_design_ai.core.rule_engine import RuleEngine
+# from hotel_design_ai.core.rule_engine import RuleEngine
 
 # from hotel_design_ai.core.grid_rl_engine import RLEngine
 
@@ -679,6 +679,7 @@ def visualize_layout(layout: SpatialGrid, args):
     # Create renderer
     renderer = LayoutRenderer(layout, building_config=building_config)
 
+    # Print rooms by floor for debugging
     rooms_by_floor = {}
     for room_id, room_data in layout.rooms.items():
         z = room_data["position"][2]
@@ -688,31 +689,54 @@ def visualize_layout(layout: SpatialGrid, args):
         rooms_by_floor[floor].append(room_id)
 
     print("\nRoom distribution by floor:")
+    for floor, rooms in sorted(rooms_by_floor.items()):
+        print(f"Floor {floor}: {len(rooms)} rooms")
 
-    # Get floor range from building configuration
-    building_config = get_building_envelope(args.building_config)
-    min_floor = building_config.get("min_floor", -1)
-    max_floor = building_config.get("max_floor", 3)
+    # Get standard floor info
+    std_floor_config = building_config.get("standard_floor", {})
+    start_floor = std_floor_config.get("start_floor", 5)
+    end_floor = std_floor_config.get("end_floor", 20)
 
-    # Show all floors in the range
-    for floor in range(min_floor, max_floor + 1):
-        print(f"Floor {floor}: {len(rooms_by_floor.get(floor, []))} rooms")
+    # Get all floors that have rooms
+    occupied_floors = sorted(
+        [floor for floor, rooms in rooms_by_floor.items() if len(rooms) > 0]
+    )
+
+    # Split into podium and standard floors
+    podium_floors = [f for f in occupied_floors if f < start_floor]
+    standard_floors = [f for f in occupied_floors if start_floor <= f <= end_floor]
+
+    # For standard floors, only keep one representative floor if sample_standard=True
+    if standard_floors and args.complete:
+        # Keep only the first standard floor
+        sample_standard_floor = min(standard_floors)
+        standard_floors = [sample_standard_floor]
+
+    # Combine and sort for final rendering
+    floors_to_render = sorted(podium_floors + standard_floors)
+
+    print(f"\nRendering floor plans for floors: {floors_to_render}")
 
     try:
         # Create 3D visualization
         fig1, ax1 = renderer.render_3d(show_labels=True)
         fig1.suptitle("Hotel Layout - 3D View")
 
-        # Use min_floor and max_floor from building_config
-        min_floor = building_config.get("min_floor", -1)
-        max_floor = building_config.get(
-            "max_floor", building_config.get("num_floors", 4)
-        )
-
-        # Create floor plans for each level
-        for floor in range(min_floor, max_floor + 1):
+        # Create floor plans ONLY for selected floors
+        for floor in floors_to_render:
             fig, ax = renderer.render_floor_plan(floor=floor)
-            floor_name = "Basement" if floor < 0 else f"Floor {floor}"
+
+            # Create appropriate floor name
+            if floor < 0:
+                floor_name = f"Basement {abs(floor)}"
+            elif start_floor <= floor <= end_floor:
+                floor_name = f"Floor {floor} (Standard Floor)"
+                # If this is a sample, indicate it represents all standard floors
+                if len(standard_floors) == 1 and floor == standard_floors[0]:
+                    floor_name += " (Representative)"
+            else:
+                floor_name = f"Floor {floor}"
+
             fig.suptitle(f"Hotel Layout - {floor_name}")
 
         # Show all figures
@@ -722,6 +746,9 @@ def visualize_layout(layout: SpatialGrid, args):
 
     except Exception as e:
         print(f"Error creating visualizations: {e}")
+        import traceback
+
+        traceback.print_exc()
         print("Make sure matplotlib is installed and properly configured.")
 
 
@@ -797,6 +824,7 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
             include_floor_plans=True,
             num_floors=num_floors,
             min_floor=min_floor,
+            sample_standard=True,
         )
 
         # Close any open matplotlib figures to prevent hanging
@@ -813,6 +841,7 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
 def generate_complete_hotel_layout(args):
     """
     Generate a complete hotel layout with both podium and standard floor sections.
+    Enhanced to properly generate standard floors.
 
     Args:
         args: Command line arguments
@@ -829,7 +858,10 @@ def generate_complete_hotel_layout(args):
     print("Step 1: Generating podium (裙房) section...")
 
     # Filter rooms for podium section
-    from hotel_design_ai.config.config_loader import create_room_objects_for_section
+    from hotel_design_ai.config.config_loader import create_room_objects_from_program
+    from hotel_design_ai.config.config_loader_grid import (
+        create_room_objects_for_section,
+    )
 
     podium_room_dicts = create_room_objects_for_section(
         args.program_config, building_config, section="podium"
@@ -851,10 +883,15 @@ def generate_complete_hotel_layout(args):
     # Step 2: Generate standard floor section
     print("\nStep 2: Generating standard floor (tower) section...")
 
+    # Print debug info before standard floor generation
+    print(f"Layout before standard floors: {len(podium_layout.rooms)} rooms")
+
     # Determine which floors need standard floor layouts
     std_floor_config = building_config.get("standard_floor", {})
     start_floor = std_floor_config.get("start_floor", 5)
     end_floor = std_floor_config.get("end_floor", 20)
+
+    print(f"Standard floor range: {start_floor} to {end_floor}")
 
     # Create a spatial grid that will hold the complete layout
     width = building_config["width"]
@@ -864,27 +901,24 @@ def generate_complete_hotel_layout(args):
     min_floor = building_config.get("min_floor", -2)
     floor_height = building_config["floor_height"]
 
-    complete_layout = SpatialGrid(
-        width=width,
-        length=length,
-        height=height,
-        grid_size=grid_size,
-        min_floor=min_floor,
-        floor_height=floor_height,
-    )
+    # Instead of creating a new grid, use the podium_layout as our base
+    complete_layout = podium_layout
 
-    # Copy all rooms from podium layout to complete layout
-    for room_id, room_data in podium_layout.rooms.items():
-        complete_layout.rooms[room_id] = room_data.copy()
-
-    # Generate standard floors
+    # IMPORTANT: Make sure we're using the correct function to generate standard floors
+    # Import the standard floor generator
     from hotel_design_ai.core.standard_floor_generator import (
         generate_all_standard_floors,
     )
 
+    # Generate standard floors with explicit parameters
+    print("Generating standard floors with explicit parameters...")
     standard_layout, standard_rooms = generate_all_standard_floors(
         building_config=building_config, spatial_grid=complete_layout
     )
+
+    # Print debug info after standard floor generation
+    print(f"Generated {len(standard_rooms)} rooms on standard floors")
+    print(f"Total rooms after standard floors: {len(complete_layout.rooms)}")
 
     # Tag standard floor rooms
     standard_rooms = tag_rooms_with_section(standard_rooms, building_config)
@@ -923,10 +957,11 @@ def main():
         with open(args.standard_floor_zones, "r") as f:
             standard_floor_zones = json.load(f)
 
-        # If using rule_engine:
-        RuleEngine.set_standard_floor_zones(standard_floor_zones["floor_zones"])
-        # If using rl_engine:
-        RLEngine.set_standard_floor_zones(standard_floor_zones["floor_zones"])
+        # Update rule engine with standard floor zones
+        RuleEngine.set_standard_floor_zones = standard_floor_zones["floor_zones"]
+        # Update RL engine with standard floor zones if needed
+        if "RLEngine" in globals():
+            RLEngine.set_standard_floor_zones = standard_floor_zones["floor_zones"]
 
     # Handle modified layout
     fixed_positions = {}
@@ -941,51 +976,16 @@ def main():
                 if "position" in room_data:
                     fixed_positions[int(room_id)] = tuple(room_data["position"])
 
-        # Update RL engine with fixed positions
-        if args.mode in ["rl", "hybrid"] and fixed_positions:
-            RLEngine.update_fixed_elements(fixed_positions)
-
-    # Handle user rating for RL
-    if args.user_rating is not None and args.mode == "rl":
-        print(f"Using user rating: {args.user_rating}")
-        # After generating layout, update the model with user feedback
-        layout = RLEngine.generate_layout(rooms)
-        RLEngine.update_model(args.user_rating)
-        # Save the model for future use
-        model_path = os.path.join(args.output, "rl_model.pt")
-        RLEngine.save_model(model_path)
-        print(f"RL model saved to: {model_path}")
-
     # Create rooms from program requirements with the specified config
     from hotel_design_ai.config.config_loader import create_room_objects_from_program
 
-    # Simply pass the program config directly
+    # Get room dictionaries from program config
     room_dicts = create_room_objects_from_program(args.program_config)
+
+    # Convert to Room objects
     rooms = convert_room_dicts_to_room_objects(room_dicts)
 
-    """
-    room_dicts = create_room_objects_from_program(args.program_config)
-    building_config = get_building_envelope(args.building_config)
-
-    from hotel_design_ai.config.config_loader_grid import adjust_room_list_to_grid
-
-    grid_x = building_config["structural_grid_x"]
-    grid_y = building_config["structural_grid_y"]
-
-    # This adjusts all room dimensions to align with the grid
-    adjusted_room_dicts = adjust_room_list_to_grid(
-        room_dicts,
-        grid_x,
-        grid_y,
-        grid_fraction=0.5,  # You can adjust this - lower for tighter grid alignment
-    )
-
-    # Convert to Room objects using the grid-aligned dimensions
-    rooms = convert_room_dicts_to_room_objects(adjusted_room_dicts)"
-    """
-
     # Load fixed room positions if specified
-    fixed_positions = None
     if args.fixed_rooms:
         try:
             fixed_data = load_fixed_rooms(args.fixed_rooms)
@@ -1001,16 +1001,24 @@ def main():
         except Exception as e:
             print(f"Error loading fixed rooms: {e}")
 
-    # Generate layout based on selected mode
-    if args.mode == "rule":
-        layout = generate_rule_based_layout(args, rooms, fixed_positions)
-    elif args.mode == "rl":
-        layout = generate_rl_layout(args, rooms, fixed_positions)
-    elif args.mode == "hybrid":
-        layout = generate_hybrid_layout(args, rooms, fixed_positions)
+    # Check if we should generate a complete hotel (with standard floors)
+    if args.complete:
+        print("\nGenerating complete hotel with podium and standard floors...")
+        layout, all_rooms = generate_complete_hotel_layout(args)
+
+        # Use all_rooms instead of original rooms for evaluation
+        rooms = all_rooms
     else:
-        print(f"Error: Unknown mode '{args.mode}'")
-        return
+        # Generate layout based on selected mode
+        if args.mode == "rule":
+            layout = generate_rule_based_layout(args, rooms, fixed_positions)
+        elif args.mode == "rl":
+            layout = generate_rl_layout(args, rooms, fixed_positions)
+        elif args.mode == "hybrid":
+            layout = generate_hybrid_layout(args, rooms, fixed_positions)
+        else:
+            print(f"Error: Unknown mode '{args.mode}'")
+            return
 
     # Evaluate layout
     metrics = evaluate_layout(layout, rooms)

@@ -211,6 +211,7 @@ class LayoutRenderer:
     ):
         """
         Render a 2D floor plan.
+        Simplified to just show rooms that exist - no template rendering.
 
         Args:
             floor: Floor number to render (0 = ground floor)
@@ -228,13 +229,15 @@ class LayoutRenderer:
         # Set up the axes
         self._setup_2d_axes(ax, floor)
 
-        # Draw rooms on this floor
+        # Draw rooms on this floor (only those that exist)
         self._draw_rooms_on_floor(ax, floor, show_labels, highlight_rooms)
 
         # Draw structural grid
         self._draw_structural_grid(ax)
 
+        # Add floor type annotation
         self._add_floor_type_annotation(ax, floor)
+
         # Set equal aspect ratio
         ax.set_aspect("equal")
 
@@ -803,29 +806,51 @@ class LayoutRenderer:
         prefix: str,
         num_floors: Optional[int] = None,
         min_floor: Optional[int] = None,
-        sample_standard: bool = True,  # Add this parameter
+        sample_standard: bool = True,
     ):
         """
         Save floor plans to disk.
-        Enhanced to handle standard floors.
+        Enhanced to handle standard floors and only render occupied floors.
         """
         # Initialize floor ranges if needed
         if not hasattr(self, "std_floor_start"):
             self._init_floor_range()
 
-        # Determine floors to render
-        if num_floors is not None and min_floor is not None:
-            # Use explicit range
-            max_floor = min_floor + num_floors - 1
-            floors_to_render = list(range(min_floor, max_floor + 1))
-        else:
-            # Use intelligent selection - only returns occupied floors
-            floors_to_render = self.get_floors_to_render(sample_standard)
+        # Always start by getting occupied floors using the intelligent selection
+        # This will include at least one standard floor even if it's not occupied
+        floors_to_render = self.get_floors_to_render(sample_standard)
 
-            # If no floors are occupied based on rooms, don't try to render anything
-            if not floors_to_render:
-                print("No occupied floors found to render")
-                return
+        # If no floors are found, don't try to render anything
+        if not floors_to_render:
+            print("No floors found to render")
+            return
+
+        # If num_floors and min_floor are specified, filter the floors to that range
+        # but make sure to keep at least one standard floor
+        if num_floors is not None and min_floor is not None:
+            max_floor = min_floor + num_floors - 1
+            range_floors = set(range(min_floor, max_floor + 1))
+
+            # First get podium floors in range
+            podium_floors = [
+                f
+                for f in floors_to_render
+                if f in range_floors and not self.is_standard_floor(f)
+            ]
+
+            # Then add one standard floor if in range
+            std_floors = [f for f in floors_to_render if self.is_standard_floor(f)]
+            if std_floors and any(f in range_floors for f in std_floors):
+                # Add the first standard floor in range
+                for f in std_floors:
+                    if f in range_floors:
+                        podium_floors.append(f)
+                        break
+            elif sample_standard and self.std_floor_start in range_floors:
+                # Add the start standard floor if in range
+                podium_floors.append(self.std_floor_start)
+
+            floors_to_render = sorted(podium_floors)
 
         print(f"Rendering floor plans for floors: {floors_to_render}")
 
@@ -918,7 +943,7 @@ class LayoutRenderer:
     def get_floors_to_render(self, sample_standard: bool = True):
         """
         Get the list of floors that should be rendered.
-        Add this method to your renderer class.
+        Enhanced to always include at least one standard floor for rendering.
 
         Args:
             sample_standard: If True, only include one sample standard floor
@@ -949,10 +974,10 @@ class LayoutRenderer:
             if self.std_floor_start <= f <= self.std_floor_end
         ]
 
-        if sample_standard and standard_floors:
-            # Just render one representative standard floor
-            # Choose the lowest occupied standard floor
-            standard_floors = [min(standard_floors)]
+        # If no standard floors are detected but we want to show a sample,
+        # add the first standard floor even if it's not occupied
+        if sample_standard and not standard_floors:
+            standard_floors = [self.std_floor_start]
 
         # Combine and sort
         floors_to_render = sorted(podium_floors + standard_floors)
