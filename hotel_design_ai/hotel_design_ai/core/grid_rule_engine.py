@@ -332,6 +332,33 @@ class RuleEngine(BaseEngine):
         Enhanced to use grid-aligned dimensions.
         """
         # First adjust dimensions to align with grid
+        if hasattr(room, "position") and room.position is not None:
+            x, y, z = room.position
+            print(
+                f"Using fixed position for {room.name} (id={room.id}): {room.position}"
+            )
+            success = self.spatial_grid.place_room(
+                room_id=room.id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+            )
+            if success:
+                # Add to placed rooms tracking
+                if room.room_type not in placed_rooms_by_type:
+                    placed_rooms_by_type[room.room_type] = []
+                placed_rooms_by_type[room.room_type].append(room.id)
+                return True
+            else:
+                print(
+                    f"Warning: Could not place {room.name} at fixed position {room.position}"
+                )
+
         original_width = room.width
         original_length = room.length
 
@@ -488,26 +515,40 @@ class RuleEngine(BaseEngine):
 
         return room_type in special_types
 
-    def _handle_special_room_type(
-        self,
-        room: Room,
-        placed_rooms_by_type: Dict[str, List[int]],
-        preferred_floors: List[int],
-    ) -> bool:
+    def _handle_special_room_type(self, room, placed_rooms_by_type, preferred_floors):
         """
         Handle placement for room types that need special processing.
-        This makes it easy to add new special room types.
-
-        Args:
-            room: The room to place
-            placed_rooms_by_type: Dictionary of already placed rooms by type
-            preferred_floors: List of preferred floor numbers
-
-        Returns:
-            bool: True if room was placed successfully
+        Modified to respect pre-set positions.
         """
+        # Check if this room already has a position
+        if hasattr(room, "position") and room.position is not None:
+            x, y, z = room.position
+            print(
+                f"Using fixed position for special room {room.name} (id={room.id}): {room.position}"
+            )
+            success = self.spatial_grid.place_room(
+                room_id=room.id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+            )
+            if success:
+                # Add to placed rooms tracking if needed
+                if room.room_type not in placed_rooms_by_type:
+                    placed_rooms_by_type[room.room_type] = []
+                if room.id not in placed_rooms_by_type[room.room_type]:
+                    placed_rooms_by_type[room.room_type].append(room.id)
+                return True
+
+        # Original special handling logic
         if room.room_type == "vertical_circulation":
             return self._place_vertical_circulation(room)
+        # Rest of the method...
         elif room.room_type == "entrance":
             return self._place_entrance(room, preferred_floors)
         elif room.room_type == "parking":
@@ -622,7 +663,17 @@ class RuleEngine(BaseEngine):
         return False
 
     def _place_vertical_circulation(self, room, preferred_floors=None):
-        """Special placement for vertical circulation elements."""
+        """
+        Special placement for vertical circulation elements with no corridors.
+        Modified to respect pre-set positions.
+        """
+        # Check if room already has a position
+        if hasattr(room, "position") and room.position is not None:
+            # Already handled in _handle_special_room_type
+            return False  # Should never reach here if correct
+
+        # Rest of the method...
+
         # First adjust dimensions to align with grid
         width, length = self.adjust_room_dimensions_to_grid(room)
 

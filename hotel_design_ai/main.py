@@ -18,9 +18,9 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 
-from hotel_design_ai.core.grid_rule_engine import RuleEngine
+# from hotel_design_ai.core.grid_rule_engine import RuleEngine
 
-# from hotel_design_ai.core.rule_engine import RuleEngine
+from hotel_design_ai.core.rule_engine import RuleEngine
 
 # from hotel_design_ai.core.grid_rl_engine import RLEngine
 
@@ -838,18 +838,18 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
     print(f"\nOutputs saved to: {output_subfolder}")
 
 
-def generate_complete_hotel_layout(args):
+def generate_complete_hotel_layout(args, fixed_positions=None):
     """
     Generate a complete hotel layout with both podium and standard floor sections.
-    Enhanced to properly generate standard floors.
-
-    Args:
-        args: Command line arguments
-
-    Returns:
-        Tuple of (combined_layout, all_rooms)
     """
     print("\nGenerating complete hotel layout...")
+
+    from hotel_design_ai.config.config_loader_grid import (
+        create_room_objects_for_section,
+    )
+    from hotel_design_ai.config.building_config_compatibility import (
+        tag_rooms_with_section,
+    )
 
     # Get building configuration
     building_config = get_building_envelope(args.building_config)
@@ -858,11 +858,6 @@ def generate_complete_hotel_layout(args):
     print("Step 1: Generating podium (裙房) section...")
 
     # Filter rooms for podium section
-    from hotel_design_ai.config.config_loader import create_room_objects_from_program
-    from hotel_design_ai.config.config_loader_grid import (
-        create_room_objects_for_section,
-    )
-
     podium_room_dicts = create_room_objects_for_section(
         args.program_config, building_config, section="podium"
     )
@@ -871,15 +866,28 @@ def generate_complete_hotel_layout(args):
     podium_rooms = convert_room_dicts_to_room_objects(podium_room_dicts)
 
     # Tag rooms with section info
-    from hotel_design_ai.config.building_config_compatibility import (
-        tag_rooms_with_section,
-    )
-
     podium_rooms = tag_rooms_with_section(podium_rooms, building_config)
 
-    # Generate podium layout with rule engine
-    podium_layout = generate_rule_based_layout(args, podium_rooms)
+    # FIXED: Re-match fixed positions to podium rooms if needed
+    if fixed_positions:
+        # If using enhanced format, we need to rematch based on new room objects
+        if isinstance(fixed_positions, list):
+            fixed_pos_for_podium = match_fixed_rooms_to_actual(
+                fixed_positions, podium_rooms
+            )
+        else:
+            # Direct mapping might not work with new IDs, but try anyway
+            fixed_pos_for_podium = fixed_positions
 
+        # Generate podium layout with fixed positions
+        podium_layout = generate_rule_based_layout(
+            args, podium_rooms, fixed_pos_for_podium
+        )
+    else:
+        # Generate podium layout without fixed positions
+        podium_layout = generate_rule_based_layout(args, podium_rooms)
+
+    # Rest of the function remains the same...
     # Step 2: Generate standard floor section
     print("\nStep 2: Generating standard floor (tower) section...")
 
@@ -1001,12 +1009,9 @@ def main():
         except Exception as e:
             print(f"Error loading fixed rooms: {e}")
 
-    # Check if we should generate a complete hotel (with standard floors)
     if args.complete:
         print("\nGenerating complete hotel with podium and standard floors...")
-        layout, all_rooms = generate_complete_hotel_layout(args)
-
-        # Use all_rooms instead of original rooms for evaluation
+        layout, all_rooms = generate_complete_hotel_layout(args, fixed_positions)
         rooms = all_rooms
     else:
         # Generate layout based on selected mode

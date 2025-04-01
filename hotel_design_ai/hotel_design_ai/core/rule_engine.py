@@ -332,6 +332,32 @@ class RuleEngine(BaseEngine):
         Place a room according to architectural constraints with priority on direct adjacency.
         Modified to create tight packing with no corridors.
         """
+        if hasattr(room, "position") and room.position is not None:
+            x, y, z = room.position
+            print(
+                f"Using fixed position for {room.name} (id={room.id}): {room.position}"
+            )
+            success = self.spatial_grid.place_room(
+                room_id=room.id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+            )
+            if success:
+                # Add to placed rooms tracking
+                if room.room_type not in placed_rooms_by_type:
+                    placed_rooms_by_type[room.room_type] = []
+                placed_rooms_by_type[room.room_type].append(room.id)
+                return True
+            else:
+                print(
+                    f"Warning: Could not place {room.name} at fixed position {room.position}"
+                )
         # First adjust dimensions to align with grid
         original_width = room.width
         original_length = room.length
@@ -858,24 +884,36 @@ class RuleEngine(BaseEngine):
 
         return room_type in special_types
 
-    def _handle_special_room_type(
-        self,
-        room: Room,
-        placed_rooms_by_type: Dict[str, List[int]],
-        preferred_floors: List[int],
-    ) -> bool:
+    def _handle_special_room_type(self, room, placed_rooms_by_type, preferred_floors):
         """
         Handle placement for room types that need special processing.
-        This makes it easy to add new special room types.
-
-        Args:
-            room: The room to place
-            placed_rooms_by_type: Dictionary of already placed rooms by type
-            preferred_floors: List of preferred floor numbers
-
-        Returns:
-            bool: True if room was placed successfully
+        Modified to respect pre-set positions.
         """
+        # Check if this room already has a position
+        if hasattr(room, "position") and room.position is not None:
+            x, y, z = room.position
+            print(
+                f"Using fixed position for special room {room.name} (id={room.id}): {room.position}"
+            )
+            success = self.spatial_grid.place_room(
+                room_id=room.id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+            )
+            if success:
+                # Add to placed rooms tracking if needed
+                if room.room_type not in placed_rooms_by_type:
+                    placed_rooms_by_type[room.room_type] = []
+                if room.id not in placed_rooms_by_type[room.room_type]:
+                    placed_rooms_by_type[room.room_type].append(room.id)
+                return True
+
         if room.room_type == "vertical_circulation":
             return self._place_vertical_circulation(room)
         elif room.room_type == "entrance":
@@ -996,6 +1034,10 @@ class RuleEngine(BaseEngine):
         Special placement for vertical circulation elements with no corridors.
         Positions vertical circulation at junctions of multiple rooms.
         """
+        if hasattr(room, "position") and room.position is not None:
+            # Already handled in _handle_special_room_type
+            return False
+
         # First adjust dimensions to align with grid
         width, length = self.adjust_room_dimensions_to_grid(room)
 
