@@ -7,7 +7,7 @@
     "tags": ["guest_room", "typical", "double-loaded"]
   },
   "parameters": {
-    "floor_width": 40.0,
+    "floor_width": 60.0,
     "floor_length": 20.0,
     "corridor_width": 2.4,
     "room_depth": 8.0,
