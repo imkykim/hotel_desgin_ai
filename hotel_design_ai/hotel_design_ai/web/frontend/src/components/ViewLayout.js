@@ -3,13 +3,17 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getLayout } from "../services/api";
 import "../styles/ViewLayout.css";
 
-const ViewLayoutPage = () => {
+const ViewLayout = () => {
   const [layout, setLayout] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeFloor, setActiveFloor] = useState(0);
+  const [imageErrors, setImageErrors] = useState({});
   const { layoutId } = useParams();
   const navigate = useNavigate();
+
+  // Get API base URL for images
+  const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
   useEffect(() => {
     fetchLayoutDetails();
@@ -18,16 +22,26 @@ const ViewLayoutPage = () => {
   const fetchLayoutDetails = async () => {
     try {
       setLoading(true);
+      console.log("Fetching layout details for:", layoutId);
+
       const response = await getLayout(layoutId);
+      console.log("Layout details response:", response);
 
       if (response.success && response.layout_data) {
         setLayout(response.layout_data);
       } else {
-        throw new Error("Failed to fetch layout details");
+        console.error(
+          "Failed to fetch layout details:",
+          response?.error || "Unknown error"
+        );
+        setError(
+          "Failed to fetch layout details: " +
+            (response?.error || "Unknown error")
+        );
       }
     } catch (err) {
+      console.error("Error loading layout:", err);
       setError("Error loading layout: " + err.message);
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -43,6 +57,14 @@ const ViewLayoutPage = () => {
       return (value * 100).toFixed(1) + "%";
     }
     return value;
+  };
+
+  const handleImageError = (key) => {
+    console.error(`Image load error for ${key}`);
+    setImageErrors((prev) => ({
+      ...prev,
+      [key]: true,
+    }));
   };
 
   if (loading) {
@@ -90,6 +112,29 @@ const ViewLayoutPage = () => {
     return total + width * length;
   }, 0);
 
+  // Get the image URL for the current view
+  const getImageUrl = (floor) => {
+    if (floor === -1) {
+      // 3D view
+      return `${apiBaseUrl}/layouts/${layoutId}/hotel_layout_3d.png`;
+    } else {
+      // Floor plan
+      return `${apiBaseUrl}/layouts/${layoutId}/hotel_layout_floor${floor}.png`;
+    }
+  };
+
+  // Create an error key for image error tracking
+  const getImageErrorKey = (floor) => {
+    return floor === -1 ? "3d" : `floor${floor}`;
+  };
+
+  // Display a placeholder for failed images
+  const getPlaceholderText = (floor) => {
+    return floor === -1
+      ? "No 3D View Available"
+      : `No Floor ${floor} Plan Available`;
+  };
+
   return (
     <div className="view-layout-page">
       <div className="layout-header">
@@ -122,24 +167,20 @@ const ViewLayoutPage = () => {
           </div>
 
           <div className="visualization-display">
-            {activeFloor === -1 ? (
-              // 3D view
-              <img
-                src={`/layouts/${layoutId}/hotel_layout_3d.png`}
-                alt="3D Layout View"
-                className="layout-image"
-              />
+            {imageErrors[getImageErrorKey(activeFloor)] ? (
+              <div className="placeholder-image">
+                {getPlaceholderText(activeFloor)}
+              </div>
             ) : (
-              // Floor plan
               <img
-                src={`/layouts/${layoutId}/hotel_layout_floor${activeFloor}.png`}
-                alt={`Floor ${activeFloor} Plan`}
+                src={getImageUrl(activeFloor)}
+                alt={
+                  activeFloor === -1
+                    ? "3D Layout View"
+                    : `Floor ${activeFloor} Plan`
+                }
                 className="layout-image"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = "/placeholder-floor.png";
-                  e.target.alt = "Floor plan not available";
-                }}
+                onError={() => handleImageError(getImageErrorKey(activeFloor))}
               />
             )}
           </div>
@@ -227,4 +268,4 @@ const ViewLayoutPage = () => {
   );
 };
 
-export default ViewLayoutPage;
+export default ViewLayout;

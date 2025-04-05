@@ -43,3 +43,156 @@ const initializeStorage = (key, initialValue) => {
     return initialValue || [];
   }
 };
+
+// Generate configurations
+export const generateConfigs = async (userData) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/generate-configs`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(userData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to generate configurations",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// List all layouts
+export const listLayouts = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/layouts`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to fetch layouts",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Get specific layout
+export const getLayout = async (layoutId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to fetch layout",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// List all configurations
+export const listConfigurations = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files/configurations`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to fetch configurations",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Get specific configuration
+export const getConfiguration = async (configType, configId) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/configuration/${configType}/${configId}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to fetch configuration",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Generate layout using configurations
+export const generateLayout = async (data) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/generate-layout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to generate layout",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Modify layout
+export const modifyLayout = async (data) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/modify-layout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to modify layout",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
