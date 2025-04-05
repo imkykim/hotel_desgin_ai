@@ -1,0 +1,167 @@
+.layout-gallery {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.layout-gallery h2 {
+  color: #3b71ca;
+  margin-bottom: 0.5rem;
+}
+
+.layout-gallery p {
+  color: #6c757d;
+  margin-bottom: 2rem;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+  font-size: 1.2rem;
+  color: #6c757d;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.no-layouts {
+  text-align: center;
+  padding: 3rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.no-layouts p {
+  font-size: 1.2rem;
+  margin-bottom: 1.5rem;
+}
+
+.layouts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.layout-card {
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.layout-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.layout-thumbnail {
+  height: 180px;
+  overflow: hidden;
+}
+
+.layout-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.layout-card:hover .layout-thumbnail img {
+  transform: scale(1.05);
+}
+
+.layout-info {
+  padding: 1rem;
+}
+
+.layout-info h3 {
+  margin: 0 0 0.5rem 0;
+  color: #343a40;
+}
+
+.layout-info p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.btn-view {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #3b71ca;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  width: 100%;
+  transition: background-color 0.2s;
+}
+
+.btn-view:hover {
+  background-color: #2c5ebd;
+}
+
+.gallery-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+}
+
+.btn-primary,
+.btn-refresh {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-primary {
+  background-color: #3b71ca;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2c5ebd;
+}
+
+.btn-refresh {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-refresh:hover {
+  background-color: #5a6268;
+}
+
+.btn-refresh:disabled {
+  background-color: #ced4da;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .layouts-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+
+  .gallery-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .btn-primary,
+  .btn-refresh {
+    width: 100%;
+  }
+}

@@ -1,0 +1,89 @@
+.not-found-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+  padding: 2rem;
+}
+
+.not-found-container {
+  text-align: center;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 3rem;
+  max-width: 500px;
+  width: 100%;
+}
+
+.not-found-container h1 {
+  font-size: 6rem;
+  color: #3b71ca;
+  margin: 0;
+  line-height: 1;
+}
+
+.not-found-container h2 {
+  color: #343a40;
+  margin: 1rem 0;
+}
+
+.not-found-container p {
+  color: #6c757d;
+  margin-bottom: 2rem;
+}
+
+.not-found-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.btn-home,
+.btn-layouts {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.btn-home {
+  background-color: #3b71ca;
+  color: white;
+}
+
+.btn-home:hover {
+  background-color: #2c5ebd;
+}
+
+.btn-layouts {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-layouts:hover {
+  background-color: #5a6268;
+}
+
+@media (max-width: 768px) {
+  .not-found-container {
+    padding: 2rem;
+  }
+
+  .not-found-container h1 {
+    font-size: 4rem;
+  }
+
+  .not-found-actions {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .btn-home,
+  .btn-layouts {
+    width: 100%;
+  }
+}
