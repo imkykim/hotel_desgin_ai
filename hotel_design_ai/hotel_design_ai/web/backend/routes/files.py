@@ -1,5 +1,3 @@
-# Add to hotel_design_ai/hotel_design_ai/web/backend/routes/files.py
-
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pathlib import Path
@@ -33,45 +31,64 @@ async def list_layouts():
     """List all available layout outputs from local directory."""
     try:
         layouts = []
+        logger.info(f"Searching for layouts in: {LAYOUTS_DIR}")
 
         # Get all layout directories
         for layout_dir in LAYOUTS_DIR.iterdir():
             if layout_dir.is_dir():
                 layout_file = layout_dir / "hotel_layout.json"
+                logger.info(f"Checking layout file: {layout_file}")
 
                 if layout_file.exists():
-                    # Load basic layout info
-                    with open(layout_file, "r") as f:
-                        layout_data = json.load(f)
+                    try:
+                        # Load basic layout info
+                        with open(layout_file, "r") as f:
+                            layout_data = json.load(f)
 
-                    # Extract creation date from directory name if possible
-                    creation_date = ""
-                    if "_" in layout_dir.name:
-                        date_part = layout_dir.name.split("_")[0]
-                        try:
-                            # Parse YYYYMMDD format
-                            if len(date_part) == 8:
-                                year = date_part[:4]
-                                month = date_part[4:6]
-                                day = date_part[6:8]
-                                creation_date = f"{year}-{month}-{day}"
-                        except Exception:
-                            pass
+                        # Extract creation date from directory name if possible
+                        creation_date = ""
+                        if "_" in layout_dir.name:
+                            date_part = layout_dir.name.split("_")[0]
+                            try:
+                                # Parse YYYYMMDD format
+                                if len(date_part) == 8:
+                                    year = date_part[:4]
+                                    month = date_part[4:6]
+                                    day = date_part[6:8]
+                                    creation_date = f"{year}-{month}-{day}"
+                            except Exception as e:
+                                logger.warning(f"Error parsing date: {e}")
 
-                    # Add to list
-                    layouts.append(
-                        {
-                            "id": layout_dir.name,
-                            "room_count": len(layout_data.get("rooms", {})),
-                            "metrics": layout_data.get("metrics", {}),
-                            "created_at": creation_date,
-                            "preview_image": f"/layouts/{layout_dir.name}/hotel_layout_3d.png",
-                            "width": layout_data.get("width", 0),
-                            "length": layout_data.get("length", 0),
-                            "height": layout_data.get("height", 0),
-                        }
-                    )
+                        # Check for preview image
+                        preview_image = (
+                            f"/layouts/{layout_dir.name}/hotel_layout_3d.png"
+                        )
+                        preview_image_path = layout_dir / "hotel_layout_3d.png"
+                        has_preview = preview_image_path.exists()
 
+                        logger.info(
+                            f"Preview image path: {preview_image_path}, exists: {has_preview}"
+                        )
+
+                        # Add to list
+                        layouts.append(
+                            {
+                                "id": layout_dir.name,
+                                "room_count": len(layout_data.get("rooms", {})),
+                                "metrics": layout_data.get("metrics", {}),
+                                "created_at": creation_date,
+                                "preview_image": preview_image if has_preview else None,
+                                "has_preview": has_preview,
+                                "width": layout_data.get("width", 0),
+                                "length": layout_data.get("length", 0),
+                                "height": layout_data.get("height", 0),
+                            }
+                        )
+                        logger.info(f"Added layout: {layout_dir.name}")
+                    except Exception as e:
+                        logger.error(f"Error processing layout {layout_dir.name}: {e}")
+
+        logger.info(f"Found {len(layouts)} layouts")
         return {"success": True, "layouts": layouts}
 
     except Exception as e:

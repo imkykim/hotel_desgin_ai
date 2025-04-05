@@ -88,21 +88,29 @@ export const listLayouts = async () => {
   }
 };
 
-// Get specific layout
+// Updated getLayout function in api.js
 export const getLayout = async (layoutId) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`);
+    // Use the /api/layouts/ endpoint to avoid confusion with frontend routes
+    const response = await fetch(`${API_BASE_URL}/api/layouts/${layoutId}`);
+    console.log(
+      `Fetching layout from: ${API_BASE_URL}/api/layouts/${layoutId}`
+    );
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: "Error parsing response" }));
       return {
         success: false,
-        error: errorData.detail || "Failed to fetch layout",
+        error:
+          errorData.detail || `Failed to fetch layout (${response.status})`,
       };
     }
 
     return await response.json();
   } catch (error) {
+    console.error("Error in getLayout:", error);
     return handleApiError(error);
   }
 };

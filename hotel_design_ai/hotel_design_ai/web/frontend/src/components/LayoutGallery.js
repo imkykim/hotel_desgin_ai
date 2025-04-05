@@ -52,7 +52,14 @@ const LayoutGallery = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return "Unknown date";
-    return dateString;
+
+    // Try to format date nicely if it's in YYYY-MM-DD format
+    try {
+      const [year, month, day] = dateString.split("-");
+      return `${month}/${day}/${year}`;
+    } catch (e) {
+      return dateString;
+    }
   };
 
   // Sort layouts based on selected criteria
@@ -86,8 +93,8 @@ const LayoutGallery = () => {
   };
 
   return (
-    <div className="layout-gallery">
-      <div className="layout-gallery-header">
+    <div className="config-browser">
+      <div className="config-browser-header">
         <h2>Layout Gallery</h2>
         <p>Browse previously generated hotel layouts</p>
 
@@ -113,7 +120,7 @@ const LayoutGallery = () => {
       {error && <div className="error-message">{error}</div>}
 
       {!loading && layouts.length === 0 && !error && (
-        <div className="no-layouts">
+        <div className="no-configs">
           <p>No layouts found. Generate your first layout!</p>
           <button
             className="btn-primary"
@@ -124,18 +131,21 @@ const LayoutGallery = () => {
         </div>
       )}
 
-      <div className="layouts-grid">
+      <div className="configs-grid">
         {getSortedLayouts().map((layout) => {
-          // Generate image URL - try different possible naming conventions
-          const imageUrl = imageErrors[layout.id]
-            ? "https://via.placeholder.com/400x300?text=No+Preview"
-            : `${apiBaseUrl}/layouts/${layout.id}/hotel_layout_3d.png`;
+          // Generate image URL - using the preview_image from backend if available
+          const imageUrl =
+            imageErrors[layout.id] || !layout.has_preview
+              ? null
+              : `${apiBaseUrl}${layout.preview_image}`;
 
           return (
-            <div key={layout.id} className="layout-card">
-              <div className="layout-thumbnail">
-                {imageErrors[layout.id] ? (
-                  <div className="placeholder-image">No Preview Available</div>
+            <div key={layout.id} className="config-card">
+              <div className="config-preview">
+                {!imageUrl ? (
+                  <div className="placeholder-image">
+                    <span className="config-icon">🏨</span>
+                  </div>
                 ) : (
                   <img
                     src={imageUrl}
@@ -144,7 +154,7 @@ const LayoutGallery = () => {
                   />
                 )}
               </div>
-              <div className="layout-info">
+              <div className="config-info">
                 <h3>{layout.id.split("_")[1] || layout.id}</h3>
                 <p>Created: {formatDate(layout.created_at)}</p>
                 <p>Rooms: {layout.room_count || 0}</p>
@@ -157,19 +167,21 @@ const LayoutGallery = () => {
                     Score: {(layout.metrics.overall_score * 100).toFixed(1)}%
                   </p>
                 )}
-                <button
-                  className="btn-view"
-                  onClick={() => handleViewLayout(layout.id)}
-                >
-                  View Details
-                </button>
+                <div className="config-actions">
+                  <button
+                    className="btn-view"
+                    onClick={() => handleViewLayout(layout.id)}
+                  >
+                    View Details
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="gallery-actions">
+      <div className="browser-actions">
         <button className="btn-primary" onClick={() => navigate("/configure")}>
           Create New Layout
         </button>

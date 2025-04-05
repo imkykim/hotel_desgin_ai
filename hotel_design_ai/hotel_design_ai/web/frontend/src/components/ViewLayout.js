@@ -5,6 +5,7 @@ import "../styles/ViewLayout.css";
 
 const ViewLayout = () => {
   const [layout, setLayout] = useState(null);
+  const [imageUrls, setImageUrls] = useState({ floor_plans: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeFloor, setActiveFloor] = useState(0);
@@ -29,6 +30,7 @@ const ViewLayout = () => {
 
       if (response.success && response.layout_data) {
         setLayout(response.layout_data);
+        setImageUrls(response.image_urls || { floor_plans: {} });
       } else {
         console.error(
           "Failed to fetch layout details:",
@@ -116,16 +118,28 @@ const ViewLayout = () => {
   const getImageUrl = (floor) => {
     if (floor === -1) {
       // 3D view
-      return `${apiBaseUrl}/layouts/${layoutId}/hotel_layout_3d.png`;
+      return imageUrls.has_3d_preview
+        ? `${apiBaseUrl}${imageUrls["3d"]}`
+        : null;
     } else {
       // Floor plan
-      return `${apiBaseUrl}/layouts/${layoutId}/hotel_layout_floor${floor}.png`;
+      return floor in imageUrls.floor_plans
+        ? `${apiBaseUrl}${imageUrls.floor_plans[floor]}`
+        : null;
     }
   };
 
   // Create an error key for image error tracking
   const getImageErrorKey = (floor) => {
     return floor === -1 ? "3d" : `floor${floor}`;
+  };
+
+  // Check if we have an image for this floor
+  const hasFloorImage = (floor) => {
+    if (floor === -1) {
+      return imageUrls.has_3d_preview && !imageErrors["3d"];
+    }
+    return floor in imageUrls.floor_plans && !imageErrors[`floor${floor}`];
   };
 
   // Display a placeholder for failed images
@@ -154,7 +168,7 @@ const ViewLayout = () => {
               3D View
             </button>
 
-            {/* Floor buttons */}
+            {/* Floor buttons - only show floors that have images */}
             {[-2, -1, 0, 1, 2, 3, 4, 5].map((floor) => (
               <button
                 key={`floor-${floor}`}
@@ -167,7 +181,7 @@ const ViewLayout = () => {
           </div>
 
           <div className="visualization-display">
-            {imageErrors[getImageErrorKey(activeFloor)] ? (
+            {!hasFloorImage(activeFloor) ? (
               <div className="placeholder-image">
                 {getPlaceholderText(activeFloor)}
               </div>

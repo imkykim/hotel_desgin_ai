@@ -58,14 +58,18 @@ app.add_middleware(
 DATA_DIR = Path("./data")
 BUILDING_DIR = DATA_DIR / "building"
 PROGRAM_DIR = DATA_DIR / "program"
-USER_DATA_DIR = Path("./user_data")
+
+PROJECT_ROOT = Path(__file__).parents[3].absolute()
+USER_DATA_DIR = PROJECT_ROOT / "user_data"
 LAYOUTS_DIR = USER_DATA_DIR / "layouts"
+
 
 # Ensure directories exist
 for dir_path in [BUILDING_DIR, PROGRAM_DIR, USER_DATA_DIR, LAYOUTS_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
-# Mount static files for layout images
+# Mount with explicit absolute path
+print(f"Mounting static files from: {LAYOUTS_DIR}")
 app.mount("/layouts", StaticFiles(directory=str(LAYOUTS_DIR)), name="layouts")
 
 
@@ -563,6 +567,63 @@ async def get_configuration(config_type: str, config_id: str):
         raise HTTPException(
             status_code=500, detail=f"Error getting configuration: {str(e)}"
         )
+
+
+@app.get("/layouts/{layout_id}")
+async def get_layout(layout_id: str):
+    """Get a specific layout by ID."""
+    try:
+        # Check if layout exists
+        layout_dir = LAYOUTS_DIR / layout_id
+        layout_file = layout_dir / "hotel_layout.json"
+
+        logger.info(f"Looking for layout file: {layout_file}")
+
+        if not layout_file.exists():
+            logger.error(f"Layout file not found: {layout_file}")
+            raise HTTPException(status_code=404, detail="Layout not found")
+
+        # Load layout
+        with open(layout_file, "r") as f:
+            layout_data = json.load(f)
+
+        # Find available preview images
+        image_urls = []
+        preview_3d = layout_dir / "hotel_layout_3d.png"
+
+        has_3d_preview = preview_3d.exists()
+
+        # Find floor plan images
+        floor_images = {}
+        for floor in range(-2, 6):  # Check floors -2 to 5
+            floor_image = layout_dir / f"hotel_layout_floor{floor}.png"
+            if floor_image.exists():
+                floor_images[floor] = (
+                    f"/layouts/{layout_id}/hotel_layout_floor{floor}.png"
+                )
+
+        # Return layout data
+        return {
+            "success": True,
+            "layout_id": layout_id,
+            "layout_data": layout_data,
+            "image_urls": {
+                "3d": (
+                    f"/layouts/{layout_id}/hotel_layout_3d.png"
+                    if has_3d_preview
+                    else None
+                ),
+                "has_3d_preview": has_3d_preview,
+                "floor_plans": floor_images,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting layout: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error getting layout: {str(e)}")
 
 
 if __name__ == "__main__":
