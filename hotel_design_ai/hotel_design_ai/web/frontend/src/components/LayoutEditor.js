@@ -104,12 +104,7 @@ const LayoutEditor = ({
     floor_height: 4.0,
   };
 
-  // Draw the layout when component updates
-  useEffect(() => {
-    drawLayout();
-  }, [layout, selectedRoom, currentFloor, width, length, floor_height]);
-
-  // Draw the layout on the canvas
+  // Function to draw the layout on the canvas
   const drawLayout = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -138,8 +133,8 @@ const LayoutEditor = ({
 
   // Draw an individual room
   const drawRoom = (ctx, roomId, roomData, scale) => {
-    const [x, y, z] = roomData.position;
-    const [w, l, h] = roomData.dimensions;
+    const [x, y] = roomData.position;
+    const [w, l] = roomData.dimensions;
     const roomType = roomData.type;
 
     // Get room styling
@@ -164,6 +159,12 @@ const LayoutEditor = ({
     );
   };
 
+  // Draw the layout when component updates
+  useEffect(() => {
+    drawLayout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, selectedRoom, currentFloor, width, length, floor_height]);
+
   // Handle mouse down for room selection and dragging
   const handleMouseDown = (e) => {
     const canvas = canvasRef.current;
@@ -175,18 +176,16 @@ const LayoutEditor = ({
 
     // Find room under mouse
     let foundRoom = null;
-    let roomData = null;
 
     Object.entries(layout.rooms || {}).forEach(([roomId, data]) => {
       const roomFloor = Math.floor(data.position[2] / floor_height);
       if (roomFloor !== currentFloor) return;
 
-      const [x, y, z] = data.position;
-      const [w, l, h] = data.dimensions;
+      const [x, y] = data.position;
+      const [w, l] = data.dimensions;
 
       if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + l) {
         foundRoom = parseInt(roomId);
-        roomData = data;
         setDragOffset({
           x: mouseX - x,
           y: mouseY - y,

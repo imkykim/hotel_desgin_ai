@@ -2,6 +2,7 @@
 
 :root {
   --primary-color: #3b71ca;
+  --primary-dark: #2c5ebd;
   --secondary-color: #6c757d;
   --background-color: #f8f9fa;
   --border-color: #dee2e6;
@@ -9,8 +10,8 @@
   --success-color: #28a745;
   --text-color: #343a40;
   --light-text: #6c757d;
-  --header-background: #343a40;
-  --header-text: white;
+  --header-background: #ffffff;
+  --header-text: #343a40;
 }
 
 * {
@@ -32,30 +33,77 @@ body {
   min-height: 100vh;
 }
 
-/* Header */
-.App-header {
+/* Improved Navigation */
+.main-nav {
   background-color: var(--header-background);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.nav-logo a {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.nav-logo a:hover {
+  color: var(--primary-dark);
+}
+
+.nav-links {
+  display: flex;
+  list-style: none;
+  gap: 2rem;
+}
+
+.nav-links li a {
   color: var(--header-text);
-  padding: 1.5rem;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+.nav-links li a:hover {
+  color: var(--primary-color);
+}
+
+.nav-links li a::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background-color: var(--primary-color);
+  transition: width 0.3s ease;
+}
+
+.nav-links li a:hover::after {
+  width: 100%;
+}
+
+/* Content Container */
+.content-container {
+  flex: 1;
+}
+
+/* Footer */
+.App-footer {
+  background-color: var(--text-color);
+  color: white;
   text-align: center;
-}
-
-.App-header h1 {
-  margin-bottom: 0.5rem;
-  font-size: 2rem;
-}
-
-.App-header p {
-  font-size: 1rem;
-  opacity: 0.8;
-}
-
-/* Main Container */
-.container {
-  width: 90%;
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  padding: 1.5rem;
+  font-size: 0.9rem;
 }
 
 /* Form Styling */
@@ -109,6 +157,21 @@ body {
 @media (max-width: 768px) {
   .half {
     flex: 0 0 100%;
+  }
+
+  .main-nav {
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .nav-logo {
+    margin-bottom: 1rem;
+  }
+
+  .nav-links {
+    width: 100%;
+    justify-content: center;
+    gap: 1rem;
   }
 }
 
@@ -172,7 +235,7 @@ label {
 }
 
 .btn-primary:hover {
-  background-color: #2c5ebd;
+  background-color: var(--primary-dark);
 }
 
 .btn-primary:disabled {
@@ -243,4 +306,15 @@ pre {
   max-height: 400px;
   overflow-y: auto;
   margin-bottom: 1rem;
+}
+
+/* Responsive layout */
+@media (max-width: 576px) {
+  .checkbox-group {
+    flex-direction: column;
+  }
+
+  .checkbox-item {
+    min-width: auto;
+  }
 }

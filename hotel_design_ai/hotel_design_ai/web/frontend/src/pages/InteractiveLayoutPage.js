@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import GridSelector from "../components/GridSelector";
 import LayoutEditor from "../components/LayoutEditor";
-import {
-  generateLayout,
-  getLayout,
-  modifyLayout,
-  processLayoutData,
-} from "../services/api";
+import { generateLayout, getLayout, modifyLayout } from "../services/api";
 import "../styles/InteractiveLayout.css";
 
 const InteractiveLayoutPage = () => {
@@ -23,6 +18,16 @@ const InteractiveLayoutPage = () => {
 
   const { buildingId, programId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get layoutId from query params if it exists
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const layoutIdParam = queryParams.get("layoutId");
+    if (layoutIdParam) {
+      setLayoutId(layoutIdParam);
+    }
+  }, [location]);
 
   // Fetch building configuration
   useEffect(() => {
@@ -98,6 +103,9 @@ const InteractiveLayoutPage = () => {
               grid_size: 1.0,
             });
             setInitialLayout(layoutData.layout_data);
+
+            // Switch to layout editor tab since we're loading an existing layout
+            setActiveTab("layout");
           }
         } else {
           // Otherwise use configuration info from params
