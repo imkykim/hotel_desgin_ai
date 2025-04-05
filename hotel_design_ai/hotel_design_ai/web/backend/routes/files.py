@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pathlib import Path
 import os
 import json
@@ -94,6 +95,33 @@ async def list_layouts():
     except Exception as e:
         logger.error(f"Error listing layouts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error listing layouts: {str(e)}")
+
+
+@router.get("/layout/{layout_id}")
+def get_layout_details(layout_id: str):
+    base_path = "hotel_design_ai/user_data/layouts"
+    layout_folder = os.path.join(base_path, layout_id)
+    layout_json_path = os.path.join(layout_folder, "hotel_layout.json")
+
+    print(f"Fetching layout: {layout_id}")
+    print(f"Looking in: {layout_json_path}")
+
+    if not os.path.isfile(layout_json_path):
+        return JSONResponse(
+            status_code=404, content={"success": False, "error": "Layout not found"}
+        )
+
+    with open(layout_json_path, "r") as f:
+        layout_data = json.load(f)
+
+    # Optional image path logic (to show 3D or floor plans)
+    image_urls = {
+        "has_3d_preview": True,
+        "3d": f"/static/layouts/{layout_id}/hotel_layout_3d.png",
+        "floor_plans": {},  # Add floor plan paths if needed
+    }
+
+    return {"success": True, "layout_data": layout_data, "image_urls": image_urls}
 
 
 @router.get("/configurations")

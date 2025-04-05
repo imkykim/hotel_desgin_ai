@@ -4,6 +4,7 @@ Main FastAPI application for Hotel Design AI web backend.
 
 import os
 from typing import Dict, Any, List, Optional, Tuple
+from routes import files
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles

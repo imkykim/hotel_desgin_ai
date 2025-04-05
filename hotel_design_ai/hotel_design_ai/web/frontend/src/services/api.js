@@ -69,49 +69,17 @@ export const generateConfigs = async (userData) => {
   }
 };
 
-// List all layouts
-export const listLayouts = async () => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files/layouts`);
+const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return {
-        success: false,
-        error: errorData.detail || "Failed to fetch layouts",
-      };
-    }
+export async function listLayouts() {
+  const response = await fetch(`${apiBaseUrl}/files/layouts`);
+  return await response.json();
+}
 
-    return await response.json();
-  } catch (error) {
-    return handleApiError(error);
-  }
-};
-
-// Updated getLayout function in api.js
-export const getLayout = async (layoutId) => {
-  try {
-    // Fix: Use the correct endpoint path without the "api/" prefix
-    const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`);
-    console.log(`Fetching layout from: ${API_BASE_URL}/layouts/${layoutId}`);
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ detail: "Error parsing response" }));
-      return {
-        success: false,
-        error:
-          errorData.detail || `Failed to fetch layout (${response.status})`,
-      };
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Error in getLayout:", error);
-    return handleApiError(error);
-  }
-};
+export async function getLayout(layoutId) {
+  const response = await fetch(`${apiBaseUrl}/layouts/${layoutId}`);
+  return await response.json();
+}
 
 // List all configurations
 export const listConfigurations = async () => {
