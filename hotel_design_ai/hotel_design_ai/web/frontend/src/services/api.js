@@ -76,10 +76,32 @@ export async function listLayouts() {
   return await response.json();
 }
 
-export async function getLayout(layoutId) {
-  const response = await fetch(`${apiBaseUrl}/layouts/${layoutId}`);
-  return await response.json();
-}
+// Update getLayout function in api.js to use /files/layouts path
+export const getLayout = async (layoutId) => {
+  try {
+    // Use the files router path - this matches the backend router structure
+    const response = await fetch(`${API_BASE_URL}/files/layouts/${layoutId}`);
+    console.log(
+      `Fetching layout from: ${API_BASE_URL}/files/layouts/${layoutId}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: "Error parsing response" }));
+      return {
+        success: false,
+        error:
+          errorData.detail || `Failed to fetch layout (${response.status})`,
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error in getLayout:", error);
+    return handleApiError(error);
+  }
+};
 
 // List all configurations
 export const listConfigurations = async () => {

@@ -97,31 +97,60 @@ async def list_layouts():
         raise HTTPException(status_code=500, detail=f"Error listing layouts: {str(e)}")
 
 
-@router.get("/layout/{layout_id}")
-def get_layout_details(layout_id: str):
-    base_path = "hotel_design_ai/user_data/layouts"
-    layout_folder = os.path.join(base_path, layout_id)
-    layout_json_path = os.path.join(layout_folder, "hotel_layout.json")
+# Add this route to files.py to handle layout detail requests
+@router.get("/layouts/{layout_id}")
+async def get_layout_detail(layout_id: str):
+    """Get details for a specific layout by ID."""
+    try:
+        # Check if layout exists
+        layout_dir = LAYOUTS_DIR / layout_id
+        layout_file = layout_dir / "hotel_layout.json"
 
-    print(f"Fetching layout: {layout_id}")
-    print(f"Looking in: {layout_json_path}")
+        logger.info(f"Looking for layout file: {layout_file}")
 
-    if not os.path.isfile(layout_json_path):
-        return JSONResponse(
-            status_code=404, content={"success": False, "error": "Layout not found"}
-        )
+        if not layout_file.exists():
+            logger.error(f"Layout file not found: {layout_file}")
+            raise HTTPException(status_code=404, detail="Layout not found")
 
-    with open(layout_json_path, "r") as f:
-        layout_data = json.load(f)
+        # Load layout
+        with open(layout_file, "r") as f:
+            layout_data = json.load(f)
 
-    # Optional image path logic (to show 3D or floor plans)
-    image_urls = {
-        "has_3d_preview": True,
-        "3d": f"/static/layouts/{layout_id}/hotel_layout_3d.png",
-        "floor_plans": {},  # Add floor plan paths if needed
-    }
+        # Find available preview images
+        preview_3d = layout_dir / "hotel_layout_3d.png"
+        has_3d_preview = preview_3d.exists()
 
-    return {"success": True, "layout_data": layout_data, "image_urls": image_urls}
+        # Find floor plan images
+        floor_images = {}
+        for floor in range(-2, 6):  # Check floors -2 to 5
+            floor_image = layout_dir / f"hotel_layout_floor{floor}.png"
+            if floor_image.exists():
+                floor_images[floor] = (
+                    f"/layouts/{layout_id}/hotel_layout_floor{floor}.png"
+                )
+
+        # Return layout data
+        return {
+            "success": True,
+            "layout_id": layout_id,
+            "layout_data": layout_data,
+            "image_urls": {
+                "3d": (
+                    f"/layouts/{layout_id}/hotel_layout_3d.png"
+                    if has_3d_preview
+                    else None
+                ),
+                "has_3d_preview": has_3d_preview,
+                "floor_plans": floor_images,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting layout: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error getting layout: {str(e)}")
 
 
 @router.get("/configurations")

@@ -8,7 +8,7 @@ const ViewLayout = () => {
   const [imageUrls, setImageUrls] = useState({ floor_plans: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeFloor, setActiveFloor] = useState(0);
+  const [activeView, setActiveView] = useState("3d"); // Changed from activeFloor to activeView
   const [imageErrors, setImageErrors] = useState({});
   const { layoutId } = useParams();
   const navigate = useNavigate();
@@ -20,20 +20,58 @@ const ViewLayout = () => {
     fetchLayoutDetails();
   }, [layoutId]);
 
-  // Update this in the ViewLayout component's fetchLayoutDetails function
+  // Set default active view once images are loaded
+  useEffect(() => {
+    if (!loading && imageUrls) {
+      // Try to set the default view to the first available image
+      if (imageUrls.has_3d_preview && !imageErrors["3d"]) {
+        setActiveView("3d");
+      } else {
+        // Check for available floor plans
+        const availableFloors = Object.keys(imageUrls.floor_plans).filter(
+          (floor) => !imageErrors[`floor${floor}`]
+        );
+
+        if (availableFloors.length > 0) {
+          // Sort floors to prioritize ground floor (0), then positive floors, then basements
+          availableFloors.sort((a, b) => {
+            if (a === "0") return -1;
+            if (b === "0") return 1;
+            if (a === "std") return 1;
+            if (b === "std") return -1;
+            return parseInt(a) - parseInt(b);
+          });
+
+          setActiveView(availableFloors[0]);
+        }
+      }
+    }
+  }, [loading, imageUrls, imageErrors]);
 
   const fetchLayoutDetails = async () => {
     try {
       setLoading(true);
       console.log("Fetching layout details for:", layoutId);
 
-      // Explicitly make sure we're calling the API endpoint, not navigating
       const response = await getLayout(layoutId);
       console.log("Layout details response:", response);
 
       if (response.success && response.layout_data) {
         setLayout(response.layout_data);
-        setImageUrls(response.image_urls || { floor_plans: {} });
+
+        // Process image URLs - check for both standard and basement naming conventions
+        const processedImageUrls = {
+          ...response.image_urls,
+          floor_plans: { ...response.image_urls.floor_plans },
+        };
+
+        // Check for basement images with alternate naming
+        checkForBasementImages(processedImageUrls, layoutId);
+
+        // Check for standard floor image
+        checkForStandardFloorImage(processedImageUrls, layoutId);
+
+        setImageUrls(processedImageUrls);
       } else {
         console.error(
           "Failed to fetch layout details:",
@@ -50,6 +88,29 @@ const ViewLayout = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Check for basement images with alternate naming
+  const checkForBasementImages = (imageUrls, layoutId) => {
+    // Check for basement1.png instead of floor-1.png
+    if (!imageUrls.floor_plans[-1]) {
+      const basementUrl = `/layouts/${layoutId}/hotel_layout_basement1.png`;
+      // We'll add it and let the image error handler remove it if it doesn't exist
+      imageUrls.floor_plans[-1] = basementUrl;
+    }
+
+    // Check for basement2.png instead of floor-2.png
+    if (!imageUrls.floor_plans[-2]) {
+      const basement2Url = `/layouts/${layoutId}/hotel_layout_basement2.png`;
+      imageUrls.floor_plans[-2] = basement2Url;
+    }
+  };
+
+  // Check for standard floor image
+  const checkForStandardFloorImage = (imageUrls, layoutId) => {
+    const standardFloorUrl = `/layouts/${layoutId}/hotel_layout_standard_floor.png`;
+    // Add special key for standard floor
+    imageUrls.floor_plans["std"] = standardFloorUrl;
   };
 
   const handleEditLayout = () => {
@@ -117,39 +178,63 @@ const ViewLayout = () => {
     return total + width * length;
   }, 0);
 
+  // Extract building dimensions - handle both direct and nested structures
+  const buildingWidth =
+    layout.width || (layout.dimensions && layout.dimensions.width) || 0;
+  const buildingLength =
+    layout.length || (layout.dimensions && layout.dimensions.length) || 0;
+  const buildingHeight =
+    layout.height || (layout.dimensions && layout.dimensions.height) || 0;
+
+  // Extract metrics - both from root and from metrics property
+  const metrics = layout.metrics || {};
+  const overallScore = metrics.overall_score || 0;
+
   // Get the image URL for the current view
-  const getImageUrl = (floor) => {
-    if (floor === -1) {
+  const getImageUrl = () => {
+    if (activeView === "3d") {
       // 3D view
       return imageUrls.has_3d_preview
         ? `${apiBaseUrl}${imageUrls["3d"]}`
         : null;
     } else {
-      // Floor plan
-      return floor in imageUrls.floor_plans
-        ? `${apiBaseUrl}${imageUrls.floor_plans[floor]}`
+      // Floor plan or standard floor
+      const floorKey = activeView === "std" ? "std" : parseInt(activeView);
+      return floorKey in imageUrls.floor_plans
+        ? `${apiBaseUrl}${imageUrls.floor_plans[floorKey]}`
         : null;
     }
   };
 
   // Create an error key for image error tracking
-  const getImageErrorKey = (floor) => {
-    return floor === -1 ? "3d" : `floor${floor}`;
+  const getImageErrorKey = () => {
+    return activeView === "3d"
+      ? "3d"
+      : activeView === "std"
+      ? "std"
+      : `floor${activeView}`;
   };
 
-  // Check if we have an image for this floor
-  const hasFloorImage = (floor) => {
-    if (floor === -1) {
+  // Check if we have an image for the active view
+  const hasImage = () => {
+    if (activeView === "3d") {
       return imageUrls.has_3d_preview && !imageErrors["3d"];
     }
-    return floor in imageUrls.floor_plans && !imageErrors[`floor${floor}`];
+    const floorKey = activeView === "std" ? "std" : parseInt(activeView);
+    return (
+      floorKey in imageUrls.floor_plans && !imageErrors[getImageErrorKey()]
+    );
   };
 
   // Display a placeholder for failed images
-  const getPlaceholderText = (floor) => {
-    return floor === -1
-      ? "No 3D View Available"
-      : `No Floor ${floor} Plan Available`;
+  const getPlaceholderText = () => {
+    if (activeView === "3d") return "No 3D View Available";
+    if (activeView === "std") return "No Standard Floor Plan Available";
+
+    const floorNum = parseInt(activeView);
+    return floorNum < 0
+      ? `No Basement ${Math.abs(floorNum)} Plan Available`
+      : `No Floor ${floorNum} Plan Available`;
   };
 
   return (
@@ -164,40 +249,78 @@ const ViewLayout = () => {
           <h2>Visualizations</h2>
 
           <div className="visualization-tabs">
-            <button
-              className={activeFloor === -1 ? "active" : ""}
-              onClick={() => setActiveFloor(-1)}
-            >
-              3D View
-            </button>
-
-            {/* Floor buttons - only show floors that have images */}
-            {[-2, -1, 0, 1, 2, 3, 4, 5].map((floor) => (
+            {/* 3D View button - only show if it exists */}
+            {imageUrls.has_3d_preview && !imageErrors["3d"] && (
               <button
-                key={`floor-${floor}`}
-                className={activeFloor === floor ? "active" : ""}
-                onClick={() => setActiveFloor(floor)}
+                className={activeView === "3d" ? "active" : ""}
+                onClick={() => setActiveView("3d")}
               >
-                {floor < 0 ? `B${Math.abs(floor)}` : `F${floor}`}
+                3D View
               </button>
-            ))}
+            )}
+
+            {/* Basement floors - only show if images exist */}
+            {["-2", "-1"].map((floor) => {
+              const floorKey = parseInt(floor);
+              const hasImage =
+                floorKey in imageUrls.floor_plans &&
+                !imageErrors[`floor${floor}`];
+
+              return hasImage ? (
+                <button
+                  key={`floor-${floor}`}
+                  className={activeView === floor ? "active" : ""}
+                  onClick={() => setActiveView(floor)}
+                >
+                  {`B${Math.abs(parseInt(floor))}`}
+                </button>
+              ) : null;
+            })}
+
+            {/* Main floors - only show if images exist */}
+            {["0", "1", "2", "3", "4", "5"].map((floor) => {
+              const floorKey = parseInt(floor);
+              const hasImage =
+                floorKey in imageUrls.floor_plans &&
+                !imageErrors[`floor${floor}`];
+
+              return hasImage ? (
+                <button
+                  key={`floor-${floor}`}
+                  className={activeView === floor ? "active" : ""}
+                  onClick={() => setActiveView(floor)}
+                >
+                  {`F${floor}`}
+                </button>
+              ) : null;
+            })}
+
+            {/* Standard floor button - only show if image exists */}
+            {imageUrls.floor_plans["std"] && !imageErrors["std"] && (
+              <button
+                className={activeView === "std" ? "active" : ""}
+                onClick={() => setActiveView("std")}
+              >
+                Standard
+              </button>
+            )}
           </div>
 
           <div className="visualization-display">
-            {!hasFloorImage(activeFloor) ? (
-              <div className="placeholder-image">
-                {getPlaceholderText(activeFloor)}
-              </div>
+            {!hasImage() ? (
+              <div className="placeholder-image">{getPlaceholderText()}</div>
             ) : (
               <img
-                src={getImageUrl(activeFloor)}
+                src={getImageUrl()}
                 alt={
-                  activeFloor === -1
+                  activeView === "3d"
                     ? "3D Layout View"
-                    : `Floor ${activeFloor} Plan`
+                    : activeView === "std"
+                    ? "Standard Floor Plan"
+                    : `Floor ${activeView} Plan`
                 }
                 className="layout-image"
-                onError={() => handleImageError(getImageErrorKey(activeFloor))}
+                onError={() => handleImageError(getImageErrorKey())}
               />
             )}
           </div>
@@ -221,17 +344,13 @@ const ViewLayout = () => {
               <div className="stat-item">
                 <h3>Building Dimensions</h3>
                 <p>
-                  {layout.width}m × {layout.length}m × {layout.height}m
+                  {buildingWidth}m × {buildingLength}m × {buildingHeight}m
                 </p>
               </div>
 
               <div className="stat-item">
                 <h3>Score</h3>
-                <p>
-                  {layout.metrics && layout.metrics.overall_score
-                    ? formatMetric(layout.metrics.overall_score)
-                    : "N/A"}
-                </p>
+                <p>{overallScore ? formatMetric(overallScore) : "N/A"}</p>
               </div>
             </div>
 
@@ -245,11 +364,11 @@ const ViewLayout = () => {
               ))}
             </div>
 
-            {layout.metrics && (
+            {Object.keys(metrics).length > 0 && (
               <>
                 <h3>Performance Metrics</h3>
                 <div className="metrics-list">
-                  {Object.entries(layout.metrics).map(([key, value]) => {
+                  {Object.entries(metrics).map(([key, value]) => {
                     // Skip complex metrics and overall score (already shown)
                     if (typeof value === "object" || key === "overall_score")
                       return null;
