@@ -71,6 +71,17 @@ for dir_path in [BUILDING_DIR, PROGRAM_DIR, USER_DATA_DIR, LAYOUTS_DIR]:
 # Mount with explicit absolute path
 print(f"Mounting static files from: {LAYOUTS_DIR}")
 app.mount("/layouts", StaticFiles(directory=str(LAYOUTS_DIR)), name="layouts")
+try:
+    frontend_dir = PROJECT_ROOT / "hotel_design_ai" / "web" / "frontend" / "build"
+    if frontend_dir.exists():
+        app.mount(
+            "/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend"
+        )
+        logger.info(f"Frontend static files mounted from: {frontend_dir}")
+    else:
+        logger.warning(f"Frontend build directory not found at {frontend_dir}")
+except Exception as e:
+    logger.error(f"Failed to mount frontend static files: {e}")
 
 
 # Pydantic models for validation
@@ -504,43 +515,6 @@ async def modify_layout(input_data: DesignModificationInput = Body(...)):
         raise HTTPException(status_code=500, detail=f"Error modifying layout: {str(e)}")
 
 
-@app.get("/layouts/{layout_id}")
-async def get_layout(layout_id: str):
-    """Get a specific layout by ID."""
-    try:
-        # Check if layout exists
-        layout_dir = LAYOUTS_DIR / layout_id
-        layout_file = layout_dir / "hotel_layout.json"
-
-        if not layout_file.exists():
-            raise HTTPException(status_code=404, detail="Layout not found")
-
-        # Load layout
-        with open(layout_file, "r") as f:
-            layout_data = json.load(f)
-
-        # Return layout data
-        return {
-            "success": True,
-            "layout_id": layout_id,
-            "layout_data": layout_data,
-            "image_urls": {
-                "3d": f"/layouts/{layout_id}/hotel_layout_3d.png",
-                "floor_plans": [
-                    f"/layouts/{layout_id}/hotel_layout_floor{i}.png"
-                    for i in range(-2, 6)
-                    if (layout_dir / f"hotel_layout_floor{i}.png").exists()
-                ],
-            },
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting layout: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Error getting layout: {str(e)}")
-
-
 # Include the routes from files.py
 app.include_router(files.router)
 
@@ -624,6 +598,21 @@ async def get_layout(layout_id: str):
         logger.error(f"Error getting layout: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error getting layout: {str(e)}")
+
+
+@app.get("/{path:path}")
+async def serve_frontend(path: str):
+    """
+    Catch-all route to serve the frontend application.
+    This allows client-side routing to work correctly when refreshing the page or accessing URLs directly.
+
+    In a production environment, this would typically be handled by a reverse proxy like Nginx.
+    """
+    # In development, we'll just return a simple message suggesting to use the client-side router
+    return {
+        "message": "This is a client-side route that should be handled by the frontend application.",
+        "requested_path": path,
+    }
 
 
 if __name__ == "__main__":

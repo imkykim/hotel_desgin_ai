@@ -20,11 +20,14 @@ const ViewLayout = () => {
     fetchLayoutDetails();
   }, [layoutId]);
 
+  // Update this in the ViewLayout component's fetchLayoutDetails function
+
   const fetchLayoutDetails = async () => {
     try {
       setLoading(true);
       console.log("Fetching layout details for:", layoutId);
 
+      // Explicitly make sure we're calling the API endpoint, not navigating
       const response = await getLayout(layoutId);
       console.log("Layout details response:", response);
 

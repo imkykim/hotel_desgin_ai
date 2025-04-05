@@ -91,11 +91,9 @@ export const listLayouts = async () => {
 // Updated getLayout function in api.js
 export const getLayout = async (layoutId) => {
   try {
-    // Use the /api/layouts/ endpoint to avoid confusion with frontend routes
-    const response = await fetch(`${API_BASE_URL}/api/layouts/${layoutId}`);
-    console.log(
-      `Fetching layout from: ${API_BASE_URL}/api/layouts/${layoutId}`
-    );
+    // Fix: Use the correct endpoint path without the "api/" prefix
+    const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`);
+    console.log(`Fetching layout from: ${API_BASE_URL}/layouts/${layoutId}`);
 
     if (!response.ok) {
       const errorData = await response
