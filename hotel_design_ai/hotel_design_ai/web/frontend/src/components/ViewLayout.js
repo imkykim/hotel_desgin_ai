@@ -5,11 +5,11 @@ import "../styles/ViewLayout.css";
 
 const ViewLayout = () => {
   const [layout, setLayout] = useState(null);
-  const [detailedMetrics, setDetailedMetrics] = useState(null); // Add this state
+  const [detailedMetrics, setDetailedMetrics] = useState(null);
   const [imageUrls, setImageUrls] = useState({ floor_plans: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeView, setActiveView] = useState("3d"); // Changed from activeFloor to activeView
+  const [activeView, setActiveView] = useState("3d");
   const [imageErrors, setImageErrors] = useState({});
   const { layoutId } = useParams();
   const navigate = useNavigate();
@@ -226,7 +226,17 @@ const ViewLayout = () => {
 
   // Extract metrics - both from root and from metrics property
   const metrics = layout.metrics || {};
-  const overallScore = metrics.overall_score || 0;
+  const getOverallScore = () => {
+    if (
+      detailedMetrics &&
+      typeof detailedMetrics.overall_score !== "undefined"
+    ) {
+      return detailedMetrics.overall_score;
+    }
+    return metrics.overall_score || 0;
+  };
+
+  const overallScore = getOverallScore();
 
   // Get the image URL for the current view
   const getImageUrl = () => {
@@ -273,6 +283,23 @@ const ViewLayout = () => {
     return floorNum < 0
       ? `No Basement ${Math.abs(floorNum)} Plan Available`
       : `No Floor ${floorNum} Plan Available`;
+  };
+
+  // Render room distribution for the blue box area
+  const renderRoomDistribution = () => {
+    return (
+      <div className="room-distribution-container">
+        <h3>Room Distribution</h3>
+        <div className="room-distribution">
+          {Object.entries(roomsByType).map(([type, count]) => (
+            <div key={type} className="room-type-count">
+              <span className="room-type">{type}</span>
+              <span className="room-count">{count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -362,6 +389,9 @@ const ViewLayout = () => {
               />
             )}
           </div>
+
+          {/* Room distribution moved to blue box location */}
+          {renderRoomDistribution()}
         </div>
 
         <div className="layout-details">
@@ -386,21 +416,21 @@ const ViewLayout = () => {
                 </p>
               </div>
 
+              {/* Score moved to red box location */}
               <div className="stat-item">
                 <h3>Score</h3>
-                <p>{overallScore ? formatMetric(overallScore) : "N/A"}</p>
+                <p>
+                  {" "}
+                  {overallScore > 0
+                    ? formatMetric(overallScore)
+                    : metrics.overall_score === 0
+                    ? "0%"
+                    : "N/A"}
+                </p>
               </div>
             </div>
 
-            <h3>Room Distribution</h3>
-            <div className="room-distribution">
-              {Object.entries(roomsByType).map(([type, count]) => (
-                <div key={type} className="room-type-count">
-                  <span className="room-type">{type}</span>
-                  <span className="room-count">{count}</span>
-                </div>
-              ))}
-            </div>
+            {/* Room distribution removed from here and moved above */}
 
             {Object.keys(metrics).length > 0 && (
               <>
