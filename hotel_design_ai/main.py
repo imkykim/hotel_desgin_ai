@@ -39,6 +39,7 @@ from hotel_design_ai.visualization.export import (
     export_to_blender,
     export_to_rhino,
     export_for_three_js,
+    export_metrics_to_json,
 )
 
 from hotel_design_ai.utils.metrics import LayoutMetrics
@@ -803,6 +804,10 @@ def save_outputs(layout: SpatialGrid, metrics: Dict[str, Any], args):
             rhino_file = os.path.join(output_subfolder, f"{prefix}_rhino.py")
             export_to_rhino(layout, rhino_file)
             print(f"  Saved Rhino Python script to {rhino_file}")
+
+    metrics_file = os.path.join(output_subfolder, f"{prefix}_metrics.json")
+    export_metrics_to_json(metrics, metrics_file)
+    print(f"  Saved metrics to {metrics_file}")
 
     # Create visualizations
     renderer = LayoutRenderer(layout, building_config=building_config)

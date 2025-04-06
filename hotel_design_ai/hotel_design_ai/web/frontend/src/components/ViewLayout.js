@@ -5,6 +5,7 @@ import "../styles/ViewLayout.css";
 
 const ViewLayout = () => {
   const [layout, setLayout] = useState(null);
+  const [detailedMetrics, setDetailedMetrics] = useState(null); // Add this state
   const [imageUrls, setImageUrls] = useState({ floor_plans: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -59,6 +60,10 @@ const ViewLayout = () => {
       if (response.success && response.layout_data) {
         setLayout(response.layout_data);
 
+        if (response.detailed_metrics) {
+          setDetailedMetrics(response.detailed_metrics);
+        }
+
         // Process image URLs - check for both standard and basement naming conventions
         const processedImageUrls = {
           ...response.image_urls,
@@ -90,7 +95,40 @@ const ViewLayout = () => {
     }
   };
 
-  // Check for basement images with alternate naming
+  const renderDetailedMetrics = () => {
+    if (!detailedMetrics) return null;
+
+    return (
+      <div className="metrics-section">
+        <h3>Detailed Performance Metrics</h3>
+        <div className="detailed-metrics">
+          {Object.entries(detailedMetrics).map(([key, value]) => {
+            // Skip complex nested objects and arrays
+            if (typeof value === "object" || Array.isArray(value)) {
+              return null;
+            }
+
+            // Format the metric name and value
+            const formattedName = key.replace(/_/g, " ");
+            const formattedValue =
+              typeof value === "number"
+                ? value > 0 && value < 1
+                  ? `${(value * 100).toFixed(1)}%`
+                  : value.toFixed(2)
+                : value.toString();
+
+            return (
+              <div key={key} className="metric-item">
+                <span className="metric-name">{formattedName}</span>
+                <span className="metric-value">{formattedValue}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const checkForBasementImages = (imageUrls, layoutId) => {
     // Check for basement1.png instead of floor-1.png
     if (!imageUrls.floor_plans[-1]) {
@@ -387,6 +425,8 @@ const ViewLayout = () => {
                 </div>
               </>
             )}
+
+            {detailedMetrics && renderDetailedMetrics()}
           </div>
 
           <div className="layout-actions">

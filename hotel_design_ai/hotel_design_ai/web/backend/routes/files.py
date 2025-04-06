@@ -97,7 +97,6 @@ async def list_layouts():
         raise HTTPException(status_code=500, detail=f"Error listing layouts: {str(e)}")
 
 
-# Add this route to files.py to handle layout detail requests
 @router.get("/layouts/{layout_id}")
 async def get_layout_detail(layout_id: str):
     """Get details for a specific layout by ID."""
@@ -115,6 +114,19 @@ async def get_layout_detail(layout_id: str):
         # Load layout
         with open(layout_file, "r") as f:
             layout_data = json.load(f)
+
+        metrics_file = layout_dir / "hotel_layout_metrics.json"
+        has_separate_metrics = metrics_file.exists()
+
+        # Load metrics from separate file if it exists
+        detailed_metrics = None
+        if has_separate_metrics:
+            try:
+                with open(metrics_file, "r") as f:
+                    detailed_metrics = json.load(f)
+                logger.info(f"Loaded detailed metrics from {metrics_file}")
+            except Exception as e:
+                logger.error(f"Error loading metrics file: {e}")
 
         # Find available preview images
         preview_3d = layout_dir / "hotel_layout_3d.png"
@@ -134,6 +146,8 @@ async def get_layout_detail(layout_id: str):
             "success": True,
             "layout_id": layout_id,
             "layout_data": layout_data,
+            "detailed_metrics": detailed_metrics,
+            "has_separate_metrics": has_separate_metrics,
             "image_urls": {
                 "3d": (
                     f"/layouts/{layout_id}/hotel_layout_3d.png"
@@ -144,12 +158,10 @@ async def get_layout_detail(layout_id: str):
                 "floor_plans": floor_images,
             },
         }
-
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting layout: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error getting layout: {str(e)}")
 
 

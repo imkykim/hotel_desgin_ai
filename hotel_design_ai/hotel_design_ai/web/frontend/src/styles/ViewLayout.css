@@ -283,3 +283,38 @@
 .visualization-display .placeholder-image {
   font-size: 1.2rem;
 }
+
+.metrics-section {
+  margin-top: 1.5rem;
+}
+
+.detailed-metrics {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.detailed-metrics .metric-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.detailed-metrics .metric-item:last-child {
+  border-bottom: none;
+}
+
+.detailed-metrics .metric-name {
+  text-transform: capitalize;
+  font-weight: 500;
+  color: #343a40;
+}
+
+.detailed-metrics .metric-value {
+  font-weight: bold;
+  color: #3b71ca;
+}
