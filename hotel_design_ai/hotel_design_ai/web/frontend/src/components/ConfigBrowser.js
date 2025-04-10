@@ -100,6 +100,16 @@ const ConfigBrowser = () => {
                   >
                     Use Configuration
                   </button>
+                  {/* Add a div spacer */}
+                  <div style={{ height: "5px" }}></div>
+                  <button
+                    className="btn-view"
+                    onClick={() =>
+                      navigate(`/configuration/program/${config.id}`)
+                    }
+                  >
+                    View Details
+                  </button>
                 </div>
               </div>
             ))}
@@ -140,6 +150,16 @@ const ConfigBrowser = () => {
                     }}
                   >
                     Use Configuration
+                  </button>
+                  {/* Add a div spacer */}
+                  <div style={{ height: "5px" }}></div>
+                  <button
+                    className="btn-view"
+                    onClick={() =>
+                      navigate(`/configuration/building/${config.id}`)
+                    }
+                  >
+                    View Details
                   </button>
                 </div>
               </div>

@@ -109,9 +109,13 @@
   margin-right: 0.5rem;
   margin-top: 0.5rem;
 }
-
-.btn-view {
+.config-buttons {
+  display: flex;
+  flex-direction: column;
   margin-top: 1rem;
+}
+
+.config-buttons .btn-view {
   padding: 0.5rem 1rem;
   background-color: #3b71ca;
   color: white;
@@ -121,6 +125,10 @@
   font-weight: 500;
   width: 100%;
   transition: background-color 0.2s;
+}
+
+.config-buttons .btn-view:first-child {
+  margin-bottom: 10px; /* Add explicit spacing between buttons */
 }
 
 .btn-view:hover {

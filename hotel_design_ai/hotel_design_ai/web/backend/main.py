@@ -4,7 +4,6 @@ Main FastAPI application for Hotel Design AI web backend.
 
 import os
 from typing import Dict, Any, List, Optional, Tuple
-from routes import files
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +20,11 @@ from datetime import datetime
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import custom route modules
+from routes import files
+from routes import visualization_routes
+from routes import configuration_routes
 
 # Add project root to system path
 project_root = Path(__file__).parents[3]
@@ -72,6 +76,18 @@ for dir_path in [BUILDING_DIR, PROGRAM_DIR, USER_DATA_DIR, LAYOUTS_DIR]:
 # Mount with explicit absolute path
 print(f"Mounting static files from: {LAYOUTS_DIR}")
 app.mount("/layouts", StaticFiles(directory=str(LAYOUTS_DIR)), name="layouts")
+
+# Mount visualizations directory
+VISUALIZATIONS_DIR = USER_DATA_DIR / "visualizations"
+VISUALIZATIONS_DIR.mkdir(exist_ok=True)
+print(f"Mounting visualizations from: {VISUALIZATIONS_DIR}")
+app.mount(
+    "/visualizations",
+    StaticFiles(directory=str(VISUALIZATIONS_DIR)),
+    name="visualizations",
+)
+
+
 try:
     frontend_dir = PROJECT_ROOT / "hotel_design_ai" / "web" / "frontend" / "build"
     if frontend_dir.exists():
@@ -516,8 +532,10 @@ async def modify_layout(input_data: DesignModificationInput = Body(...)):
         raise HTTPException(status_code=500, detail=f"Error modifying layout: {str(e)}")
 
 
-# Include the routes from files.py
+# Include router modules
 app.include_router(files.router)
+app.include_router(visualization_routes.router)
+app.include_router(configuration_routes.router)
 
 
 @app.get("/list-configurations")

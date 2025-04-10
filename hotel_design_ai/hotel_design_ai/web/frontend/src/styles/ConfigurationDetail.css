@@ -1,0 +1,250 @@
+.config-detail-page {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.config-header {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.config-header h1 {
+  color: #3b71ca;
+  margin-bottom: 0.5rem;
+}
+
+.config-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.btn-back,
+.btn-generate {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-back {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-back:hover {
+  background-color: #5a6268;
+}
+
+.btn-generate {
+  background-color: #3b71ca;
+  color: white;
+}
+
+.btn-generate:hover {
+  background-color: #2c5ebd;
+}
+
+.btn-generate:disabled {
+  background-color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.config-tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  background-color: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.tab-button.active {
+  color: #3b71ca;
+  border-bottom-color: #3b71ca;
+}
+
+.tab-button:disabled {
+  color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.tab-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  min-height: 1200px; /* Doubled from 600px to 1200px */
+}
+
+.json-content {
+  max-height: 1600px; /* Doubled from 800px to 1600px */
+  overflow-y: auto;
+  height: 100%;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 1rem;
+  background-color: #f8f9fa;
+}
+
+.json-content pre {
+  margin: 0;
+  font-family: "Courier New", Courier, monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.visualizations-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.visualization-section h2 {
+  color: #343a40;
+  margin-bottom: 1.5rem;
+}
+
+.visualization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.visualization-card {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.visualization-card:hover {
+  transform: translateY(-5px);
+}
+
+.visualization-card h3 {
+  padding: 1rem;
+  margin: 0;
+  background-color: #3b71ca;
+  color: white;
+  font-size: 1.1rem;
+}
+
+.visualization-card img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  background-color: white;
+  display: block;
+}
+
+.visualization-card p {
+  padding: 1rem;
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.image-error {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #dc3545;
+  background-color: #f8d7da;
+  padding: 1rem;
+  text-align: center;
+}
+
+.no-visualizations {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.no-visualizations p {
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+.loading-container,
+.error-container,
+.not-found-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.loading-container {
+  font-size: 1.2rem;
+  color: #6c757d;
+}
+
+.error-container,
+.not-found-container {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.error-container h2 {
+  color: #dc3545;
+}
+
+.not-found-container h2 {
+  color: #6c757d;
+}
+
+.error-container p,
+.not-found-container p {
+  margin-bottom: 1.5rem;
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background-color: #3b71ca;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #2c5ebd;
+}
+
+@media (max-width: 768px) {
+  .config-actions {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .btn-back,
+  .btn-generate {
+    width: 100%;
+  }
+
+  .visualization-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,6 +6,7 @@ import "./App.css";
 import HomePage from "./pages/HomePage";
 import ConfigGenerator from "./pages/ConfigGenerator";
 import ConfigBrowserPage from "./pages/ConfigBrowserPage";
+import ConfigurationDetailPage from "./pages/ConfigurationDetailPage";
 import InteractiveLayoutPage from "./pages/InteractiveLayoutPage";
 import LayoutGallery from "./pages/LayoutGallery";
 import ViewLayoutPage from "./pages/ViewLayoutPage";
@@ -48,6 +49,10 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/configure" element={<ConfigGenerator />} />
             <Route path="/configurations" element={<ConfigBrowserPage />} />
+            <Route
+              path="/configuration/:configType/:configId"
+              element={<ConfigurationDetailPage />}
+            />
             <Route path="/layouts" element={<LayoutGallery />} />
             <Route path="/view-layout/:layoutId" element={<ViewLayoutPage />} />
             <Route
