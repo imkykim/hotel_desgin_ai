@@ -167,6 +167,30 @@ export const generateVisualizations = async (configType, configId) => {
   }
 };
 
+// Generate visualizations for a layout
+export const generateLayoutVisualizations = async (layoutId) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/visualize-layout/${layoutId}`,
+      {
+        method: "POST",
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to generate layout visualizations",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
 // Generate layout using configurations
 export const generateLayout = async (data) => {
   try {

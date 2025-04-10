@@ -13,6 +13,9 @@ const ViewLayout = () => {
   const [imageErrors, setImageErrors] = useState({});
   const { layoutId } = useParams();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("visualizations");
+  const [layoutVisualizations, setLayoutVisualizations] = useState(null);
+  const [visualizationLoading, setVisualizationLoading] = useState(false);
 
   // Get API base URL for images
   const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
@@ -163,12 +166,40 @@ const ViewLayout = () => {
     return value;
   };
 
+  // Simplified error message
   const handleImageError = (key) => {
     console.error(`Image load error for ${key}`);
     setImageErrors((prev) => ({
       ...prev,
       [key]: true,
     }));
+  };
+
+  // Generate layout visualizations
+  const handleGenerateVisualizations = async () => {
+    try {
+      setVisualizationLoading(true);
+      setError(null);
+
+      const response = await generateLayoutVisualizations(layoutId);
+      console.log("Layout visualization response:", response);
+
+      if (response.success) {
+        setLayoutVisualizations(response.visualizations);
+        // Switch to visualization tab
+        setActiveTab("metrics");
+      } else {
+        setError(
+          "Failed to generate visualizations: " +
+            (response?.error || "Unknown error")
+        );
+      }
+    } catch (err) {
+      console.error("Error generating visualizations:", err);
+      setError("Error generating visualizations: " + err.message);
+    } finally {
+      setVisualizationLoading(false);
+    }
   };
 
   if (loading) {
@@ -313,82 +344,160 @@ const ViewLayout = () => {
         <div className="layout-visualizations">
           <h2>Visualizations</h2>
 
-          <div className="visualization-tabs">
-            {/* 3D View button - only show if it exists */}
-            {imageUrls.has_3d_preview && !imageErrors["3d"] && (
-              <button
-                className={activeView === "3d" ? "active" : ""}
-                onClick={() => setActiveView("3d")}
-              >
-                3D View
-              </button>
-            )}
-
-            {/* Basement floors - only show if images exist */}
-            {["-2", "-1"].map((floor) => {
-              const floorKey = parseInt(floor);
-              const hasImage =
-                floorKey in imageUrls.floor_plans &&
-                !imageErrors[`floor${floor}`];
-
-              return hasImage ? (
-                <button
-                  key={`floor-${floor}`}
-                  className={activeView === floor ? "active" : ""}
-                  onClick={() => setActiveView(floor)}
-                >
-                  {`B${Math.abs(parseInt(floor))}`}
-                </button>
-              ) : null;
-            })}
-
-            {/* Main floors - only show if images exist */}
-            {["0", "1", "2", "3", "4", "5"].map((floor) => {
-              const floorKey = parseInt(floor);
-              const hasImage =
-                floorKey in imageUrls.floor_plans &&
-                !imageErrors[`floor${floor}`];
-
-              return hasImage ? (
-                <button
-                  key={`floor-${floor}`}
-                  className={activeView === floor ? "active" : ""}
-                  onClick={() => setActiveView(floor)}
-                >
-                  {`F${floor}`}
-                </button>
-              ) : null;
-            })}
-
-            {/* Standard floor button - only show if image exists */}
-            {imageUrls.floor_plans["std"] && !imageErrors["std"] && (
-              <button
-                className={activeView === "std" ? "active" : ""}
-                onClick={() => setActiveView("std")}
-              >
-                Standard
-              </button>
-            )}
+          <div className="view-tabs">
+            <button
+              className={`tab-button ${
+                activeTab === "visualizations" ? "active" : ""
+              }`}
+              onClick={() => setActiveTab("visualizations")}
+            >
+              Floor Plans
+            </button>
+            <button
+              className={`tab-button ${
+                activeTab === "metrics" ? "active" : ""
+              }`}
+              onClick={() => setActiveTab("metrics")}
+              disabled={!layoutVisualizations}
+            >
+              Metrics Visualizations
+            </button>
+            <button
+              className="tab-button generate-vis"
+              onClick={handleGenerateVisualizations}
+              disabled={visualizationLoading}
+            >
+              {visualizationLoading
+                ? "Generating..."
+                : layoutVisualizations
+                ? "Regenerate Visualizations"
+                : "Generate Metrics Visualizations"}
+            </button>
           </div>
 
-          <div className="visualization-display">
-            {!hasImage() ? (
-              <div className="placeholder-image">{getPlaceholderText()}</div>
-            ) : (
-              <img
-                src={getImageUrl()}
-                alt={
-                  activeView === "3d"
-                    ? "3D Layout View"
-                    : activeView === "std"
-                    ? "Standard Floor Plan"
-                    : `Floor ${activeView} Plan`
-                }
-                className="layout-image"
-                onError={() => handleImageError(getImageErrorKey())}
-              />
-            )}
-          </div>
+          {activeTab === "visualizations" && (
+            <>
+              <div className="visualization-tabs">
+                {/* 3D View button - only show if it exists */}
+                {imageUrls.has_3d_preview && !imageErrors["3d"] && (
+                  <button
+                    className={activeView === "3d" ? "active" : ""}
+                    onClick={() => setActiveView("3d")}
+                  >
+                    3D View
+                  </button>
+                )}
+
+                {/* Basement floors - only show if images exist */}
+                {["-2", "-1"].map((floor) => {
+                  const floorKey = parseInt(floor);
+                  const hasImage =
+                    floorKey in imageUrls.floor_plans &&
+                    !imageErrors[`floor${floor}`];
+
+                  return hasImage ? (
+                    <button
+                      key={`floor-${floor}`}
+                      className={activeView === floor ? "active" : ""}
+                      onClick={() => setActiveView(floor)}
+                    >
+                      {`B${Math.abs(parseInt(floor))}`}
+                    </button>
+                  ) : null;
+                })}
+
+                {/* Main floors - only show if images exist */}
+                {["0", "1", "2", "3", "4", "5"].map((floor) => {
+                  const floorKey = parseInt(floor);
+                  const hasImage =
+                    floorKey in imageUrls.floor_plans &&
+                    !imageErrors[`floor${floor}`];
+
+                  return hasImage ? (
+                    <button
+                      key={`floor-${floor}`}
+                      className={activeView === floor ? "active" : ""}
+                      onClick={() => setActiveView(floor)}
+                    >
+                      {`F${floor}`}
+                    </button>
+                  ) : null;
+                })}
+
+                {/* Standard floor button - only show if image exists */}
+                {imageUrls.floor_plans["std"] && !imageErrors["std"] && (
+                  <button
+                    className={activeView === "std" ? "active" : ""}
+                    onClick={() => setActiveView("std")}
+                  >
+                    Standard
+                  </button>
+                )}
+              </div>
+
+              <div className="visualization-display">
+                {!hasImage() ? (
+                  <div className="placeholder-image">
+                    {getPlaceholderText()}
+                  </div>
+                ) : (
+                  <img
+                    src={getImageUrl()}
+                    alt={
+                      activeView === "3d"
+                        ? "3D Layout View"
+                        : activeView === "std"
+                        ? "Standard Floor Plan"
+                        : `Floor ${activeView} Plan`
+                    }
+                    className="layout-image"
+                    onError={() => handleImageError(getImageErrorKey())}
+                  />
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === "metrics" && layoutVisualizations && (
+            <div className="metrics-visualizations">
+              <h3>Layout Metrics Visualizations</h3>
+
+              {layoutVisualizations.filter((viz) => !imageErrors[viz.url])
+                .length > 0 ? (
+                <div className="visualization-grid">
+                  {layoutVisualizations
+                    .filter((viz) => !imageErrors[viz.url])
+                    .map((viz, index) => (
+                      <div key={index} className="visualization-card">
+                        <h4>{viz.title}</h4>
+                        {viz.type === "image/png" ? (
+                          <img
+                            src={`${apiBaseUrl}${viz.url}`}
+                            alt={viz.title}
+                            onError={() => handleImageError(viz.url)}
+                          />
+                        ) : (
+                          <iframe
+                            src={`${apiBaseUrl}${viz.url}`}
+                            title={viz.title}
+                            className="visualization-iframe"
+                            onError={() => handleImageError(viz.url)}
+                          />
+                        )}
+                        <p>{viz.description}</p>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="no-visualizations">
+                  <p>
+                    No visualizations could be loaded. Please try regenerating
+                    them.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Room distribution moved to blue box location */}
           {renderRoomDistribution()}
@@ -429,8 +538,6 @@ const ViewLayout = () => {
                 </p>
               </div>
             </div>
-
-            {/* Room distribution removed from here and moved above */}
 
             {Object.keys(metrics).length > 0 && (
               <>

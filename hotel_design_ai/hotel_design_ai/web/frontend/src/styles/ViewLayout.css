@@ -365,3 +365,118 @@
 .visualization-display .placeholder-image {
   font-size: 1.2rem;
 }
+.view-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 0.5rem;
+}
+
+.view-tabs button {
+  padding: 0.5rem 1rem;
+  border: none;
+  background-color: transparent;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 3px solid transparent;
+  font-weight: 500;
+}
+
+.view-tabs button.active {
+  color: #3b71ca;
+  border-bottom-color: #3b71ca;
+}
+
+.view-tabs button:disabled {
+  color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.view-tabs button.generate-vis {
+  margin-left: auto;
+  background-color: #3b71ca;
+  color: white;
+  border-radius: 4px;
+}
+
+.view-tabs button.generate-vis:hover {
+  background-color: #2c5ebd;
+}
+
+.view-tabs button.generate-vis:disabled {
+  background-color: #adb5bd;
+}
+
+.metrics-visualizations {
+  padding: 1rem 0;
+}
+
+.metrics-visualizations h3 {
+  margin-bottom: 1rem;
+  color: #343a40;
+}
+
+.visualization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.visualization-card {
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.visualization-card:hover {
+  transform: translateY(-5px);
+}
+
+.visualization-card h4 {
+  padding: 0.75rem;
+  margin: 0;
+  background-color: #3b71ca;
+  color: white;
+  font-size: 1rem;
+}
+
+.visualization-card img {
+  width: 100%;
+  max-height: 250px;
+  object-fit: contain;
+  display: block;
+  background-color: #f8f9fa;
+}
+
+.visualization-card p {
+  padding: 0.75rem;
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.visualization-iframe {
+  width: 100%;
+  height: 250px;
+  border: none;
+  display: block;
+}
+
+.no-visualizations {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+.no-visualizations p {
+  color: #6c757d;
+  font-size: 1.1rem;
+}
