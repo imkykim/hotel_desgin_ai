@@ -1,5 +1,5 @@
 """
-Routes for generating visualizations of layout outputs.
+Routes for layout visualization generation for Hotel Design AI.
 """
 
 import os
@@ -11,7 +11,10 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 import tempfile
 import shutil
-import time
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+import pandas as pd
 
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse, FileResponse
@@ -20,8 +23,8 @@ from fastapi.responses import JSONResponse, FileResponse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/visualize/layout", tags=["Layout Visualization"])
+# Create router with a dedicated prefix for layout visualization
+router = APIRouter(prefix="/visualize-layout", tags=["Layout Visualization"])
 
 # Define paths
 PROJECT_ROOT = Path(__file__).parents[4]
@@ -37,12 +40,13 @@ for dir_path in [DATA_DIR, USER_DATA_DIR, LAYOUTS_DIR, VISUALIZATION_DIR]:
 # Add project root to system path to import visualizers
 sys.path.append(str(PROJECT_ROOT))
 
-# Import visualization modules
+# Import visualizers
 try:
-    # Import the required modules
+    # Import the visualization modules
+    from hotel_design_ai.utils.diagram_metrics import LayoutMetrics
     from hotel_design_ai.visualization.renderer import LayoutRenderer
     from hotel_design_ai.models.layout import Layout
-    from hotel_design_ai.utils.diagram_metrics import LayoutMetrics
+    from hotel_design_ai.core.spatial_grid import SpatialGrid
 
     VISUALIZERS_IMPORTED = True
     logger.info("Successfully imported layout visualization modules")
@@ -82,214 +86,292 @@ async def visualize_layout(layout_id: str):
         output_dir = VISUALIZATION_DIR / viz_id
         output_dir.mkdir(exist_ok=True)
 
-        # Load the layout
+        # Load layout from JSON file
         with open(layout_file, "r") as f:
             layout_data = json.load(f)
 
-        # Visualizations list to return
+        # Create the metrics visualizations
         visualizations = []
 
         try:
-            # The layout file already contains visualization images - let's use them
-            # First, let's check if visualization files exist in the layout directory
-            found_vis_files = False
+            # Create a temporary directory for the visualizations
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Convert layout_data to SpatialGrid or Layout object
+                spatial_grid = SpatialGrid(
+                    width=layout_data.get("width", 80),
+                    length=layout_data.get("length", 120),
+                    height=layout_data.get("height", 30),
+                    grid_size=layout_data.get("grid_size", 1.0),
+                )
 
-            # Copy existing visualization files if they exist
-            for image_file in layout_dir.glob("*.png"):
-                dest_file = output_dir / image_file.name
-                shutil.copy(image_file, dest_file)
+                # Add rooms from the layout data
+                for room_id, room_data in layout_data.get("rooms", {}).items():
+                    room_id_int = int(room_id)
+                    position = room_data.get("position", [0, 0, 0])
+                    dimensions = room_data.get("dimensions", [0, 0, 0])
+                    room_type = room_data.get("type", "default")
+                    metadata = room_data.get("metadata", {})
 
-                # Create a title based on filename
-                title = image_file.stem
-                title = title.replace("hotel_layout_", "").replace("_", " ").title()
+                    # Add the room to the spatial grid
+                    spatial_grid.place_room(
+                        room_id=room_id_int,
+                        x=position[0],
+                        y=position[1],
+                        z=position[2],
+                        width=dimensions[0],
+                        length=dimensions[1],
+                        height=dimensions[2],
+                        room_type=room_type,
+                        metadata=metadata,
+                    )
 
-                if "3d" in title.lower():
-                    title = "3D Layout View"
-                    description = "Three-dimensional view of the complete hotel layout"
-                elif "floor" in title.lower():
-                    floor_num = title.lower().replace("floor", "").strip()
-                    try:
-                        if floor_num.startswith("-"):
-                            title = f"Basement {abs(int(floor_num))} Plan"
-                            description = (
-                                f"Floor plan for basement level {abs(int(floor_num))}"
-                            )
-                        else:
-                            floor_num = int(floor_num)
-                            title = f"Floor {floor_num} Plan"
-                            description = f"Floor plan for level {floor_num}"
-                    except ValueError:
-                        # Just use the original title if parsing fails
-                        description = f"Floor plan visualization"
-                elif "standard" in title.lower():
-                    title = "Standard Floor Plan"
-                    description = "Floor plan for typical standard floors (guest rooms)"
-                else:
-                    description = f"Layout visualization for {title}"
+                # Create metrics calculator
+                metrics = LayoutMetrics(spatial_grid)
 
-                # Add to visualizations list
+                # Get the metrics data
+                metrics_data = layout_data.get("metrics", {})
+
+                # Generate relationship diagram
+                plt.figure(figsize=(16, 12))
+                G = nx.DiGraph()
+
+                # Create nodes for rooms
+                for room_id, room_data in spatial_grid.rooms.items():
+                    G.add_node(
+                        room_id,
+                        name=room_data.get("type", "unknown"),
+                        color=room_data.get("type", "default"),
+                    )
+
+                # Create edges based on adjacency
+                adjacency_graph = (
+                    spatial_grid.get_adjacency_graph()
+                    if hasattr(spatial_grid, "get_adjacency_graph")
+                    else {}
+                )
+                for room_id, neighbors in adjacency_graph.items():
+                    for neighbor in neighbors:
+                        G.add_edge(
+                            room_id, neighbor, relationship="adjacency", weight=2
+                        )
+
+                # Draw the graph
+                pos = nx.spring_layout(G, k=0.15, iterations=50)
+
+                # Map room types to actual colors
+                room_type_colors = {
+                    "lobby": "#7fcdbb",
+                    "entrance": "#2c7fb8",
+                    "vertical_circulation": "#FF0000",
+                    "restaurant": "#f0f9e8",
+                    "kitchen": "#e5f5e0",
+                    "meeting_room": "#edf8b1",
+                    "ballroom": "#ffffcc",
+                    "guest_room": "#f7fcb9",
+                    "service_area": "#d9f0a3",
+                    "service": "#d9f0a3",
+                    "back_of_house": "#addd8e",
+                    "retail": "#c7e9c0",
+                    "food_service": "#a1d99b",
+                    "lounge": "#e0ecf4",
+                    "office": "#9ebcda",
+                    "staff_area": "#8c96c6",
+                    "parking": "#d4d4d4",
+                    "mechanical": "#969696",
+                    "maintenance": "#737373",
+                    "default": "#cccccc",
+                }
+
+                # Convert room types to actual color values
+                node_colors = [
+                    room_type_colors.get(
+                        G.nodes[n].get("color", "default"), room_type_colors["default"]
+                    )
+                    for n in G.nodes()
+                ]
+
+                nx.draw_networkx_nodes(
+                    G, pos, node_size=700, node_color=node_colors, alpha=0.8
+                )
+
+                # Draw node labels
+                labels = {n: G.nodes[n].get("name", str(n)) for n in G.nodes()}
+                nx.draw_networkx_labels(G, pos, labels=labels, font_size=10)
+
+                # Draw edges
+                nx.draw_networkx_edges(G, pos, edge_color="green", arrows=True)
+
+                plt.title("Room Relationship Diagram", fontsize=18)
+                plt.axis("off")
+                plt.tight_layout()
+
+                # Save the plot
+                relationship_file = Path(temp_dir) / "room_relationships.png"
+                plt.savefig(relationship_file, dpi=200)
+                plt.close()
+
+                # Copy the file to our output directory
+                relationship_dest = output_dir / "room_relationships.png"
+                shutil.copy(relationship_file, relationship_dest)
+
+                # Add to visualizations
                 visualizations.append(
                     {
-                        "title": title,
-                        "url": f"/visualizations/{viz_id}/{image_file.name}",
-                        "description": description,
+                        "title": "Room Relationships",
+                        "url": f"/visualizations/{viz_id}/room_relationships.png",
+                        "description": "Visualization of room relationships and adjacencies",
                         "type": "image/png",
                     }
                 )
-                found_vis_files = True
 
-            # If we didn't find any visualizations, generate metrics visualizations
-            if not found_vis_files:
-                logger.info(
-                    f"No existing visualization files found, generating metrics visualizations"
-                )
+                # Generate metrics visualization
+                for metric_name, metric_value in metrics_data.items():
+                    if metric_name == "overall_score" or isinstance(metric_value, dict):
+                        continue
 
-                # Create temporary metrics visualizations using the metrics data
-                # Create a simple bar chart of metrics using matplotlib
-                try:
-                    import matplotlib.pyplot as plt
-                    import numpy as np
-
-                    # Extract metrics from layout data
-                    metrics = layout_data.get("metrics", {})
-
-                    if metrics and len(metrics) > 0:
-                        # Create metrics visualization
-                        plt.figure(figsize=(10, 6))
-
-                        # Filter out the overall score and any non-numeric values
-                        filtered_metrics = {
-                            k: v
-                            for k, v in metrics.items()
-                            if k != "overall_score" and isinstance(v, (int, float))
-                        }
-
-                        # Format labels and values
-                        labels = [
-                            k.replace("_", " ").title() for k in filtered_metrics.keys()
-                        ]
-                        values = [
-                            v * 100 if v <= 1 else v for v in filtered_metrics.values()
-                        ]
-
-                        # Create bar chart
-                        y_pos = np.arange(len(labels))
-                        plt.barh(
-                            y_pos, values, align="center", alpha=0.7, color="#3b71ca"
-                        )
-                        plt.yticks(y_pos, labels)
-                        plt.xlabel("Score (%)")
-                        plt.title("Layout Performance Metrics")
-                        plt.tight_layout()
-
-                        # Save chart
-                        metrics_file = output_dir / "layout_metrics.png"
-                        plt.savefig(metrics_file)
-                        plt.close()
-
-                        # Add to visualizations
-                        visualizations.append(
-                            {
-                                "title": "Performance Metrics",
-                                "url": f"/visualizations/{viz_id}/layout_metrics.png",
-                                "description": "Visualization of layout performance metrics",
-                                "type": "image/png",
-                            }
-                        )
-
-                        # Create room distribution visualization
-                        rooms = layout_data.get("rooms", {})
-                        if rooms:
-                            # Count rooms by type
-                            room_types = {}
-                            for room_id, room_data in rooms.items():
-                                room_type = room_data.get("type", "unknown")
-                                if room_type not in room_types:
-                                    room_types[room_type] = 0
-                                room_types[room_type] += 1
-
-                            if room_types:
-                                plt.figure(figsize=(10, 6))
-
-                                # Sort room types by count (descending)
-                                sorted_types = sorted(
-                                    room_types.items(), key=lambda x: x[1], reverse=True
-                                )
-                                labels = [
-                                    t[0].replace("_", " ").title() for t in sorted_types
-                                ]
-                                values = [t[1] for t in sorted_types]
-
-                                # Create bar chart
-                                plt.bar(labels, values, color="#3b71ca")
-                                plt.xticks(rotation=45, ha="right")
-                                plt.ylabel("Count")
-                                plt.title("Room Distribution by Type")
-                                plt.tight_layout()
-
-                                # Save chart
-                                rooms_file = output_dir / "room_distribution.png"
-                                plt.savefig(rooms_file)
-                                plt.close()
-
-                                # Add to visualizations
-                                visualizations.append(
-                                    {
-                                        "title": "Room Distribution",
-                                        "url": f"/visualizations/{viz_id}/room_distribution.png",
-                                        "description": "Distribution of rooms by type",
-                                        "type": "image/png",
-                                    }
-                                )
-
-                except Exception as e:
-                    logger.error(f"Error generating metrics visualizations: {e}")
-
-            # If there are still no visualizations, create a placeholder
-            if len(visualizations) == 0:
-                logger.warning("No visualizations could be generated for this layout")
-
-                # Create a simple placeholder image
-                try:
-                    import matplotlib.pyplot as plt
-
-                    plt.figure(figsize=(8, 6))
+                    # Create bar chart for the metric
+                    plt.figure(figsize=(10, 6))
+                    plt.bar(["Value"], [metric_value], color="blue", alpha=0.7)
+                    plt.title(f"{metric_name.replace('_', ' ').title()}", fontsize=16)
+                    plt.ylabel("Score (0-1)", fontsize=14)
+                    plt.ylim(0, 1)
                     plt.text(
-                        0.5,
-                        0.5,
-                        f"Layout {layout_id}\nNo visualizations available",
+                        0,
+                        metric_value + 0.05,
+                        f"{metric_value:.2f}",
                         ha="center",
-                        va="center",
-                        fontsize=14,
+                        fontsize=12,
                     )
-                    plt.axis("off")
+                    plt.tight_layout()
 
-                    placeholder_file = output_dir / "placeholder.png"
-                    plt.savefig(placeholder_file)
+                    # Save the plot
+                    metric_file = Path(temp_dir) / f"{metric_name}.png"
+                    plt.savefig(metric_file, dpi=200)
                     plt.close()
 
+                    # Copy the file to our output directory
+                    metric_dest = output_dir / f"{metric_name}.png"
+                    shutil.copy(metric_file, metric_dest)
+
+                    # Add to visualizations
                     visualizations.append(
                         {
-                            "title": "Layout Information",
-                            "url": f"/visualizations/{viz_id}/placeholder.png",
-                            "description": "Layout information visualization",
+                            "title": f"{metric_name.replace('_', ' ').title()}",
+                            "url": f"/visualizations/{viz_id}/{metric_name}.png",
+                            "description": f"Visualization of {metric_name.replace('_', ' ')} metric",
                             "type": "image/png",
                         }
                     )
-                except Exception as e:
-                    logger.error(f"Error creating placeholder visualization: {e}")
+
+                # Create a summary table of rooms by type
+                room_types = {}
+                for room_data in spatial_grid.rooms.values():
+                    room_type = room_data.get("type", "unknown")
+                    if room_type not in room_types:
+                        room_types[room_type] = 0
+                    room_types[room_type] += 1
+
+                # Create DataFrame and save as HTML
+                df = pd.DataFrame(
+                    list(room_types.items()), columns=["Room Type", "Count"]
+                )
+                df = df.sort_values("Count", ascending=False)
+
+                html = df.to_html(index=False)
+                styled_html = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+                        th, td {{ text-align: left; padding: 8px; border: 1px solid #ddd; }}
+                        th {{ background-color: #4CAF50; color: white; }}
+                        tr:nth-child(even) {{ background-color: #f2f2f2; }}
+                        tr:hover {{ background-color: #ddd; }}
+                        .caption {{ font-size: 1.5em; font-weight: bold; margin-bottom: 10px; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="caption">Room Type Distribution</div>
+                    {html}
+                </body>
+                </html>
+                """
+
+                # Save the HTML
+                html_file = Path(temp_dir) / "room_types.html"
+                with open(html_file, "w") as f:
+                    f.write(styled_html)
+
+                # Copy the file to our output directory
+                html_dest = output_dir / "room_types.html"
+                shutil.copy(html_file, html_dest)
+
+                # Add to visualizations
+                visualizations.append(
+                    {
+                        "title": "Room Type Distribution",
+                        "url": f"/visualizations/{viz_id}/room_types.html",
+                        "description": "Distribution of rooms by type",
+                        "type": "text/html",
+                    }
+                )
+
+            # Generate bar chart for all metrics
+            plt.figure(figsize=(12, 8))
+            metrics_to_plot = {}
+            for k, v in metrics_data.items():
+                if (
+                    k != "overall_score"
+                    and not isinstance(v, dict)
+                    and not isinstance(v, list)
+                ):
+                    metrics_to_plot[k.replace("_", " ").title()] = v
+
+            if metrics_to_plot:
+                labels = list(metrics_to_plot.keys())
+                values = list(metrics_to_plot.values())
+
+                plt.bar(labels, values, color="skyblue", alpha=0.7)
+                plt.title("Layout Performance Metrics", fontsize=16)
+                plt.ylabel("Score (0-1)", fontsize=14)
+                plt.ylim(0, 1)
+                plt.xticks(rotation=45, ha="right")
+
+                # Add value labels above bars
+                for i, v in enumerate(values):
+                    plt.text(i, v + 0.02, f"{v:.2f}", ha="center", fontsize=10)
+
+                plt.tight_layout()
+
+                # Save the plot
+                all_metrics_file = output_dir / "all_metrics.png"
+                plt.savefig(all_metrics_file, dpi=200)
+                plt.close()
+
+                # Add to visualizations
+                visualizations.append(
+                    {
+                        "title": "All Metrics Summary",
+                        "url": f"/visualizations/{viz_id}/all_metrics.png",
+                        "description": "Summary of all performance metrics",
+                        "type": "image/png",
+                    }
+                )
 
         except Exception as e:
-            logger.error(f"Error processing layout visualizations: {e}")
+            logger.error(f"Error creating layout visualizations: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
-                    "error": f"Error processing layout visualizations: {str(e)}",
+                    "error": f"Error creating layout visualizations: {str(e)}",
                 },
             )
 
-        # Return success with visualizations
         return JSONResponse(
             status_code=200,
             content={
@@ -301,6 +383,9 @@ async def visualize_layout(layout_id: str):
 
     except Exception as e:
         logger.error(f"Error in visualize_layout: {e}")
+        import traceback
+
+        logger.error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
             content={

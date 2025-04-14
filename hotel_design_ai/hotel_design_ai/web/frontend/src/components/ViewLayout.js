@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getLayout } from "../services/api";
+import { getLayout, generateLayoutVisualizations } from "../services/api";
 import "../styles/ViewLayout.css";
 
 const ViewLayout = () => {
@@ -51,7 +51,29 @@ const ViewLayout = () => {
       }
     }
   }, [loading, imageUrls, imageErrors]);
+  const [lightbox, setLightbox] = useState({
+    open: false,
+    image: null,
+    title: "",
+  });
 
+  // Add a function to open the lightbox
+  const openLightbox = (imageUrl, title) => {
+    setLightbox({
+      open: true,
+      image: imageUrl,
+      title: title,
+    });
+  };
+
+  // Add a function to close the lightbox
+  const closeLightbox = () => {
+    setLightbox({
+      open: false,
+      image: null,
+      title: "",
+    });
+  };
   const fetchLayoutDetails = async () => {
     try {
       setLoading(true);
@@ -176,6 +198,7 @@ const ViewLayout = () => {
   };
 
   // Generate layout visualizations
+  // In the handleGenerateVisualizations function:
   const handleGenerateVisualizations = async () => {
     try {
       setVisualizationLoading(true);
@@ -201,6 +224,81 @@ const ViewLayout = () => {
       setVisualizationLoading(false);
     }
   };
+
+  // In the metrics tab section:
+  {
+    activeTab === "metrics" && layoutVisualizations && (
+      <div className="metrics-visualizations">
+        <h3>Layout Metrics Visualizations</h3>
+
+        {layoutVisualizations.filter((viz) => !imageErrors[viz.url]).length >
+        0 ? (
+          <div className="visualization-grid">
+            {layoutVisualizations
+              .filter((viz) => !imageErrors[viz.url])
+              .map((viz, index) => (
+                <div key={index} className="visualization-card">
+                  <h4>{viz.title}</h4>
+                  {viz.type === "text/html" ? (
+                    <iframe
+                      src={`${apiBaseUrl}${viz.url}`}
+                      title={viz.title}
+                      className="visualization-iframe"
+                      onError={() => handleImageError(viz.url)}
+                    />
+                  ) : (
+                    <img
+                      src={`${apiBaseUrl}${viz.url}`}
+                      alt={viz.title}
+                      className="visualization-image"
+                      onClick={() =>
+                        openLightbox(`${apiBaseUrl}${viz.url}`, viz.title)
+                      }
+                      style={{ cursor: "pointer" }}
+                      onError={() => handleImageError(viz.url)}
+                    />
+                  )}
+                  // Then, add the lightbox component at the end of your
+                  component:
+                  {lightbox.open && (
+                    <div className="lightbox-overlay" onClick={closeLightbox}>
+                      <div
+                        className="lightbox-content"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="lightbox-header">
+                          <h3>{lightbox.title}</h3>
+                          <button
+                            className="lightbox-close"
+                            onClick={closeLightbox}
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="lightbox-body">
+                          <img
+                            src={lightbox.image}
+                            alt={lightbox.title}
+                            className="lightbox-image"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <p>{viz.description}</p>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <div className="no-visualizations">
+            <p>
+              No visualizations could be loaded. Please try regenerating them.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return <div className="loading-container">Loading layout details...</div>;
