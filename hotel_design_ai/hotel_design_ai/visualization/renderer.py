@@ -25,6 +25,7 @@ class RenderingTheme:
         "maintenance": "#909090",  # Medium gray for maintenance
         # Default color for unknown types
         "default": "#efefef",
+        "suite_room": "#FFD700",
     }
 
     # Default room type transparencies
@@ -41,6 +42,7 @@ class RenderingTheme:
         "mechanical": 0.6,
         "maintenance": 0.6,
         "default": 0.5,
+        "suite_room": 0.8,
     }
 
     @classmethod
@@ -234,6 +236,8 @@ class LayoutRenderer:
 
         # Draw structural grid
         self._draw_structural_grid(ax)
+
+        self._draw_standard_floor_boundary(ax, self.building_config)
 
         # Add floor type annotation
         self._add_floor_type_annotation(ax, floor)
@@ -1018,3 +1022,36 @@ class LayoutRenderer:
                 boxstyle="round,pad=0.3", fc="lightyellow", ec="orange", alpha=0.8
             ),
         )
+
+    def _draw_standard_floor_boundary(self, ax, building_config):
+        """
+        Draw the outline of the standard floor boundary on the floor plan.
+
+        Args:
+            ax: Matplotlib axis
+            building_config: Building configuration dictionary
+        """
+        std_floor_config = building_config.get("standard_floor", {})
+        if not std_floor_config:
+            print("No standard floor configuration found.")
+            return
+
+        # Extract boundary dimensions and position
+        width = std_floor_config.get("width", 0.0)
+        length = std_floor_config.get("length", 0.0)
+        position_x = std_floor_config.get("position_x", 0.0)
+        position_y = std_floor_config.get("position_y", 0.0)
+
+        # Draw rectangle representing the boundary
+        rect = plt.Rectangle(
+            (position_x, position_y),  # Bottom-left corner
+            width,  # Width of the rectangle
+            length,  # Height of the rectangle
+            linewidth=2,
+            edgecolor="blue",
+            facecolor="none",
+            linestyle="--",
+            label="Standard Floor Boundary",
+        )
+        ax.add_patch(rect)
+        ax.legend()
