@@ -43,7 +43,78 @@ const initializeStorage = (key, initialValue) => {
     return initialValue || [];
   }
 };
+// Add these functions to your existing api.js file
 
+// Initialize a chat2plan session
+export const startChat2PlanSession = async (context) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat2plan/start`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ context }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to start chat session",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Send a message to the chat2plan system
+export const sendChat2PlanMessage = async (sessionId, message) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat2plan/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ session_id: sessionId, message }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to process chat message",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+// Get the current state of the chat2plan system
+export const getChat2PlanState = async (sessionId) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat2plan/state?session_id=${sessionId}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to get chat state",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
 // Generate configurations
 export const generateConfigs = async (userData) => {
   try {

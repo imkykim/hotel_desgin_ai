@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateConfigs } from "../services/api";
+import Chat2PlanInterface from "../components/Chat2PlanInterface";
 
 const ConfigGenerator = () => {
   const navigate = useNavigate();
@@ -146,7 +147,6 @@ const ConfigGenerator = () => {
                 </div>
               </div>
             </div>
-
             <div className="form-section">
               <h2>Building Envelope (Optional)</h2>
               <p className="helper-text">
@@ -258,7 +258,6 @@ const ConfigGenerator = () => {
                 </div>
               </div>
             </div>
-
             <div className="form-section">
               <h2>Facilities</h2>
               <div className="checkbox-group">
@@ -331,18 +330,28 @@ const ConfigGenerator = () => {
                 <label htmlFor="special_requirements">
                   Additional Requirements or Constraints
                 </label>
+                <div className="chat-interface-container">
+                  <Chat2PlanInterface
+                    onRequirementsUpdate={(requirements) => {
+                      setFormData({
+                        ...formData,
+                        special_requirements: requirements,
+                      });
+                    }}
+                    initialContext={formData} // Pass the current form data as context
+                  />
+                </div>
                 <textarea
                   id="special_requirements"
                   name="special_requirements"
-                  className="form-control"
+                  className="form-control mt-3"
                   value={formData.special_requirements}
                   onChange={handleChange}
                   rows="4"
-                  placeholder="Enter any special requirements or constraints for your hotel design..."
+                  placeholder="Requirements generated from the chat above will appear here. You can also edit directly."
                 ></textarea>
               </div>
             </div>
-
             <div className="form-actions">
               <button type="submit" className="btn-primary" disabled={loading}>
                 {loading ? "Generating..." : "Generate Configuration"}

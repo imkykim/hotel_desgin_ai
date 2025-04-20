@@ -26,6 +26,7 @@ from routes import files
 from routes import visualization_routes
 from routes import configuration_routes
 from routes import layout_visualization_routes
+from routes import chat2plan_routes
 
 # Add project root to system path
 project_root = Path(__file__).parents[3]
@@ -538,6 +539,7 @@ app.include_router(files.router)
 app.include_router(visualization_routes.router)
 app.include_router(configuration_routes.router)
 app.include_router(layout_visualization_routes.router)
+app.include_router(chat2plan_routes.router)
 
 
 @app.get("/list-configurations")
