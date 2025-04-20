@@ -3,6 +3,7 @@ import {
   startChat2PlanSession,
   sendChat2PlanMessage,
   getChat2PlanState,
+  skipStage,
 } from "../services/api";
 import "../styles/Chat2PlanInterface.css";
 
@@ -179,25 +180,29 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
-  const skipStage = async () => {
+  // Find the skipStage function in your component
+  const handleSkipStage = async () => {
     if (!sessionId) return;
 
     setIsLoading(true);
-    setMessages((prev) => [
-      ...prev,
-      { role: "system", content: "Skipping current stage..." },
-    ]);
-
     try {
-      // This would call a skip_stage API endpoint in the original app
-      // For now, let's just refresh the state
+      const response = await skipStage(sessionId);
+
+      if (response.error) {
+        console.error("Failed to skip stage:", response.error);
+        return;
+      }
+
+      // Update current stage
+      setCurrentStage(response.current_stage);
+
+      // Add message to chat
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: "Skipping to next stage..." },
+      ]);
+
+      // Refresh state
       await refreshState();
     } catch (error) {
       console.error("Error skipping stage:", error);
@@ -215,7 +220,7 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
           {currentStage !== "STAGE_REQUIREMENT_GATHERING" && (
             <button
               className="skip-button"
-              onClick={skipStage}
+              onClick={handleSkipStage}
               disabled={isLoading}
             >
               Skip Stage

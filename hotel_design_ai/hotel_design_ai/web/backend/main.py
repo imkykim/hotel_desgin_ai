@@ -98,36 +98,6 @@ app.include_router(layout_visualization_routes.router)
 app.include_router(chat2plan_routes.router)
 
 
-try:
-    # This will help you verify the chat2plan_interaction package is accessible
-    import chat2plan_interaction
-
-    print(
-        f"Successfully imported chat2plan_interaction from {chat2plan_interaction.__file__}"
-    )
-
-    # Try to import ArchitectureAISystem directly
-    from chat2plan_interaction.main import ArchitectureAISystem
-
-    print("Successfully imported ArchitectureAISystem")
-except ImportError as e:
-    print(f"⚠️ Error importing chat2plan_interaction: {e}")
-    print("Please ensure chat2plan_interaction is installed and in the Python path")
-
-
-try:
-    frontend_dir = PROJECT_ROOT / "hotel_design_ai" / "web" / "frontend" / "build"
-    if frontend_dir.exists():
-        app.mount(
-            "/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend"
-        )
-        logger.info(f"Frontend static files mounted from: {frontend_dir}")
-    else:
-        logger.warning(f"Frontend build directory not found at {frontend_dir}")
-except Exception as e:
-    logger.error(f"Failed to mount frontend static files: {e}")
-
-
 # Pydantic models for validation
 class UserInput(BaseModel):
     # Basic hotel information

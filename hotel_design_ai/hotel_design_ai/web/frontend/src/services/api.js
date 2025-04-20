@@ -127,6 +127,31 @@ export const getChat2PlanState = async (sessionId) => {
     return handleApiError(error);
   }
 };
+
+export const skipStage = async (sessionId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat2plan/skip_stage`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to skip stage",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error skipping stage:", error);
+    return handleApiError(error);
+  }
+};
 // Generate configurations
 export const generateConfigs = async (userData) => {
   try {

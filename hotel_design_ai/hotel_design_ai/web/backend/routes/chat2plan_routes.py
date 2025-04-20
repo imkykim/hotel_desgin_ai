@@ -8,31 +8,15 @@ import logging
 import json
 import uuid
 
-from typing import Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Body, Request
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-"""
-Routes for chat2plan integration for Hotel Design AI.
-"""
-
-import os
-import sys
-import logging
-import json
-import uuid
-
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Body
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-
-# Define the absolute path to the chat2plan_interaction directory
-# This is more reliable than trying to construct relative paths
-chat2plan_path = "/Users/ky/01_Projects/chat2plan_interaction/chat2plan_interaction"
-if chat2plan_path not in sys.path:
-    sys.path.append(chat2plan_path)
+# Only add the parent directory of chat2plan_interaction
+chat2plan_parent = "/Users/ky/01_Projects"
+if chat2plan_parent not in sys.path:
+    sys.path.append(chat2plan_parent)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -40,51 +24,51 @@ logger = logging.getLogger(__name__)
 
 # Create router - NOTE: The prefix is now "/api/chat2plan" to match your frontend calls
 router = APIRouter(prefix="/api/chat2plan", tags=["Chat2Plan Integration"])
+sessions = {}
+
+
+class SessionRequest(BaseModel):
+    session_id: str
+
+
+class ChatMessage(BaseModel):
+    session_id: str
+    message: str
+
 
 try:
-    # Debug the import
-    logger.info(f"Python sys.path: {sys.path}")
-    logger.info(f"Attempting to import ArchitectureAISystem from chat2plan_interaction")
-
-    # First try direct import
-    from chat2plan_interaction.chat2plan_interaction.main import ArchitectureAISystem
+    logger.info(
+        f"Attempting to import ArchitectureAISystem from chat2plan_interaction.main"
+    )
+    from chat2plan_interaction.main import ArchitectureAISystem
 
     logger.info("Successfully imported ArchitectureAISystem")
 except ImportError as e:
     logger.error(f"Failed to import ArchitectureAISystem: {e}")
-    # Try alternative import
-    try:
-        # Try importing from the local directory
-        import main
-        from main import ArchitectureAISystem
 
-        logger.info("Imported ArchitectureAISystem from direct main")
-    except ImportError as e2:
-        logger.error(f"All import attempts failed. Last error: {e2}")
+    # Fallback: Dummy class for development/testing
+    class ArchitectureAISystem:
+        def __init__(self):
+            self.spatial_understanding_record = ""
+            self.user_requirement_guess = ""
+            self.workflow_manager = type(
+                "obj",
+                (object,),
+                {"get_current_stage": lambda: "STAGE_REQUIREMENT_GATHERING"},
+            )
+            self.session_manager = type(
+                "obj",
+                (object,),
+                {
+                    "add_user_input": lambda x: None,
+                    "add_system_response": lambda x: None,
+                    "update_spatial_understanding": lambda x: None,
+                },
+            )
+            self.key_questions = []
 
-        # Create a dummy class for development/testing
-        class ArchitectureAISystem:
-            def __init__(self):
-                self.spatial_understanding_record = ""
-                self.user_requirement_guess = ""
-                self.workflow_manager = type(
-                    "obj",
-                    (object,),
-                    {"get_current_stage": lambda: "STAGE_REQUIREMENT_GATHERING"},
-                )
-                self.session_manager = type(
-                    "obj",
-                    (object,),
-                    {
-                        "add_user_input": lambda x: None,
-                        "add_system_response": lambda x: None,
-                        "update_spatial_understanding": lambda x: None,
-                    },
-                )
-                self.key_questions = []
-
-            def process_user_input(self, user_input):
-                return f"Processed: {user_input}"
+        def process_user_input(self, user_input):
+            return f"Processed: {user_input}"
 
 
 # Store chat2plan sessions
@@ -110,7 +94,14 @@ async def start_chat2plan_session(context: Context = Body(...)):
 
         # Initialize the system
         system = ArchitectureAISystem()
-        chat2plan_sessions[session_id] = system
+
+        # Store the system in the sessions dictionary
+        sessions[session_id] = system
+
+        # Print debug info
+        print(f"New session created with ID: {session_id}")
+        print(f"Current stage: {system.workflow_manager.get_current_stage()}")
+        print(f"Stage description: {system.workflow_manager.get_stage_description()}")
 
         # You can use the context to pre-populate some information
         if context.context:
@@ -137,7 +128,10 @@ async def start_chat2plan_session(context: Context = Body(...)):
 
         return {"session_id": session_id}
     except Exception as e:
-        logger.error(f"Error starting chat2plan session: {str(e)}")
+        print(f"Error starting chat2plan session: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         raise HTTPException(
             status_code=500, detail=f"Failed to start chat session: {str(e)}"
         )
@@ -149,10 +143,10 @@ async def chat2plan_process(msg: ChatMessage = Body(...)):
     session_id = msg.session_id
     user_input = msg.message
 
-    if not session_id or session_id not in chat2plan_sessions:
+    if not session_id or session_id not in sessions:
         raise HTTPException(status_code=400, detail="Invalid session")
 
-    system = chat2plan_sessions[session_id]
+    system = sessions[session_id]
 
     try:
         # Record the user input
@@ -165,17 +159,44 @@ async def chat2plan_process(msg: ChatMessage = Body(...)):
         system.session_manager.add_system_response(response)
 
         # Check if stage changed
+        previous_stage = system.workflow_manager.get_current_stage()
+
+        # Check if we should automatically advance to the next stage
+        all_questions_answered = True
+        for question in system.key_questions:
+            if question["status"] == "未知":
+                all_questions_answered = False
+                break
+
+        stage_changed = False
+        if (
+            all_questions_answered
+            and previous_stage == system.workflow_manager.STAGE_REQUIREMENT_GATHERING
+        ):
+            # Advance to next stage
+            system.workflow_manager.advance_to_next_stage()
+            stage_changed = True
+
         current_stage = system.workflow_manager.get_current_stage()
+        stage_description = system.workflow_manager.get_stage_description()
+
+        print(f"Stage: {current_stage}, Changed: {stage_changed}")
+        print(f"Stage description: {stage_description}")
 
         # Return the current requirements guess
         return {
             "response": response,
             "requirements": system.user_requirement_guess,
-            "stage_change": False,
+            "stage_change": stage_changed,
             "current_stage": current_stage,
+            "previous_stage": previous_stage if stage_changed else None,
+            "stage_description": stage_description,
         }
     except Exception as e:
-        logger.error(f"Error processing chat message: {str(e)}")
+        print(f"Error processing chat message: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         raise HTTPException(
             status_code=500, detail=f"Error processing your message: {str(e)}"
         )
@@ -184,20 +205,67 @@ async def chat2plan_process(msg: ChatMessage = Body(...)):
 @router.get("/state")
 async def chat2plan_state(session_id: str):
     """Get the current state of a chat2plan session."""
-    if not session_id or session_id not in chat2plan_sessions:
+    if not session_id or session_id not in sessions:
         raise HTTPException(status_code=400, detail="Invalid session")
 
-    system = chat2plan_sessions[session_id]
+    system = sessions[session_id]
 
     try:
         current_stage = system.workflow_manager.get_current_stage()
+        stage_description = system.workflow_manager.get_stage_description()
+
+        # Count resolved key questions
+        resolved_questions = 0
+        total_questions = len(system.key_questions)
+
+        for question in system.key_questions:
+            if question["status"] == "已知":
+                resolved_questions += 1
+
+        # Set key questions status in workflow manager
+        system.workflow_manager.set_key_questions_status(
+            resolved_questions, total_questions
+        )
 
         return {
             "current_stage": current_stage,
+            "stage_description": stage_description,
             "user_requirement_guess": system.user_requirement_guess,
             "spatial_understanding_record": system.spatial_understanding_record,
             "key_questions": system.key_questions,
+            "resolved_questions": resolved_questions,
+            "total_questions": total_questions,
+            "all_key_questions_known": resolved_questions == total_questions
+            and total_questions > 0,
         }
     except Exception as e:
-        logger.error(f"Error getting chat state: {str(e)}")
+        print(f"Error getting chat state: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error retrieving state: {str(e)}")
+
+
+@router.post("/skip_stage")
+async def skip_stage(session_request: SessionRequest = Body(...)):
+    session_id = session_request.session_id
+
+    if not session_id or session_id not in sessions:
+        raise HTTPException(status_code=400, detail="Invalid session")
+
+    system = sessions[session_id]
+    current_stage = system.workflow_manager.get_current_stage()
+
+    print(f"Skipping stage: {current_stage}")
+
+    # Advance to the next stage
+    system.workflow_manager.advance_to_next_stage()
+    new_stage = system.workflow_manager.get_current_stage()
+
+    print(f"Advanced to stage: {new_stage}")
+
+    return {
+        "previous_stage": current_stage,
+        "current_stage": new_stage,
+        "stage_description": system.workflow_manager.get_stage_description(),
+    }
