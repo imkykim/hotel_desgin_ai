@@ -48,6 +48,7 @@ from hotel_design_ai.utils.metrics import LayoutMetrics
 
 # Import routes
 from hotel_design_ai.web.backend.routes import files
+from hotel_design_ai.web.backend.routes import chat2plan_routes
 
 # Initialize FastAPI app
 app = FastAPI(title="Hotel Design AI Configuration Generator")
@@ -88,6 +89,30 @@ app.mount(
     StaticFiles(directory=str(VISUALIZATIONS_DIR)),
     name="visualizations",
 )
+
+# Include router modules
+app.include_router(files.router)
+app.include_router(visualization_routes.router)
+app.include_router(configuration_routes.router)
+app.include_router(layout_visualization_routes.router)
+app.include_router(chat2plan_routes.router)
+
+
+try:
+    # This will help you verify the chat2plan_interaction package is accessible
+    import chat2plan_interaction
+
+    print(
+        f"Successfully imported chat2plan_interaction from {chat2plan_interaction.__file__}"
+    )
+
+    # Try to import ArchitectureAISystem directly
+    from chat2plan_interaction.main import ArchitectureAISystem
+
+    print("Successfully imported ArchitectureAISystem")
+except ImportError as e:
+    print(f"⚠️ Error importing chat2plan_interaction: {e}")
+    print("Please ensure chat2plan_interaction is installed and in the Python path")
 
 
 try:
@@ -532,14 +557,6 @@ async def modify_layout(input_data: DesignModificationInput = Body(...)):
     except Exception as e:
         logger.error(f"Error modifying layout: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error modifying layout: {str(e)}")
-
-
-# Include router modules
-app.include_router(files.router)
-app.include_router(visualization_routes.router)
-app.include_router(configuration_routes.router)
-app.include_router(layout_visualization_routes.router)
-app.include_router(chat2plan_routes.router)
 
 
 @app.get("/list-configurations")

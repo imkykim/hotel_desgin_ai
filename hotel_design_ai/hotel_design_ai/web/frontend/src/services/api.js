@@ -53,11 +53,14 @@ export const startChat2PlanSession = async (context) => {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify(context),
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+      console.error("Start session error:", errorData);
       return {
         success: false,
         error: errorData.detail || "Failed to start chat session",
@@ -66,6 +69,7 @@ export const startChat2PlanSession = async (context) => {
 
     return await response.json();
   } catch (error) {
+    console.error("Start session exception:", error);
     return handleApiError(error);
   }
 };
@@ -82,7 +86,10 @@ export const sendChat2PlanMessage = async (sessionId, message) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+      console.error("Send message error:", errorData);
       return {
         success: false,
         error: errorData.detail || "Failed to process chat message",
@@ -91,6 +98,7 @@ export const sendChat2PlanMessage = async (sessionId, message) => {
 
     return await response.json();
   } catch (error) {
+    console.error("Send message exception:", error);
     return handleApiError(error);
   }
 };
@@ -103,7 +111,10 @@ export const getChat2PlanState = async (sessionId) => {
     );
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+      console.error("Get state error:", errorData);
       return {
         success: false,
         error: errorData.detail || "Failed to get chat state",
@@ -112,6 +123,7 @@ export const getChat2PlanState = async (sessionId) => {
 
     return await response.json();
   } catch (error) {
+    console.error("Get state exception:", error);
     return handleApiError(error);
   }
 };

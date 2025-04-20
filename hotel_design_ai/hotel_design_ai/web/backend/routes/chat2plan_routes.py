@@ -13,12 +13,24 @@ from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-chat2plan_path = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        "/Users/ky/01_Projects/chat2plan_interaction",
-    )
-)
+"""
+Routes for chat2plan integration for Hotel Design AI.
+"""
+
+import os
+import sys
+import logging
+import json
+import uuid
+
+from typing import Dict, Any, Optional
+from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+# Define the absolute path to the chat2plan_interaction directory
+# This is more reliable than trying to construct relative paths
+chat2plan_path = "/Users/ky/01_Projects/chat2plan_interaction/chat2plan_interaction"
 if chat2plan_path not in sys.path:
     sys.path.append(chat2plan_path)
 
@@ -26,26 +38,29 @@ if chat2plan_path not in sys.path:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create router
-router = APIRouter(prefix="/chat2plan", tags=["Chat2Plan Integration"])
+# Create router - NOTE: The prefix is now "/api/chat2plan" to match your frontend calls
+router = APIRouter(prefix="/api/chat2plan", tags=["Chat2Plan Integration"])
 
 try:
-    # Try to import with a more flexible approach
-    logger.info(
-        f"Attempting to import ArchitectureAISystem from chat2plan_interaction, sys.path: {sys.path}"
-    )
-    from chat2plan_interaction.main import ArchitectureAISystem
+    # Debug the import
+    logger.info(f"Python sys.path: {sys.path}")
+    logger.info(f"Attempting to import ArchitectureAISystem from chat2plan_interaction")
+
+    # First try direct import
+    from chat2plan_interaction.chat2plan_interaction.main import ArchitectureAISystem
 
     logger.info("Successfully imported ArchitectureAISystem")
 except ImportError as e:
     logger.error(f"Failed to import ArchitectureAISystem: {e}")
-    # Fallback import - you might need to modify this based on your actual structure
+    # Try alternative import
     try:
+        # Try importing from the local directory
+        import main
         from main import ArchitectureAISystem
 
         logger.info("Imported ArchitectureAISystem from direct main")
-    except ImportError:
-        logger.error("Could not import ArchitectureAISystem even with fallback")
+    except ImportError as e2:
+        logger.error(f"All import attempts failed. Last error: {e2}")
 
         # Create a dummy class for development/testing
         class ArchitectureAISystem:
@@ -87,7 +102,7 @@ class ChatMessage(BaseModel):
 
 
 @router.post("/start")
-async def start_chat2plan_session(context: Context):
+async def start_chat2plan_session(context: Context = Body(...)):
     """Start a new chat2plan session."""
     try:
         # Create a session ID for this chat session
@@ -129,7 +144,7 @@ async def start_chat2plan_session(context: Context):
 
 
 @router.post("/chat")
-async def chat2plan_process(msg: ChatMessage):
+async def chat2plan_process(msg: ChatMessage = Body(...)):
     """Process a chat message in an existing session."""
     session_id = msg.session_id
     user_input = msg.message

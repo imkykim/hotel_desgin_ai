@@ -323,14 +323,21 @@ const ConfigGenerator = () => {
                 </div>
               </div>
             </div>
-
             <div className="form-section">
               <h2>Special Requirements</h2>
               <div className="form-group">
                 <label htmlFor="special_requirements">
                   Additional Requirements or Constraints
                 </label>
+
+                {/* Chat2Plan Interface Container */}
                 <div className="chat-interface-container">
+                  <p className="helper-text">
+                    Use the chat interface below to describe your specific
+                    requirements. The AI will help identify key design
+                    constraints for your hotel project.
+                  </p>
+
                   <Chat2PlanInterface
                     onRequirementsUpdate={(requirements) => {
                       setFormData({
@@ -341,6 +348,8 @@ const ConfigGenerator = () => {
                     initialContext={formData} // Pass the current form data as context
                   />
                 </div>
+
+                {/* Requirements Text Area */}
                 <textarea
                   id="special_requirements"
                   name="special_requirements"
