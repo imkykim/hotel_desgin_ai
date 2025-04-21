@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateConfigs } from "../services/api";
 import Chat2PlanInterface from "../components/Chat2PlanInterface";
+import "../styles/ConfigGenerator.css";
 
 const ConfigGenerator = () => {
   const navigate = useNavigate();
@@ -12,15 +13,14 @@ const ConfigGenerator = () => {
     building_width: "",
     building_length: "",
     building_height: "",
-    num_floors: "",
-    num_basement_floors: 1,
+    min_floor: "",
+    max_floor: "",
     floor_height: 4.5,
-    has_restaurant: true,
-    has_meeting_rooms: true,
-    has_ballroom: false,
-    has_pool: false,
-    has_gym: true,
-    has_spa: false,
+    structural_grid_x: 8.0,
+    structural_grid_y: 8.0,
+    grid_size: 1.0,
+    podium_min_floor: -2,
+    podium_max_floor: 1,
     special_requirements: "",
   });
 
@@ -148,16 +148,16 @@ const ConfigGenerator = () => {
               </div>
             </div>
             <div className="form-section">
-              <h2>Building Envelope (Optional)</h2>
+              <h2>Building Envelope</h2>
               <p className="helper-text">
-                Leave fields blank to use recommended values based on hotel type
-                and size.
+                Define the physical parameters of your hotel building.
               </p>
 
+              {/* Building Dimensions */}
               <div className="form-row">
-                <div className="half">
+                <div className="third">
                   <div className="form-group">
-                    <label htmlFor="building_width">Building Width (m)</label>
+                    <label htmlFor="building_width">Width (m)</label>
                     <input
                       type="number"
                       id="building_width"
@@ -171,9 +171,9 @@ const ConfigGenerator = () => {
                     />
                   </div>
                 </div>
-                <div className="half">
+                <div className="third">
                   <div className="form-group">
-                    <label htmlFor="building_length">Building Length (m)</label>
+                    <label htmlFor="building_length">Length (m)</label>
                     <input
                       type="number"
                       id="building_length"
@@ -187,12 +187,9 @@ const ConfigGenerator = () => {
                     />
                   </div>
                 </div>
-              </div>
-
-              <div className="form-row">
-                <div className="half">
+                <div className="third">
                   <div className="form-group">
-                    <label htmlFor="building_height">Building Height (m)</label>
+                    <label htmlFor="building_height">Height (m)</label>
                     <input
                       type="number"
                       id="building_height"
@@ -206,7 +203,39 @@ const ConfigGenerator = () => {
                     />
                   </div>
                 </div>
-                <div className="half">
+              </div>
+
+              {/* Floor Configuration */}
+              <div className="form-row">
+                <div className="third">
+                  <div className="form-group">
+                    <label htmlFor="min_floor">Lowest Floor</label>
+                    <input
+                      type="number"
+                      id="min_floor"
+                      name="min_floor"
+                      className="form-control"
+                      value={formData.min_floor}
+                      onChange={handleNumericChange}
+                      placeholder="-2"
+                    />
+                  </div>
+                </div>
+                <div className="third">
+                  <div className="form-group">
+                    <label htmlFor="max_floor">Highest Floor</label>
+                    <input
+                      type="number"
+                      id="max_floor"
+                      name="max_floor"
+                      className="form-control"
+                      value={formData.max_floor}
+                      onChange={handleNumericChange}
+                      placeholder="20"
+                    />
+                  </div>
+                </div>
+                <div className="third">
                   <div className="form-group">
                     <label htmlFor="floor_height">Floor Height (m)</label>
                     <input
@@ -224,102 +253,97 @@ const ConfigGenerator = () => {
                 </div>
               </div>
 
+              {/* Structural Grid */}
               <div className="form-row">
-                <div className="half">
+                <div className="third">
                   <div className="form-group">
-                    <label htmlFor="num_floors">Number of Floors</label>
-                    <input
-                      type="number"
-                      id="num_floors"
-                      name="num_floors"
-                      className="form-control"
-                      value={formData.num_floors}
-                      onChange={handleNumericChange}
-                      min="1"
-                      placeholder="Auto"
-                    />
-                  </div>
-                </div>
-                <div className="half">
-                  <div className="form-group">
-                    <label htmlFor="num_basement_floors">
-                      Number of Basement Floors
+                    <label htmlFor="structural_grid_x">
+                      Structural Grid X (m)
                     </label>
                     <input
                       type="number"
-                      id="num_basement_floors"
-                      name="num_basement_floors"
+                      id="structural_grid_x"
+                      name="structural_grid_x"
                       className="form-control"
-                      value={formData.num_basement_floors}
+                      value={formData.structural_grid_x}
                       onChange={handleNumericChange}
+                      placeholder="8"
                       min="0"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+                <div className="third">
+                  <div className="form-group">
+                    <label htmlFor="structural_grid_y">
+                      Structural Grid Y (m)
+                    </label>
+                    <input
+                      type="number"
+                      id="structural_grid_y"
+                      name="structural_grid_y"
+                      className="form-control"
+                      value={formData.structural_grid_y}
+                      onChange={handleNumericChange}
+                      placeholder="8"
+                      min="0"
+                      step="0.1"
+                    />
+                  </div>
+                </div>
+                <div className="third">
+                  <div className="form-group">
+                    <label htmlFor="grid_size">
+                      Grid Size (m){" "}
+                      <span className="tooltip-text">
+                        (Spatial granularity for room placement)
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      id="grid_size"
+                      name="grid_size"
+                      className="form-control"
+                      value={formData.grid_size}
+                      onChange={handleNumericChange}
+                      placeholder="1"
+                      min="0.1"
+                      step="0.1"
                     />
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="form-section">
-              <h2>Facilities</h2>
-              <div className="checkbox-group">
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_restaurant"
-                    name="has_restaurant"
-                    checked={formData.has_restaurant}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_restaurant">Restaurant</label>
+
+              {/* Podium Configuration */}
+              <h3 className="subsection-title">Podium Configuration</h3>
+              <div className="form-row">
+                <div className="half">
+                  <div className="form-group">
+                    <label htmlFor="podium_min_floor">Podium Min Floor</label>
+                    <input
+                      type="number"
+                      id="podium_min_floor"
+                      name="podium_min_floor"
+                      className="form-control"
+                      value={formData.podium_min_floor}
+                      onChange={handleNumericChange}
+                      placeholder="-2"
+                    />
+                  </div>
                 </div>
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_meeting_rooms"
-                    name="has_meeting_rooms"
-                    checked={formData.has_meeting_rooms}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_meeting_rooms">Meeting Rooms</label>
-                </div>
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_ballroom"
-                    name="has_ballroom"
-                    checked={formData.has_ballroom}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_ballroom">Ballroom</label>
-                </div>
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_pool"
-                    name="has_pool"
-                    checked={formData.has_pool}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_pool">Swimming Pool</label>
-                </div>
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_gym"
-                    name="has_gym"
-                    checked={formData.has_gym}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_gym">Fitness Center</label>
-                </div>
-                <div className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    id="has_spa"
-                    name="has_spa"
-                    checked={formData.has_spa}
-                    onChange={handleChange}
-                  />
-                  <label htmlFor="has_spa">Spa</label>
+                <div className="half">
+                  <div className="form-group">
+                    <label htmlFor="podium_max_floor">Podium Max Floor</label>
+                    <input
+                      type="number"
+                      id="podium_max_floor"
+                      name="podium_max_floor"
+                      className="form-control"
+                      value={formData.podium_max_floor}
+                      onChange={handleNumericChange}
+                      placeholder="1"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

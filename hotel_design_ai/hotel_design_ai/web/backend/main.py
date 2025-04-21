@@ -100,46 +100,26 @@ app.include_router(chat2plan_routes.router)
 
 # Pydantic models for validation
 class UserInput(BaseModel):
-    # Basic hotel information
-    hotel_name: str = Field(..., description="Name of the hotel")
-    hotel_type: str = Field(
-        ..., description="Type of hotel (luxury, business, resort, boutique, etc.)"
-    )
-    num_rooms: int = Field(..., description="Total number of guest rooms", gt=0)
-
-    # Building envelope parameters
+    hotel_name: str = Field(..., description="Name of the hotel project")
+    hotel_type: str = Field(..., description="Type of hotel (luxury, business, etc.)")
+    num_rooms: int = Field(..., description="Number of guest rooms")
     building_width: Optional[float] = Field(
-        None, description="Width of the building in meters"
+        None, description="Building width in meters"
     )
     building_length: Optional[float] = Field(
-        None, description="Length of the building in meters"
+        None, description="Building length in meters"
     )
     building_height: Optional[float] = Field(
-        None, description="Height of the building in meters"
+        None, description="Building height in meters"
     )
-    num_floors: Optional[int] = Field(
-        None, description="Number of floors (excluding basement)"
-    )
-    num_basement_floors: Optional[int] = Field(
-        None, description="Number of basement floors"
-    )
-    floor_height: Optional[float] = Field(
-        None, description="Height of each floor in meters"
-    )
-
-    # Program requirements
-    has_restaurant: bool = Field(
-        True, description="Whether the hotel has restaurant facilities"
-    )
-    has_meeting_rooms: bool = Field(
-        True, description="Whether the hotel has meeting facilities"
-    )
-    has_ballroom: bool = Field(False, description="Whether the hotel has a ballroom")
-    has_pool: bool = Field(False, description="Whether the hotel has a swimming pool")
-    has_gym: bool = Field(True, description="Whether the hotel has a fitness center")
-    has_spa: bool = Field(False, description="Whether the hotel has spa facilities")
-
-    # Custom requirements as free text
+    min_floor: Optional[int] = Field(None, description="Lowest floor (e.g. -2)")
+    max_floor: Optional[int] = Field(None, description="Highest floor (e.g. 20)")
+    floor_height: float = Field(4.5, description="Height of each floor in meters")
+    structural_grid_x: Optional[float] = Field(8.0, description="Structural grid X (m)")
+    structural_grid_y: Optional[float] = Field(8.0, description="Structural grid Y (m)")
+    grid_size: Optional[float] = Field(1.0, description="Grid size (m)")
+    podium_min_floor: Optional[int] = Field(None, description="Podium min floor")
+    podium_max_floor: Optional[int] = Field(None, description="Podium max floor")
     special_requirements: Optional[str] = Field(
         None, description="Any special requirements or constraints"
     )
@@ -213,20 +193,49 @@ async def generate_configs(user_input: UserInput = Body(...)):
         # In a real implementation, you would call the LLM API here
         # For now, we'll create a simple mock response
 
-        # Create a simplified building envelope
+        # Build the building envelope dictionary using new fields
         building_envelope = {
-            "width": user_input.building_width or 60.0,
-            "length": user_input.building_length or 80.0,
-            "height": user_input.building_height or 30.0,
-            "min_floor": -(user_input.num_basement_floors or 1),
-            "max_floor": (user_input.num_floors or 5) - 1,
-            "floor_height": user_input.floor_height or 4.5,
-            "structural_grid_x": 8.0,
-            "structural_grid_y": 8.0,
-            "grid_size": 1.0,
-            "main_entry": "front",
-            "description": f"{user_input.hotel_name} building configuration",
-            "units": "meters",
+            "width": user_input.building_width if user_input.building_width else 60.0,
+            "length": (
+                user_input.building_length if user_input.building_length else 80.0
+            ),
+            "height": (
+                user_input.building_height if user_input.building_height else 100.0
+            ),
+            "min_floor": (
+                user_input.min_floor if user_input.min_floor is not None else -2
+            ),
+            "max_floor": (
+                user_input.max_floor if user_input.max_floor is not None else 20
+            ),
+            "floor_height": user_input.floor_height,
+            "structural_grid_x": (
+                user_input.structural_grid_x
+                if user_input.structural_grid_x is not None
+                else 8.0
+            ),
+            "structural_grid_y": (
+                user_input.structural_grid_y
+                if user_input.structural_grid_y is not None
+                else 8.0
+            ),
+            "grid_size": (
+                user_input.grid_size if user_input.grid_size is not None else 1.0
+            ),
+            "podium": {
+                "min_floor": (
+                    user_input.podium_min_floor
+                    if user_input.podium_min_floor is not None
+                    else -2
+                ),
+                "max_floor": (
+                    user_input.podium_max_floor
+                    if user_input.podium_max_floor is not None
+                    else 1
+                ),
+                "description": "Podium section (裙房) of the building",
+            },
+            # ...other fields (standard_floor, etc.) can be added as needed...
         }
 
         # Create a simplified hotel requirements
