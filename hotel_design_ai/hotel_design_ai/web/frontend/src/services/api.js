@@ -8,19 +8,26 @@ const LOCAL_STORAGE_LAYOUTS_KEY = "hotel_design_ai_layouts";
 // Function to handle API errors
 const handleApiError = (error) => {
   console.error("API Error:", error);
+
+  // If the error is an Axios response error
   if (error.response) {
-    // The request was made and the server responded with a status code
-    // that falls out of the range of 2xx
+    // Check if the detail is an object or a string
+    const detail = error.response.data.detail;
+    const errorMessage =
+      typeof detail === "object"
+        ? JSON.stringify(detail)
+        : detail || "API error occurred";
+
     return {
       success: false,
-      error: error.response.data.detail || "API error occurred",
+      error: errorMessage,
     };
   } else if (error.request) {
     // The request was made but no response was received
     return { success: false, error: "No response from server" };
   } else {
     // Something happened in setting up the request that triggered an Error
-    return { success: false, error: error.message };
+    return { success: false, error: error.message || "Unknown error occurred" };
   }
 };
 

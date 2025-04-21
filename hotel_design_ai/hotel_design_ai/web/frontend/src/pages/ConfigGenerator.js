@@ -57,10 +57,17 @@ const ConfigGenerator = () => {
       if (response.success) {
         setGeneratedConfigs(response);
       } else {
-        setError(response.error || "Failed to generate configurations");
+        // Handle error properly - make sure error is a string
+        const errorMessage =
+          typeof response.error === "string"
+            ? response.error
+            : "Failed to generate configurations";
+        setError(errorMessage);
       }
     } catch (err) {
-      setError("Error generating configurations: " + err.message);
+      // Convert error to string if it's not already
+      const errorMessage = err?.message || "Unknown error occurred";
+      setError("Error generating configurations: " + errorMessage);
     } finally {
       setLoading(false);
     }
@@ -78,6 +85,27 @@ const ConfigGenerator = () => {
     navigate(`/interactive/${buildingId}/${programId}`);
   };
 
+  // Safely convert error to string for display
+  const getErrorMessage = () => {
+    if (!error) return null;
+
+    if (typeof error === "string") {
+      return error;
+    } else if (error && typeof error === "object") {
+      // If error is an object with a message property
+      if (error.message) {
+        return error.message;
+      }
+      // Try to convert object to string representation
+      try {
+        return JSON.stringify(error);
+      } catch (e) {
+        return "An unknown error occurred";
+      }
+    }
+    return "An unknown error occurred";
+  };
+
   return (
     <div className="container">
       <div className="config-form">
@@ -90,7 +118,7 @@ const ConfigGenerator = () => {
         {error && (
           <div className="error-message">
             <h3>Error</h3>
-            <p>{error}</p>
+            <p>{getErrorMessage()}</p>
           </div>
         )}
 
