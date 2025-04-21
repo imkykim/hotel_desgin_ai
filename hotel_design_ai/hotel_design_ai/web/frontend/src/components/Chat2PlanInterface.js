@@ -211,6 +211,14 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
     }
   };
 
+  // Add this function inside your Chat2PlanInterface component
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault(); // Prevent default to avoid new line
+      sendMessage();
+    }
+  };
+
   return (
     <div className="chat2plan-interface">
       {/* Stage indicator */}

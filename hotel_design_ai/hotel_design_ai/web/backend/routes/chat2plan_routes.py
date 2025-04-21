@@ -7,11 +7,15 @@ import sys
 import logging
 import json
 import uuid
+import threading
+import time
+import traceback
+
 
 from fastapi import APIRouter, HTTPException, Body, Request
-from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from typing import Dict, Any
 
 # Only add the parent directory of chat2plan_interaction
 chat2plan_parent = "/Users/ky/01_Projects"
@@ -263,6 +267,63 @@ async def skip_stage(session_request: SessionRequest = Body(...)):
     new_stage = system.workflow_manager.get_current_stage()
 
     print(f"Advanced to stage: {new_stage}")
+
+    # Handle special actions for certain stages
+    if new_stage == system.workflow_manager.STAGE_CONSTRAINT_GENERATION:
+        # Launch constraint generation in a background thread
+        def generate_constraints():
+            print("Skip triggered constraint generation...")
+            try:
+                system.finalize_constraints()
+                print("Constraint generation complete!")
+                system.workflow_manager.advance_to_next_stage()
+
+                viz_stage = system.workflow_manager.get_current_stage()
+                print(f"Now in stage: {viz_stage}")
+
+                # Generate visualization
+                print("Generating visualization...")
+                output_dir = os.path.join(
+                    system.session_manager.get_session_dir(),
+                    "constraints_visualization.png",
+                )
+                system.constraint_visualization.visualize_constraints(
+                    system.constraints_all, output_path=output_dir
+                )
+                print(f"Visualization complete! Files created at: {output_dir}")
+
+                # Wait briefly to allow frontend to update
+                time.sleep(2)
+
+                # Advance to refinement stage
+                system.workflow_manager.advance_to_next_stage()
+                refinement_stage = system.workflow_manager.get_current_stage()
+                print(f"Advanced to stage: {refinement_stage}")
+            except Exception as e:
+                print(f"Error in constraint generation after skip: {str(e)}")
+                traceback.print_exc()
+
+        threading.Thread(target=generate_constraints, daemon=True).start()
+
+    elif new_stage == system.workflow_manager.STAGE_SOLUTION_GENERATION:
+        # Launch solution generation in a background thread
+        def generate_solution():
+            try:
+                print("Skip triggered solution generation...")
+                system.current_solution = system.call_solver(system.constraints_all)
+                system.session_manager.add_intermediate_state(
+                    f"solution_generation_{system.workflow_manager.current_iteration}",
+                    {"solution": system.current_solution},
+                )
+                print("Solution generation complete!")
+                system.workflow_manager.advance_to_next_stage()
+                refinement_stage = system.workflow_manager.get_current_stage()
+                print(f"Advanced to solution refinement stage: {refinement_stage}")
+            except Exception as e:
+                print(f"Error in solution generation after skip: {str(e)}")
+                traceback.print_exc()
+
+        threading.Thread(target=generate_solution, daemon=True).start()
 
     return {
         "previous_stage": current_stage,
