@@ -380,3 +380,44 @@ async def export_requirements(session_id: str):
         logger.error(f"Error exporting requirements: {str(e)}")
         traceback.print_exc()
         return {"success": False, "error": f"Error exporting requirements: {str(e)}"}
+
+
+@router.get("/logs")
+async def get_session_logs(session_id: str, since: int = 0):
+    """
+    Return the latest logs for a given session.
+    Optional 'since' parameter (int): only return logs after this index.
+    """
+    if not session_id or session_id not in sessions:
+        raise HTTPException(status_code=400, detail="Invalid session")
+
+    system = sessions[session_id]
+    logs = []
+
+    # Try to get logs from session_manager, else fallback to logs.txt file
+    try:
+        if hasattr(system.session_manager, "get_logs"):
+            logs = system.session_manager.get_logs()
+        else:
+            # Fallback: read logs.txt in session dir if exists
+            session_dir = getattr(
+                system.session_manager, "get_session_dir", lambda: None
+            )()
+            if session_dir:
+                log_file = os.path.join(session_dir, "logs.txt")
+                if os.path.exists(log_file):
+                    with open(log_file, "r", encoding="utf-8") as f:
+                        logs = f.read().splitlines()
+    except Exception as e:
+        logger.error(f"Error fetching logs for session {session_id}: {str(e)}")
+        traceback.print_exc()
+        logs = []
+
+    # Only return logs after the given index
+    if since > 0:
+        logs = logs[since:]
+
+    return {
+        "logs": logs,
+        "total": len(logs) + since,
+    }

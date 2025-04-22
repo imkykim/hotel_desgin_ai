@@ -5,6 +5,7 @@ import {
   getChat2PlanState,
   skipStage,
   exportRequirements,
+  getChat2PlanLogs, // <-- add import
 } from "../services/api";
 import "../styles/Chat2PlanInterface.css";
 
@@ -31,10 +32,29 @@ const Chat2PlanInterface = ({
     constraintsTable: null,
     layout: null,
   });
+  const [logs, setLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const [backendLogs, setBackendLogs] = useState([]); // new: backend logs
+  const [backendLogTotal, setBackendLogTotal] = useState(0); // new: backend log index
+
+  // Helper to log to both UI and browser console
+  const logMessage = (msg, type = "INFO") => {
+    const timestamp = new Date().toLocaleString();
+    const formatted = `[${timestamp}] ${type}: ${msg}`;
+    if (type === "ERROR") {
+      // eslint-disable-next-line no-console
+      console.error(formatted);
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(formatted);
+    }
+    setLogs((prev) => [...prev, formatted]);
+  };
 
   // Initialize the session when the component mounts
   useEffect(() => {
     initializeSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Check for requirements file periodically after constraint generation stage
@@ -46,12 +66,10 @@ const Chat2PlanInterface = ({
       !requirementsGenerated &&
       !isGeneratingRequirements
     ) {
-      // Start checking for requirements file
       const interval = setInterval(checkRequirementsFile, 5000);
       setCheckingRequirementsInterval(interval);
       return () => clearInterval(interval);
     } else if (requirementsGenerated && checkingRequirementsInterval) {
-      // Stop checking once we have requirements
       clearInterval(checkingRequirementsInterval);
       setCheckingRequirementsInterval(null);
     }
@@ -60,6 +78,7 @@ const Chat2PlanInterface = ({
     currentStage,
     requirementsGenerated,
     isGeneratingRequirements,
+    checkingRequirementsInterval,
   ]);
 
   // Scroll to bottom of messages when messages change
@@ -76,6 +95,35 @@ const Chat2PlanInterface = ({
 
       return () => clearInterval(interval);
     }
+  }, [sessionId]);
+
+  // Poll backend logs every 2 seconds when session is active
+  useEffect(() => {
+    if (!sessionId) return;
+    let logPoller = null;
+    let isUnmounted = false;
+
+    const pollLogs = async () => {
+      try {
+        const result = await getChat2PlanLogs(sessionId, backendLogTotal);
+        if (!isUnmounted && result.logs && result.logs.length > 0) {
+          setBackendLogs((prev) => [...prev, ...result.logs]);
+          setBackendLogTotal((prev) => prev + result.logs.length);
+        }
+      } catch (e) {
+        // ignore errors
+      }
+    };
+
+    logPoller = setInterval(pollLogs, 2000);
+    // Initial fetch
+    pollLogs();
+
+    return () => {
+      isUnmounted = true;
+      if (logPoller) clearInterval(logPoller);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const scrollToBottom = () => {
@@ -103,11 +151,15 @@ const Chat2PlanInterface = ({
               "Welcome! Please describe any special design requirements or constraints for your hotel project.",
           },
         ]);
+        logMessage(`Chat2Plan session started: ${newSessionId}`);
 
         // Get initial state
         refreshState();
       } else if (response.error) {
-        console.error("Failed to initialize chat session:", response.error);
+        logMessage(
+          `Failed to initialize chat session: ${response.error}`,
+          "ERROR"
+        );
         setMessages([
           {
             role: "system",
@@ -116,7 +168,7 @@ const Chat2PlanInterface = ({
         ]);
       }
     } catch (error) {
-      console.error("Failed to initialize chat session:", error);
+      logMessage(`Failed to initialize chat session: ${error}`, "ERROR");
       setMessages([
         {
           role: "system",
@@ -150,6 +202,7 @@ const Chat2PlanInterface = ({
               "🎉 Hotel requirements have been successfully generated and are ready to use for layout generation! You can now proceed to generate the configuration.",
           },
         ]);
+        logMessage("Hotel requirements file generated and ready.");
 
         // Clear the interval since we found the file
         if (checkingRequirementsInterval) {
@@ -159,11 +212,18 @@ const Chat2PlanInterface = ({
         return true;
       }
     } catch (error) {
-      console.error("Error checking requirements file:", error);
+      logMessage(`Error checking requirements file: ${error}`, "ERROR");
     } finally {
       setIsGeneratingRequirements(false);
     }
     return false;
+  };
+
+  // Only update special_requirements in parent, not the whole form
+  const safeOnRequirementsUpdate = (requirements) => {
+    if (onRequirementsUpdate) {
+      onRequirementsUpdate(requirements);
+    }
   };
 
   const refreshState = async () => {
@@ -173,13 +233,15 @@ const Chat2PlanInterface = ({
       const state = await getChat2PlanState(sessionId);
 
       if (state.error) {
-        console.error("Error getting state:", state.error);
+        logMessage(`Error getting state: ${state.error}`, "ERROR");
         return;
       }
 
       // Update current stage
       if (state.current_stage !== currentStage) {
         setCurrentStage(state.current_stage);
+
+        logMessage(`Stage changed: ${state.current_stage}`);
 
         // If we just moved to constraint visualization or refinement stage,
         // add a system message informing the user
@@ -196,6 +258,9 @@ const Chat2PlanInterface = ({
                   "✅ Constraint generation complete! Processing requirements file...",
               },
             ]);
+            logMessage(
+              "Constraint generation complete, processing requirements file."
+            );
 
             // Trigger immediate check for requirements file
             checkRequirementsFile();
@@ -210,7 +275,7 @@ const Chat2PlanInterface = ({
 
       // Update the user requirements in the parent component
       if (state.user_requirement_guess && onRequirementsUpdate) {
-        onRequirementsUpdate(state.user_requirement_guess);
+        safeOnRequirementsUpdate(state.user_requirement_guess);
       }
 
       // Check for visualizations if we're in later stages
@@ -222,7 +287,7 @@ const Chat2PlanInterface = ({
         // For simplicity, we're not implementing this part in this example
       }
     } catch (error) {
-      console.error("Error refreshing state:", error);
+      logMessage(`Error refreshing state: ${error}`, "ERROR");
     }
   };
 
@@ -234,13 +299,14 @@ const Chat2PlanInterface = ({
 
     // Add user message to chat
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    logMessage(`User: ${userMessage}`);
 
     setIsLoading(true);
     try {
       const response = await sendChat2PlanMessage(sessionId, userMessage);
 
       if (response.error) {
-        console.error("Failed to send message:", response.error);
+        logMessage(`Failed to send message: ${response.error}`, "ERROR");
         setMessages((prev) => [
           ...prev,
           {
@@ -254,20 +320,22 @@ const Chat2PlanInterface = ({
           ...prev,
           { role: "system", content: response.response },
         ]);
+        logMessage(`System: ${response.response}`);
 
-        // Update the requirements in the parent component
+        // Only update special_requirements in parent, not the whole form
         if (response.requirements && onRequirementsUpdate) {
-          onRequirementsUpdate(response.requirements);
+          safeOnRequirementsUpdate(response.requirements);
         }
 
         // Check if stage changed
         if (response.stage_change) {
           setCurrentStage(response.current_stage);
+          logMessage(`Stage changed: ${response.current_stage}`);
           refreshState(); // Refresh state after stage change
         }
       }
     } catch (error) {
-      console.error("Failed to send message:", error);
+      logMessage(`Failed to send message: ${error}`, "ERROR");
       setMessages((prev) => [
         ...prev,
         {
@@ -288,12 +356,13 @@ const Chat2PlanInterface = ({
       const response = await skipStage(sessionId);
 
       if (response.error) {
-        console.error("Failed to skip stage:", response.error);
+        logMessage(`Failed to skip stage: ${response.error}`, "ERROR");
         return;
       }
 
       // Update current stage
       setCurrentStage(response.current_stage);
+      logMessage(`Stage skipped. Now at: ${response.current_stage}`);
 
       // Add message to chat
       setMessages((prev) => [
@@ -314,6 +383,9 @@ const Chat2PlanInterface = ({
               "✅ Constraint generation complete! Processing requirements file...",
           },
         ]);
+        logMessage(
+          "Constraint generation complete, processing requirements file."
+        );
 
         // Trigger immediate check for requirements file
         checkRequirementsFile();
@@ -322,7 +394,7 @@ const Chat2PlanInterface = ({
       // Refresh state
       await refreshState();
     } catch (error) {
-      console.error("Error skipping stage:", error);
+      logMessage(`Error skipping stage: ${error}`, "ERROR");
     } finally {
       setIsLoading(false);
     }
@@ -335,8 +407,76 @@ const Chat2PlanInterface = ({
     }
   };
 
-  return (
-    <div className="chat2plan-interface">
+  // Move the log viewer outside the main chat2plan frame
+  // So, do NOT render the log viewer inside the main <div className="chat2plan-interface">
+  // Instead, export logs and showLogs/setShowLogs via props if needed, or render the log viewer after Chat2PlanInterface in the parent
+
+  // For simplicity, export the log viewer as a named export
+  const LogViewer = (
+    <div style={{ marginTop: "1rem" }}>
+      <button
+        className="btn"
+        style={{
+          background: "#f5f5f5",
+          color: "#333",
+          border: "1px solid #ccc",
+          marginBottom: "0.5rem",
+          fontFamily: "inherit",
+          fontSize: "0.95rem",
+        }}
+        onClick={() => setShowLogs((prev) => !prev)}
+      >
+        {showLogs ? "Hide Logs" : "Show Logs"}
+      </button>
+      {showLogs && (
+        <div
+          style={{
+            background: "#222",
+            color: "#e0e0e0",
+            fontFamily: "monospace",
+            fontSize: "0.95rem",
+            borderRadius: "6px",
+            padding: "1rem",
+            maxHeight: "200px",
+            overflowY: "auto",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          }}
+          data-testid="log-viewer"
+        >
+          {/* Merge backendLogs and UI logs, deduplicate, show newest last */}
+          {(() => {
+            // Merge and deduplicate logs (backend first, then UI logs)
+            const allLogs = [...backendLogs, ...logs];
+            const seen = new Set();
+            const deduped = [];
+            for (const log of allLogs) {
+              if (!seen.has(log)) {
+                seen.add(log);
+                deduped.push(log);
+              }
+            }
+            return deduped.length === 0 ? (
+              <div style={{ color: "#888" }}>No logs yet.</div>
+            ) : (
+              deduped.map((log, idx) => (
+                <div key={idx} style={{ marginBottom: "0.25rem" }}>
+                  {log}
+                </div>
+              ))
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+
+  // Attach the log viewer to the component so parent can use it
+  // (If you want to use it outside, you can do: <Chat2PlanInterface ... ref={ref} /> and then <ref.current.LogViewer />)
+  // But for most React usage, it's easier to just return it as a second element in an array
+
+  // Instead of returning a single <div>, return an array: [chat2plan, logviewer]
+  return [
+    <div className="chat2plan-interface" key="chat2plan">
       {/* Stage indicator */}
       {currentStage && (
         <div className="stage-indicator">
@@ -447,7 +587,7 @@ const Chat2PlanInterface = ({
         <div className="visualizations-panel">
           <div className="panel-header">
             <h4>Visualizations</h4>
-            <span className="toggle-icon">▼</span>
+            <span className="toggle-icon">▼</span>Z
           </div>
           <div className="panel-content">
             {visualizations.roomGraph && (
@@ -459,8 +599,65 @@ const Chat2PlanInterface = ({
           </div>
         </div>
       )}
-    </div>
-  );
+    </div>,
+    <React.Fragment key="logviewer">
+      <div style={{ marginTop: "1rem" }}>
+        <button
+          className="btn"
+          style={{
+            background: "#f5f5f5",
+            color: "#333",
+            border: "1px solid #ccc",
+            marginBottom: "0.5rem",
+            fontFamily: "inherit",
+            fontSize: "0.95rem",
+          }}
+          onClick={() => setShowLogs((prev) => !prev)}
+        >
+          {showLogs ? "Hide Logs" : "Show Logs"}
+        </button>
+        {showLogs && (
+          <div
+            style={{
+              background: "#222",
+              color: "#e0e0e0",
+              fontFamily: "monospace",
+              fontSize: "0.95rem",
+              borderRadius: "6px",
+              padding: "1rem",
+              maxHeight: "200px",
+              overflowY: "auto",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+            }}
+            data-testid="log-viewer"
+          >
+            {/* Merge backendLogs and UI logs, deduplicate, show newest last */}
+            {(() => {
+              // Merge and deduplicate logs (backend first, then UI logs)
+              const allLogs = [...backendLogs, ...logs];
+              const seen = new Set();
+              const deduped = [];
+              for (const log of allLogs) {
+                if (!seen.has(log)) {
+                  seen.add(log);
+                  deduped.push(log);
+                }
+              }
+              return deduped.length === 0 ? (
+                <div style={{ color: "#888" }}>No logs yet.</div>
+              ) : (
+                deduped.map((log, idx) => (
+                  <div key={idx} style={{ marginBottom: "0.25rem" }}>
+                    {log}
+                  </div>
+                ))
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    </React.Fragment>,
+  ];
 };
 
 export default Chat2PlanInterface;

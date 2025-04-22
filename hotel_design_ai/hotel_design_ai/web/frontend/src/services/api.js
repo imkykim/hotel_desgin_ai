@@ -386,3 +386,19 @@ export const exportRequirements = async (sessionId) => {
     return handleApiError(error);
   }
 };
+
+// Fetch backend logs for a session
+export const getChat2PlanLogs = async (sessionId, since = 0) => {
+  try {
+    if (!sessionId) return { logs: [], total: 0 };
+    const response = await fetch(
+      `${API_BASE_URL}/api/chat2plan/logs?session_id=${sessionId}&since=${since}`
+    );
+    if (!response.ok) {
+      return { logs: [], total: since };
+    }
+    return await response.json();
+  } catch (error) {
+    return { logs: [], total: since };
+  }
+};
