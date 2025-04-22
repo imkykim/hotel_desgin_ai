@@ -35,14 +35,25 @@ const Chat2PlanInterface = ({
     initializeSession();
   }, []);
 
-  // Check for requirements file periodically after constraint generation stage
+  // In Chat2PlanInterface.js - Add this effect for logging stage changes
   useEffect(() => {
-    if (sessionId && currentStage === "STAGE_CONSTRAINT_VISUALIZATION") {
-      // Start checking for requirements file
-      const checkInterval = setInterval(checkRequirementsFile, 5000);
-      return () => clearInterval(checkInterval);
+    console.log(`Stage changed to: ${currentStage}`);
+
+    // Force a check whenever we reach a later stage
+    if (
+      sessionId &&
+      !requirementsGenerated &&
+      (currentStage === "STAGE_CONSTRAINT_VISUALIZATION" ||
+        currentStage === "STAGE_SOLUTION_GENERATION" ||
+        currentStage === "STAGE_SOLUTION_VISUALIZATION")
+    ) {
+      console.log("Later stage detected, checking for requirements file...");
+      // Use setTimeout to avoid checking too soon
+      setTimeout(() => {
+        checkRequirementsFile();
+      }, 1000);
     }
-  }, [sessionId, currentStage]);
+  }, [currentStage, sessionId, requirementsGenerated]);
 
   // Scroll to bottom of messages when messages change
   useEffect(() => {
@@ -110,18 +121,19 @@ const Chat2PlanInterface = ({
     }
   };
 
+  // In Chat2PlanInterface.js - Update the checkRequirementsFile function
   const checkRequirementsFile = async () => {
     if (!sessionId || requirementsGenerated || isGeneratingRequirements) return;
 
+    console.log("Checking for requirements file...");
     setIsGeneratingRequirements(true);
     try {
       const result = await exportRequirements(sessionId);
+      console.log("Export requirements result:", result);
 
       if (result.success) {
+        console.log("Requirements file found and exported successfully!");
         setRequirementsGenerated(true);
-
-        // Notify parent that requirements are ready
-        if (onRequirementsReady) onRequirementsReady(result);
 
         // Add a message about requirements being ready
         setMessages((prev) => [
@@ -133,8 +145,15 @@ const Chat2PlanInterface = ({
           },
         ]);
 
-        // Clear the interval since we found the file
+        // Notify parent component that requirements are ready
+        if (onRequirementsReady) {
+          console.log("Calling onRequirementsReady with:", result);
+          onRequirementsReady(result);
+        }
+
         return true;
+      } else {
+        console.log("Requirements file not ready yet:", result.error);
       }
     } catch (error) {
       console.error("Error checking requirements file:", error);
