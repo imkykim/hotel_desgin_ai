@@ -4,10 +4,16 @@ import {
   sendChat2PlanMessage,
   getChat2PlanState,
   skipStage,
+  exportRequirements,
 } from "../services/api";
 import "../styles/Chat2PlanInterface.css";
 
-const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
+const Chat2PlanInterface = ({
+  initialContext,
+  onRequirementsUpdate,
+  onSessionStart,
+  onRequirementsReady,
+}) => {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -15,6 +21,9 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
   const [currentStage, setCurrentStage] = useState(null);
   const [keyQuestions, setKeyQuestions] = useState([]);
   const messagesEndRef = useRef(null);
+  const [requirementsGenerated, setRequirementsGenerated] = useState(false);
+  const [isGeneratingRequirements, setIsGeneratingRequirements] =
+    useState(false);
   const [visualizations, setVisualizations] = useState({
     roomGraph: null,
     constraintsTable: null,
@@ -25,6 +34,15 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
   useEffect(() => {
     initializeSession();
   }, []);
+
+  // Check for requirements file periodically after constraint generation stage
+  useEffect(() => {
+    if (sessionId && currentStage === "STAGE_CONSTRAINT_VISUALIZATION") {
+      // Start checking for requirements file
+      const checkInterval = setInterval(checkRequirementsFile, 5000);
+      return () => clearInterval(checkInterval);
+    }
+  }, [sessionId, currentStage]);
 
   // Scroll to bottom of messages when messages change
   useEffect(() => {
@@ -54,7 +72,12 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
       });
 
       if (response.session_id) {
-        setSessionId(response.session_id);
+        const newSessionId = response.session_id;
+        setSessionId(newSessionId);
+
+        // Call the onSessionStart callback if provided
+        if (onSessionStart) onSessionStart(newSessionId);
+
         setMessages([
           {
             role: "system",
@@ -85,6 +108,40 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const checkRequirementsFile = async () => {
+    if (!sessionId || requirementsGenerated || isGeneratingRequirements) return;
+
+    setIsGeneratingRequirements(true);
+    try {
+      const result = await exportRequirements(sessionId);
+
+      if (result.success) {
+        setRequirementsGenerated(true);
+
+        // Notify parent that requirements are ready
+        if (onRequirementsReady) onRequirementsReady(result);
+
+        // Add a message about requirements being ready
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content:
+              "Hotel requirements have been successfully generated and are ready to use for layout generation!",
+          },
+        ]);
+
+        // Clear the interval since we found the file
+        return true;
+      }
+    } catch (error) {
+      console.error("Error checking requirements file:", error);
+    } finally {
+      setIsGeneratingRequirements(false);
+    }
+    return false;
   };
 
   const refreshState = async () => {
@@ -306,6 +363,21 @@ const Chat2PlanInterface = ({ initialContext, onRequirementsUpdate }) => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Add an indicator for requirements status */}
+      {requirementsGenerated && (
+        <div className="requirements-status success">
+          <span className="status-icon">✓</span>
+          Requirements generated successfully!
+        </div>
+      )}
+
+      {isGeneratingRequirements && (
+        <div className="requirements-status loading">
+          <span className="loading-indicator"></span>
+          Generating requirements file...
         </div>
       )}
 

@@ -227,3 +227,59 @@
   border: 1px solid #dee2e6;
   border-radius: 4px;
 }
+
+/* Requirements status indicators */
+.requirements-status {
+  margin-top: 15px;
+  padding: 10px 15px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.requirements-status.success {
+  background-color: rgba(40, 167, 69, 0.1);
+  border: 1px solid rgba(40, 167, 69, 0.2);
+  color: #28a745;
+}
+
+.requirements-status.pending {
+  background-color: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.requirements-status.loading {
+  background-color: rgba(59, 113, 202, 0.1);
+  border: 1px solid rgba(59, 113, 202, 0.2);
+  color: #3b71ca;
+}
+
+.status-icon {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.loading-indicator {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 3px solid rgba(59, 113, 202, 0.3);
+  border-radius: 50%;
+  border-top-color: #3b71ca;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.button-hint {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: #dc3545;
+  text-align: center;
+}

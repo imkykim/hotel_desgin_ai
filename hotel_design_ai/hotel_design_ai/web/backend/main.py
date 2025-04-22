@@ -186,6 +186,45 @@ async def root():
     return {"message": "Hotel Design AI API is running"}
 
 
+@app.post("/generate-building-config")
+async def generate_building_config(request: Dict = Body(...)):
+    """Generate only building envelope configuration."""
+    try:
+        building_envelope = request.get("building_envelope")
+        filename = request.get("filename")
+
+        if not building_envelope:
+            raise HTTPException(
+                status_code=400, detail="Building envelope data is required"
+            )
+
+        if not filename:
+            # Generate a default filename
+            safe_name = "building"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{safe_name}_{timestamp}.json"
+
+        # Ensure the filename has .json extension
+        if not filename.endswith(".json"):
+            filename += ".json"
+
+        # Save to file
+        with open(BUILDING_DIR / filename, "w") as f:
+            json.dump(building_envelope, f, indent=2)
+
+        return {
+            "success": True,
+            "building_id": filename.replace(".json", ""),
+            "filename": filename,
+            "path": str(BUILDING_DIR / filename),
+        }
+    except Exception as e:
+        logger.error(f"Error generating building config: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error generating building configuration: {str(e)}"
+        )
+
+
 @app.post("/generate-configs")
 async def generate_configs(user_input: UserInput = Body(...)):
     """Generate building envelope and hotel requirements configurations based on user input."""

@@ -10,12 +10,14 @@ import uuid
 import threading
 import time
 import traceback
-
+import shutil
 
 from fastapi import APIRouter, HTTPException, Body, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any
+from pathlib import Path
+from datetime import datetime
 
 # Only add the parent directory of chat2plan_interaction
 chat2plan_parent = "/Users/ky/01_Projects"
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Create router - NOTE: The prefix is now "/api/chat2plan" to match your frontend calls
 router = APIRouter(prefix="/api/chat2plan", tags=["Chat2Plan Integration"])
 sessions = {}
+PROJECT_ROOT = Path(__file__).parents[4]
 
 
 class SessionRequest(BaseModel):
@@ -330,3 +333,50 @@ async def skip_stage(session_request: SessionRequest = Body(...)):
         "current_stage": new_stage,
         "stage_description": system.workflow_manager.get_stage_description(),
     }
+
+
+# In chat2plan_routes.py - Add this function
+@router.get("/export_requirements")
+async def export_requirements(session_id: str):
+    """Export the generated hotel requirements JSON to the Hotel Design AI directory."""
+    if not session_id or session_id not in sessions:
+        raise HTTPException(status_code=400, detail="Invalid session")
+
+    system = sessions[session_id]
+
+    try:
+        # Find the exports directory
+        session_dir = system.session_manager.get_session_dir()
+        exports_dir = os.path.join(session_dir, "exports")
+        source_file = os.path.join(exports_dir, "hotel_requirements.json")
+
+        # Check if file exists
+        if not os.path.exists(source_file):
+            return {"success": False, "error": "Requirements file not yet generated"}
+
+        # Define destination in Hotel Design AI project
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"chat2plan_{timestamp}_requirements.json"
+        dest_dir = os.path.join(PROJECT_ROOT, "data", "program")
+        os.makedirs(dest_dir, exist_ok=True)
+        dest_file = os.path.join(dest_dir, filename)
+
+        # Copy the file
+        shutil.copy(source_file, dest_file)
+
+        # Read the file to return its contents
+        with open(source_file, "r", encoding="utf-8") as f:
+            requirements_data = json.load(f)
+
+        return {
+            "success": True,
+            "requirements": requirements_data,
+            "source_file": source_file,
+            "destination_file": dest_file,
+            "filename": filename,
+            "program_id": filename.replace(".json", ""),
+        }
+    except Exception as e:
+        logger.error(f"Error exporting requirements: {str(e)}")
+        traceback.print_exc()
+        return {"success": False, "error": f"Error exporting requirements: {str(e)}"}
