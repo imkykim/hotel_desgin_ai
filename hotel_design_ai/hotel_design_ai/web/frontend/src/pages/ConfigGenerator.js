@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateConfigs } from "../services/api";
 import Chat2PlanInterface from "../components/Chat2PlanInterface";
@@ -32,20 +32,6 @@ const ConfigGenerator = () => {
   const [sessionId, setSessionId] = useState(null);
   const [requirementsReady, setRequirementsReady] = useState(false);
   const [programId, setProgramId] = useState(null);
-  const [formLocked, setFormLocked] = useState(false);
-
-  // Load saved form data from localStorage on mount
-  useEffect(() => {
-    const savedFormData = localStorage.getItem("hotelConfigFormData");
-    if (savedFormData) {
-      setFormData(JSON.parse(savedFormData));
-    }
-  }, []);
-
-  // Save form data to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem("hotelConfigFormData", JSON.stringify(formData));
-  }, [formData]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -65,26 +51,32 @@ const ConfigGenerator = () => {
       });
     }
   };
-  // Add this function to your ConfigGenerator component
+
+  // Add the missing handleSessionStart function
   const handleSessionStart = (newSessionId) => {
     console.log("Chat2Plan session started:", newSessionId);
     setSessionId(newSessionId);
   };
+
+  const handleRequirementsUpdate = (requirements) => {
+    console.log("Requirements updated:", requirements);
+    // Update form data with the latest requirements
+    setFormData((prev) => ({
+      ...prev,
+      special_requirements: requirements,
+    }));
+  };
+
   const handleRequirementsReady = (result) => {
-    console.log("Requirements ready called with:", result);
-    setRequirementsReady(true); // This should enable the button
+    console.log("Requirements ready:", result);
+    setRequirementsReady(true);
     setProgramId(result.program_id);
 
-    // Update form data with program ID
+    // Update the form data with the program ID
     setFormData((prev) => ({
       ...prev,
       program_id: result.program_id,
     }));
-
-    // Show a success message to the user
-    alert(
-      `Hotel requirements generated successfully! Program ID: ${result.program_id}`
-    );
   };
 
   const handleSubmit = async (e) => {
@@ -133,7 +125,8 @@ const ConfigGenerator = () => {
       };
 
       // Generate a unique name for the building config
-      const safe_name = formData.hotel_name.toLowerCase().replace(/\s+/g, "_");
+      const safe_name =
+        formData.hotel_name.toLowerCase().replace(/\s+/g, "_") || "hotel";
       const timestamp = new Date()
         .toISOString()
         .replace(/[-:.TZ]/g, "")
@@ -210,14 +203,6 @@ const ConfigGenerator = () => {
     return "An unknown error occurred";
   };
 
-  // Use this improved handler to avoid overwriting the whole formData
-  const handleRequirementsUpdate = (requirements) => {
-    setFormData((prevFormData) => ({
-      ...prevFormData,
-      special_requirements: requirements,
-    }));
-  };
-
   return (
     <div className="container">
       <div className="config-form">
@@ -247,7 +232,6 @@ const ConfigGenerator = () => {
                   className="form-control"
                   value={formData.hotel_name}
                   onChange={handleChange}
-                  disabled={formLocked}
                   required
                 />
               </div>
@@ -262,7 +246,6 @@ const ConfigGenerator = () => {
                       className="form-control"
                       value={formData.hotel_type}
                       onChange={handleChange}
-                      disabled={formLocked}
                     >
                       <option value="luxury">Luxury</option>
                       <option value="business">Business</option>
@@ -283,7 +266,6 @@ const ConfigGenerator = () => {
                       value={formData.num_rooms}
                       onChange={handleNumericChange}
                       min="1"
-                      disabled={formLocked}
                       required
                     />
                   </div>
@@ -311,7 +293,6 @@ const ConfigGenerator = () => {
                       min="0"
                       step="0.1"
                       placeholder="Auto"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -328,7 +309,6 @@ const ConfigGenerator = () => {
                       min="0"
                       step="0.1"
                       placeholder="Auto"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -345,7 +325,6 @@ const ConfigGenerator = () => {
                       min="0"
                       step="0.1"
                       placeholder="Auto"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -364,7 +343,6 @@ const ConfigGenerator = () => {
                       value={formData.min_floor}
                       onChange={handleNumericChange}
                       placeholder="-2"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -379,7 +357,6 @@ const ConfigGenerator = () => {
                       value={formData.max_floor}
                       onChange={handleNumericChange}
                       placeholder="20"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -396,7 +373,6 @@ const ConfigGenerator = () => {
                       min="2.5"
                       step="0.1"
                       required
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -419,7 +395,6 @@ const ConfigGenerator = () => {
                       placeholder="8"
                       min="0"
                       step="0.1"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -438,7 +413,6 @@ const ConfigGenerator = () => {
                       placeholder="8"
                       min="0"
                       step="0.1"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -460,7 +434,6 @@ const ConfigGenerator = () => {
                       placeholder="1"
                       min="0.1"
                       step="0.1"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -480,7 +453,6 @@ const ConfigGenerator = () => {
                       value={formData.podium_min_floor}
                       onChange={handleNumericChange}
                       placeholder="-2"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -495,7 +467,6 @@ const ConfigGenerator = () => {
                       value={formData.podium_max_floor}
                       onChange={handleNumericChange}
                       placeholder="1"
-                      disabled={formLocked}
                     />
                   </div>
                 </div>
@@ -552,31 +523,10 @@ const ConfigGenerator = () => {
                 {loading ? "Generating..." : "Generate Configuration"}
               </button>
 
-              {requirementsReady ? (
-                <div className="requirements-status success">
-                  <span className="status-icon">✓</span>
-                  Requirements ready! Program ID: {programId}
+              {!requirementsReady && (
+                <div className="button-hint">
+                  <p>Complete the Chat2Plan process to enable this button</p>
                 </div>
-              ) : (
-                <div className="requirements-status pending">
-                  <span className="status-icon">⚠️</span>
-                  Waiting for requirements file...
-                </div>
-              )}
-            </div>
-            <div className="form-actions">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setFormLocked(true)}
-                disabled={formLocked}
-              >
-                Lock Form Values
-              </button>
-              {formLocked && (
-                <span className="success-text" style={{ marginLeft: "1rem" }}>
-                  Form values locked
-                </span>
               )}
             </div>
           </form>
@@ -623,5 +573,3 @@ const ConfigGenerator = () => {
     </div>
   );
 };
-
-export default ConfigGenerator;

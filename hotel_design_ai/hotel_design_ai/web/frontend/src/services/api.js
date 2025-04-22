@@ -357,20 +357,32 @@ export const modifyLayout = async (data) => {
 
 export const exportRequirements = async (sessionId) => {
   try {
+    // Make sure we have a valid session ID
+    if (!sessionId) {
+      return { success: false, error: "Invalid session ID" };
+    }
+
+    // Call the server endpoint to export requirements
     const response = await fetch(
       `${API_BASE_URL}/api/chat2plan/export_requirements?session_id=${sessionId}`
     );
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error("Export requirements error:", errorData);
       return {
         success: false,
         error: errorData.detail || "Failed to export requirements",
       };
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log("Successfully exported requirements:", result);
+
+    // Return the successful result including program_id
+    return result;
   } catch (error) {
+    console.error("Error exporting requirements:", error);
     return handleApiError(error);
   }
 };

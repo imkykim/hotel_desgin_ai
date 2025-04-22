@@ -24,6 +24,8 @@ const Chat2PlanInterface = ({
   const [requirementsGenerated, setRequirementsGenerated] = useState(false);
   const [isGeneratingRequirements, setIsGeneratingRequirements] =
     useState(false);
+  const [checkingRequirementsInterval, setCheckingRequirementsInterval] =
+    useState(null);
   const [visualizations, setVisualizations] = useState({
     roomGraph: null,
     constraintsTable: null,
@@ -35,25 +37,30 @@ const Chat2PlanInterface = ({
     initializeSession();
   }, []);
 
-  // In Chat2PlanInterface.js - Add this effect for logging stage changes
+  // Check for requirements file periodically after constraint generation stage
   useEffect(() => {
-    console.log(`Stage changed to: ${currentStage}`);
-
-    // Force a check whenever we reach a later stage
     if (
       sessionId &&
-      !requirementsGenerated &&
       (currentStage === "STAGE_CONSTRAINT_VISUALIZATION" ||
-        currentStage === "STAGE_SOLUTION_GENERATION" ||
-        currentStage === "STAGE_SOLUTION_VISUALIZATION")
+        currentStage === "STAGE_CONSTRAINT_REFINEMENT") &&
+      !requirementsGenerated &&
+      !isGeneratingRequirements
     ) {
-      console.log("Later stage detected, checking for requirements file...");
-      // Use setTimeout to avoid checking too soon
-      setTimeout(() => {
-        checkRequirementsFile();
-      }, 1000);
+      // Start checking for requirements file
+      const interval = setInterval(checkRequirementsFile, 5000);
+      setCheckingRequirementsInterval(interval);
+      return () => clearInterval(interval);
+    } else if (requirementsGenerated && checkingRequirementsInterval) {
+      // Stop checking once we have requirements
+      clearInterval(checkingRequirementsInterval);
+      setCheckingRequirementsInterval(null);
     }
-  }, [currentStage, sessionId, requirementsGenerated]);
+  }, [
+    sessionId,
+    currentStage,
+    requirementsGenerated,
+    isGeneratingRequirements,
+  ]);
 
   // Scroll to bottom of messages when messages change
   useEffect(() => {
@@ -121,19 +128,18 @@ const Chat2PlanInterface = ({
     }
   };
 
-  // In Chat2PlanInterface.js - Update the checkRequirementsFile function
   const checkRequirementsFile = async () => {
     if (!sessionId || requirementsGenerated || isGeneratingRequirements) return;
 
-    console.log("Checking for requirements file...");
     setIsGeneratingRequirements(true);
     try {
       const result = await exportRequirements(sessionId);
-      console.log("Export requirements result:", result);
 
       if (result.success) {
-        console.log("Requirements file found and exported successfully!");
         setRequirementsGenerated(true);
+
+        // Notify parent that requirements are ready
+        if (onRequirementsReady) onRequirementsReady(result);
 
         // Add a message about requirements being ready
         setMessages((prev) => [
@@ -141,19 +147,16 @@ const Chat2PlanInterface = ({
           {
             role: "system",
             content:
-              "Hotel requirements have been successfully generated and are ready to use for layout generation!",
+              "🎉 Hotel requirements have been successfully generated and are ready to use for layout generation! You can now proceed to generate the configuration.",
           },
         ]);
 
-        // Notify parent component that requirements are ready
-        if (onRequirementsReady) {
-          console.log("Calling onRequirementsReady with:", result);
-          onRequirementsReady(result);
+        // Clear the interval since we found the file
+        if (checkingRequirementsInterval) {
+          clearInterval(checkingRequirementsInterval);
+          setCheckingRequirementsInterval(null);
         }
-
         return true;
-      } else {
-        console.log("Requirements file not ready yet:", result.error);
       }
     } catch (error) {
       console.error("Error checking requirements file:", error);
@@ -177,6 +180,27 @@ const Chat2PlanInterface = ({
       // Update current stage
       if (state.current_stage !== currentStage) {
         setCurrentStage(state.current_stage);
+
+        // If we just moved to constraint visualization or refinement stage,
+        // add a system message informing the user
+        if (
+          state.current_stage === "STAGE_CONSTRAINT_VISUALIZATION" ||
+          state.current_stage === "STAGE_CONSTRAINT_REFINEMENT"
+        ) {
+          if (currentStage === "STAGE_CONSTRAINT_GENERATION") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "system",
+                content:
+                  "✅ Constraint generation complete! Processing requirements file...",
+              },
+            ]);
+
+            // Trigger immediate check for requirements file
+            checkRequirementsFile();
+          }
+        }
       }
 
       // Update key questions
@@ -256,7 +280,6 @@ const Chat2PlanInterface = ({
     }
   };
 
-  // Find the skipStage function in your component
   const handleSkipStage = async () => {
     if (!sessionId) return;
 
@@ -278,6 +301,24 @@ const Chat2PlanInterface = ({
         { role: "system", content: "Skipping to next stage..." },
       ]);
 
+      // If we're moving to constraint visualization or refinement, check for requirements
+      if (
+        response.current_stage === "STAGE_CONSTRAINT_VISUALIZATION" ||
+        response.current_stage === "STAGE_CONSTRAINT_REFINEMENT"
+      ) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content:
+              "✅ Constraint generation complete! Processing requirements file...",
+          },
+        ]);
+
+        // Trigger immediate check for requirements file
+        checkRequirementsFile();
+      }
+
       // Refresh state
       await refreshState();
     } catch (error) {
@@ -287,7 +328,6 @@ const Chat2PlanInterface = ({
     }
   };
 
-  // Add this function inside your Chat2PlanInterface component
   const handleKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault(); // Prevent default to avoid new line
@@ -410,7 +450,6 @@ const Chat2PlanInterface = ({
             <span className="toggle-icon">▼</span>
           </div>
           <div className="panel-content">
-            {/* Visualizations would go here */}
             {visualizations.roomGraph && (
               <div className="visualization">
                 <h5>Room Graph</h5>
