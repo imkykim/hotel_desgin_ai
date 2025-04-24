@@ -342,12 +342,11 @@ import scriptcontext as sc
 import Rhino
 import System.Guid
 
-# Clear the document
-if not rs.IsDocumentModified():
-    rs.Command("_-New _None", False)
-else:
-    if rs.MessageBox("Clear existing geometry?", 4 | 32) == 6:
-        rs.Command("_-New _None", False)
+# explicitly target the already-open document
+sc.doc = Rhino.RhinoDoc.ActiveDoc
+
+# (Optional) clear existing geometry in this file
+# rs.DeleteObjects( rs.AllObjects() )
 
 # Create layers for different room types
 def create_layer(name, color):

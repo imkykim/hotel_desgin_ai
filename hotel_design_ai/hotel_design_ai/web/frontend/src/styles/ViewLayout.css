@@ -560,3 +560,47 @@
 .visualization-image:hover {
   transform: scale(1.03);
 }
+
+/* Rhino Export Section */
+.rhino-export-section {
+  background-color: #f0f7ff;
+  border-radius: 8px;
+  border-left: 4px solid #3b71ca;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.btn-rhino-export {
+  background-color: #3b71ca;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 0.2s;
+  margin-bottom: 1rem;
+}
+
+.btn-rhino-export:hover {
+  background-color: #2c5ebd;
+}
+
+.btn-rhino-export:disabled {
+  background-color: #adb5bd;
+  cursor: not-allowed;
+}
+
+.export-icon {
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.export-instructions {
+  font-size: 0.9rem;
+  color: #495057;
+  margin: 0;
+}

@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import pandas as pd
+import traceback
 
 from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse, FileResponse
@@ -392,4 +393,76 @@ async def visualize_layout(layout_id: str):
                 "success": False,
                 "error": f"Error generating layout visualizations: {str(e)}",
             },
+        )
+
+
+@router.get("/export-rhino-script/{layout_id}")
+async def export_rhino_script(layout_id: str):
+    """Export a Python script that can be run in Rhino to create the layout."""
+    try:
+        # Check if layout exists
+        layout_dir = LAYOUTS_DIR / layout_id
+        layout_file = layout_dir / "hotel_layout.json"
+
+        if not layout_file.exists():
+            raise HTTPException(status_code=404, detail=f"Layout {layout_id} not found")
+
+        # Load layout data
+        with open(layout_file, "r") as f:
+            layout_data = json.load(f)
+
+        # Create output file
+        script_file = layout_dir / f"hotel_layout_{layout_id}_rhino.py"
+
+        # Generate the Rhino Python script
+        try:
+            from hotel_design_ai.visualization.export import export_to_rhino
+
+            # Create a SpatialGrid object from the layout data
+            spatial_grid = SpatialGrid(
+                width=layout_data.get("width", 80),
+                length=layout_data.get("length", 120),
+                height=layout_data.get("height", 30),
+                grid_size=layout_data.get("grid_size", 1.0),
+            )
+
+            # Add rooms from the layout data
+            for room_id, room_data in layout_data.get("rooms", {}).items():
+                room_id_int = int(room_id)
+                position = room_data.get("position", [0, 0, 0])
+                dimensions = room_data.get("dimensions", [0, 0, 0])
+                room_type = room_data.get("type", "default")
+                metadata = room_data.get("metadata", {})
+
+                # Add the room to the spatial grid
+                spatial_grid.place_room(
+                    room_id=room_id_int,
+                    x=position[0],
+                    y=position[1],
+                    z=position[2],
+                    width=dimensions[0],
+                    length=dimensions[1],
+                    height=dimensions[2],
+                    room_type=room_type,
+                    metadata=metadata,
+                )
+
+            # Export to Rhino script
+            export_to_rhino(spatial_grid, str(script_file))
+
+            # Return the file as a download response
+            return FileResponse(
+                path=script_file,
+                filename=f"hotel_layout_{layout_id}_rhino.py",
+                media_type="text/x-python",
+            )
+        except ImportError as e:
+            logger.error(f"Error importing export modules: {e}")
+            raise HTTPException(status_code=500, detail="Export module not available")
+
+    except Exception as e:
+        logger.error(f"Error exporting to Rhino script: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, detail=f"Error exporting to Rhino script: {str(e)}"
         )

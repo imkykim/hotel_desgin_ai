@@ -218,3 +218,73 @@
     transform: rotate(360deg);
   }
 }
+
+/* Add these styles to your existing InteractiveLayout.css file */
+
+.selection-mode-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 15px 20px 15px;
+}
+
+.mode-button {
+  padding: 10px 15px;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+  margin: 0 5px;
+  font-weight: 500;
+}
+
+.mode-button.active {
+  background-color: #3b71ca;
+  color: white;
+  border-color: #3b71ca;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.mode-button:hover:not(.active) {
+  background-color: #e9ecef;
+}
+
+.fixed-elements-summary {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.fixed-elements-summary h3 {
+  color: #3b71ca;
+  margin-bottom: 15px;
+}
+
+.fixed-elements-summary h4 {
+  color: #495057;
+  margin: 10px 0;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 5px;
+}
+
+.fixed-elements-summary ul {
+  list-style-type: none;
+  padding-left: 10px;
+}
+
+.fixed-elements-summary li {
+  padding: 5px 0;
+  color: #495057;
+}
+
+/* Update the selection colors in the canvas */
+.canvas-container .entrance {
+  background-color: #ff9800 !important; /* Orange */
+}
+
+.canvas-container .core {
+  background-color: #f44336 !important; /* Red */
+}

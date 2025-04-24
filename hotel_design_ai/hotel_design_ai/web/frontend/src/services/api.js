@@ -430,3 +430,48 @@ export const updateBuildingConfig = async (buildingId, configData) => {
     return handleApiError(error);
   }
 };
+
+// Export layout to Rhino script
+export const exportLayoutToRhinoScript = async (layoutId) => {
+  try {
+    // This will trigger a file download, so we use a different approach
+    const response = await fetch(
+      `${API_BASE_URL}/visualize-layout/export-rhino-script/${layoutId}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+      return {
+        success: false,
+        error:
+          errorData.detail ||
+          `Failed to export Rhino script (${response.status})`,
+      };
+    }
+
+    // Get the file blob
+    const blob = await response.blob();
+
+    // Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = `hotel_layout_${layoutId}_rhino.py`;
+
+    // Append to the document and trigger the download
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error exporting to Rhino:", error);
+    return handleApiError(error);
+  }
+};
