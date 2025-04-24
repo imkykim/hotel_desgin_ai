@@ -3,34 +3,48 @@ Main FastAPI application for Hotel Design AI web backend.
 """
 
 import os
+import sys
+import json
+import logging
+import uuid
+import traceback
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
+
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator
-import httpx
-import json
-import logging
-from pathlib import Path
-import sys
-import uuid
-import traceback
-from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import custom route modules
-from routes import files
-from routes import visualization_routes
-from routes import configuration_routes
-from routes import layout_visualization_routes
-from routes import chat2plan_routes
+# Define project paths
+PROJECT_ROOT = Path(__file__).parents[3].absolute()
+sys.path.append(str(PROJECT_ROOT))
 
-# Add project root to system path
-project_root = Path(__file__).parents[3]
-sys.path.append(str(project_root))
+# Define data directories
+DATA_DIR = PROJECT_ROOT / "data"
+BUILDING_DIR = DATA_DIR / "building"
+PROGRAM_DIR = DATA_DIR / "program"
+FIX_DIR = DATA_DIR / "fix"
+
+USER_DATA_DIR = PROJECT_ROOT / "user_data"
+LAYOUTS_DIR = USER_DATA_DIR / "layouts"
+VISUALIZATIONS_DIR = USER_DATA_DIR / "visualizations"
+
+# Ensure all directories exist
+for dir_path in [
+    BUILDING_DIR,
+    PROGRAM_DIR,
+    FIX_DIR,
+    USER_DATA_DIR,
+    LAYOUTS_DIR,
+    VISUALIZATIONS_DIR,
+]:
+    dir_path.mkdir(parents=True, exist_ok=True)
 
 # Import core functionality
 from hotel_design_ai.core.rule_engine import RuleEngine
@@ -46,9 +60,12 @@ from hotel_design_ai.config.config_loader import (
 )
 from hotel_design_ai.utils.metrics import LayoutMetrics
 
-# Import routes
-from hotel_design_ai.web.backend.routes import files
-from hotel_design_ai.web.backend.routes import chat2plan_routes
+# Import route modules
+from routes import files
+from routes import visualization_routes
+from routes import configuration_routes
+from routes import layout_visualization_routes
+from routes import chat2plan_routes
 
 # Initialize FastAPI app
 app = FastAPI(title="Hotel Design AI Configuration Generator")
@@ -62,29 +79,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define paths to save generated configurations
-# Changed to use project_root for consistency
-PROJECT_ROOT = Path(__file__).parents[3].absolute()
-DATA_DIR = PROJECT_ROOT / "data"
-BUILDING_DIR = DATA_DIR / "building"
-PROGRAM_DIR = DATA_DIR / "program"
-
-USER_DATA_DIR = PROJECT_ROOT / "user_data"
-LAYOUTS_DIR = USER_DATA_DIR / "layouts"
-
-
-# Ensure directories exist
-for dir_path in [BUILDING_DIR, PROGRAM_DIR, USER_DATA_DIR, LAYOUTS_DIR]:
-    dir_path.mkdir(parents=True, exist_ok=True)
-
-# Mount with explicit absolute path
-print(f"Mounting static files from: {LAYOUTS_DIR}")
+# Mount static file directories
+logger.info(f"Mounting static files from: {LAYOUTS_DIR}")
 app.mount("/layouts", StaticFiles(directory=str(LAYOUTS_DIR)), name="layouts")
 
-# Mount visualizations directory
-VISUALIZATIONS_DIR = USER_DATA_DIR / "visualizations"
-VISUALIZATIONS_DIR.mkdir(exist_ok=True)
-print(f"Mounting visualizations from: {VISUALIZATIONS_DIR}")
+logger.info(f"Mounting visualizations from: {VISUALIZATIONS_DIR}")
 app.mount(
     "/visualizations",
     StaticFiles(directory=str(VISUALIZATIONS_DIR)),
@@ -209,7 +208,7 @@ async def generate_building_config(request: Dict = Body(...)):
         if not filename.endswith(".json"):
             filename += ".json"
 
-        # Save to file - modified to use PROJECT_ROOT path
+        # Save to file
         filepath = BUILDING_DIR / filename
         with open(filepath, "w") as f:
             json.dump(building_envelope, f, indent=2)
@@ -317,7 +316,7 @@ async def generate_configs(user_input: UserInput = Body(...)):
         building_filename = f"{safe_name}_building.json"
         requirements_filename = f"{safe_name}_requirements.json"
 
-        # Save to files - using PROJECT_ROOT paths for both files
+        # Save to files
         building_filepath = BUILDING_DIR / building_filename
         with open(building_filepath, "w") as f:
             json.dump(building_envelope, f, indent=2)
@@ -387,6 +386,50 @@ async def update_building_config(request: Dict = Body(...)):
         logger.error(f"Error updating building config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Error updating building configuration: {str(e)}"
+        )
+
+
+@app.post("/save-fixed-elements")
+async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
+    """Save fixed elements to a JSON file."""
+    try:
+        building_id = data.get("building_id")
+        fixed_elements = data.get("fixed_elements")
+
+        if not building_id or not fixed_elements:
+            raise HTTPException(
+                status_code=400,
+                detail="Building ID and fixed elements data are required",
+            )
+
+        # Create filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{building_id}_{timestamp}_fixed_rooms.json"
+
+        # Save to file
+        filepath = FIX_DIR / filename
+
+        with open(filepath, "w") as f:
+            json.dump(fixed_elements, f, indent=2)
+
+        logger.info(f"Fixed elements saved to: {filepath}")
+
+        # Also save to the default fixed_rooms.json which is loaded by the engine
+        default_filepath = FIX_DIR / "fixed_rooms.json"
+        with open(default_filepath, "w") as f:
+            json.dump(fixed_elements, f, indent=2)
+
+        logger.info(f"Fixed elements also saved to default path: {default_filepath}")
+
+        return {
+            "success": True,
+            "message": "Fixed elements saved successfully",
+            "filepath": str(filepath),
+        }
+    except Exception as e:
+        logger.error(f"Error saving fixed elements: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error saving fixed elements: {str(e)}"
         )
 
 

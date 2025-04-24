@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getLayout, generateLayoutVisualizations } from "../services/api";
+import {
+  getLayout,
+  generateLayoutVisualizations,
+  exportLayoutToRhinoScript,
+} from "../services/api";
 import "../styles/ViewLayout.css";
 
 const ViewLayout = () => {
@@ -413,7 +417,26 @@ const ViewLayout = () => {
       ? `No Basement ${Math.abs(floorNum)} Plan Available`
       : `No Floor ${floorNum} Plan Available`;
   };
+  const handleExportToRhino = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
+      const result = await exportLayoutToRhinoScript(layoutId);
+
+      if (result.success) {
+        setSuccess(
+          "Rhino script exported successfully. Open the script in Rhino using the RunPythonScript command."
+        );
+      } else {
+        setError(result.error || "Failed to export Rhino script");
+      }
+    } catch (err) {
+      setError("Error exporting to Rhino: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
   // Render room distribution for the blue box area
   const renderRoomDistribution = () => {
     return (
@@ -662,6 +685,20 @@ const ViewLayout = () => {
             )}
 
             {detailedMetrics && renderDetailedMetrics()}
+            {/* Rhino Export Button - Add this part below the detailed metrics */}
+            <div className="rhino-export-section">
+              <button
+                className="btn-rhino-export"
+                onClick={handleExportToRhino}
+                disabled={loading}
+              >
+                <span className="export-icon">🦏</span> Open in Rhino
+              </button>
+              <p className="export-instructions">
+                This will download a Python script that you can run in
+                Rhinoceros 3D using the RunPythonScript command.
+              </p>
+            </div>
           </div>
 
           <div className="layout-actions">

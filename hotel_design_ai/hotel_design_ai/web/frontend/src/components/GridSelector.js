@@ -6,6 +6,8 @@ const GridSelector = ({
   buildingLength = 120,
   gridSize = 8,
   onSelectionChange = () => {},
+  onFixedElementSelect = () => {},
+  selectionMode = "standard", // 'standard', 'entrance', 'core'
 }) => {
   // Calculate grid dimensions
   const gridCellsX = Math.floor(buildingWidth / gridSize);
@@ -13,9 +15,11 @@ const GridSelector = ({
 
   // State for selected cells
   const [selectedCells, setSelectedCells] = useState(new Set());
+  const [entranceCells, setEntranceCells] = useState(new Set());
+  const [coreCells, setCoreCells] = useState(new Set());
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState(null);
-  const [selectionMode, setSelectionMode] = useState("add"); // 'add' or 'remove'
+  const [selectionModeInternal, setSelectionModeInternal] = useState("add"); // 'add' or 'remove'
 
   const canvasRef = useRef(null);
 
@@ -29,7 +33,7 @@ const GridSelector = ({
     const aspectRatio = buildingWidth / buildingLength;
 
     // Set a reasonable canvas size while maintaining proportions
-    const CELL_SIZE = 50; // Increase this value for bigger grid cells (was 15)
+    const CELL_SIZE = 50; // Increase this value for bigger grid cells
     if (aspectRatio > 1) {
       canvas.width = Math.min(1200, gridCellsX * CELL_SIZE);
       canvas.height = canvas.width / aspectRatio;
@@ -55,8 +59,32 @@ const GridSelector = ({
       for (let y = 0; y < gridCellsY; y++) {
         const cellKey = `${x},${y}`;
         const isSelected = selectedCells.has(cellKey);
+        const isEntrance = entranceCells.has(cellKey);
+        const isCore = coreCells.has(cellKey);
 
-        ctx.fillStyle = isSelected ? "#3B71CA" : "#f8f9fa";
+        // Determine cell color based on what it represents
+        if (isEntrance) {
+          ctx.fillStyle = "#FF9800"; // Orange for entrance
+        } else if (isCore) {
+          ctx.fillStyle = "#F44336"; // Red for core
+        } else if (isSelected) {
+          ctx.fillStyle = "#3B71CA"; // Blue for standard floors
+        } else {
+          ctx.fillStyle = "#f8f9fa"; // Default background
+        }
+
+        // Highlight active selection mode
+        if (selectionMode === "entrance" && isEntrance) {
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#FF9800";
+        } else if (selectionMode === "core" && isCore) {
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#F44336";
+        } else {
+          ctx.lineWidth = 0.5;
+          ctx.strokeStyle = "#000";
+        }
+
         ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
       }
@@ -66,9 +94,18 @@ const GridSelector = ({
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, gridCellsX * cellSize, gridCellsY * cellSize);
-  }, [selectedCells, gridCellsX, gridCellsY, buildingWidth, buildingLength]);
+  }, [
+    selectedCells,
+    entranceCells,
+    coreCells,
+    gridCellsX,
+    gridCellsY,
+    buildingWidth,
+    buildingLength,
+    selectionMode,
+  ]);
 
-  // Handle mouse interactions for selection
+  // Handle mouse down for room selection and dragging
   const handleMouseDown = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -83,17 +120,58 @@ const GridSelector = ({
     setIsSelecting(true);
     setSelectionStart({ x, y });
 
-    // Determine selection mode based on whether cell is already selected
     const cellKey = `${x},${y}`;
-    if (selectedCells.has(cellKey)) {
-      setSelectionMode("remove");
+
+    // Determine which selection we're working with based on mode
+    if (selectionMode === "entrance") {
+      // For entrance and core, we only want single cells (not dragging)
+      if (entranceCells.has(cellKey)) {
+        setSelectionModeInternal("remove");
+        const newEntranceCells = new Set(entranceCells);
+        newEntranceCells.delete(cellKey);
+        setEntranceCells(newEntranceCells);
+      } else {
+        setSelectionModeInternal("add");
+        // Clear previous entrance cells (we only want one)
+        setEntranceCells(new Set([cellKey]));
+      }
+      // Update parent component
+      const gridCoords = { x: x * gridSize, y: y * gridSize };
+      onFixedElementSelect("entrance", gridCoords);
+
+      // No dragging needed for fixed elements
+      setIsSelecting(false);
+    } else if (selectionMode === "core") {
+      if (coreCells.has(cellKey)) {
+        setSelectionModeInternal("remove");
+        const newCoreCells = new Set(coreCells);
+        newCoreCells.delete(cellKey);
+        setCoreCells(newCoreCells);
+      } else {
+        setSelectionModeInternal("add");
+        // For core, we might want to allow multiple cores
+        const newCoreCells = new Set(coreCells);
+        newCoreCells.add(cellKey);
+        setCoreCells(newCoreCells);
+      }
+      // Update parent component
+      const gridCoords = { x: x * gridSize, y: y * gridSize };
+      onFixedElementSelect("core", gridCoords);
+
+      // No dragging needed for fixed elements
+      setIsSelecting(false);
     } else {
-      setSelectionMode("add");
+      // Standard floor zone selection - check if cell is already selected
+      if (selectedCells.has(cellKey)) {
+        setSelectionModeInternal("remove");
+      } else {
+        setSelectionModeInternal("add");
+      }
     }
   };
 
   const handleMouseMove = (e) => {
-    if (!isSelecting || !selectionStart) return;
+    if (!isSelecting || !selectionStart || selectionMode !== "standard") return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -118,7 +196,7 @@ const GridSelector = ({
     for (let x = startX; x <= endX; x++) {
       for (let y = startY; y <= endY; y++) {
         const cellKey = `${x},${y}`;
-        if (selectionMode === "add") {
+        if (selectionModeInternal === "add") {
           newSelection.add(cellKey);
         } else {
           newSelection.delete(cellKey);
@@ -130,29 +208,44 @@ const GridSelector = ({
   };
 
   const handleMouseUp = () => {
+    if (!isSelecting) return;
+
     setIsSelecting(false);
 
-    // Convert selected cells to grid coordinates and notify parent
-    const selectedGridAreas = Array.from(selectedCells).map((key) => {
-      const [x, y] = key.split(",").map(Number);
-      return {
-        x: x * gridSize,
-        y: y * gridSize,
-        width: gridSize,
-        height: gridSize,
-      };
-    });
+    // Only update parent for standard floor zones
+    if (selectionMode === "standard") {
+      // Convert selected cells to grid coordinates and notify parent
+      const selectedGridAreas = Array.from(selectedCells).map((key) => {
+        const [x, y] = key.split(",").map(Number);
+        return {
+          x: x * gridSize,
+          y: y * gridSize,
+          width: gridSize,
+          height: gridSize,
+        };
+      });
 
-    onSelectionChange(selectedGridAreas);
+      onSelectionChange(selectedGridAreas);
+    }
   };
 
   const clearSelection = () => {
-    setSelectedCells(new Set());
-    onSelectionChange([]);
+    if (selectionMode === "entrance") {
+      setEntranceCells(new Set());
+      onFixedElementSelect("entrance", null);
+    } else if (selectionMode === "core") {
+      setCoreCells(new Set());
+      onFixedElementSelect("core", null);
+    } else {
+      setSelectedCells(new Set());
+      onSelectionChange([]);
+    }
   };
 
-  // Fill entire area
+  // Fill entire area (only for standard floor zones)
   const selectAll = () => {
+    if (selectionMode !== "standard") return;
+
     const allCells = new Set();
     for (let x = 0; x < gridCellsX; x++) {
       for (let y = 0; y < gridCellsY; y++) {
@@ -176,10 +269,19 @@ const GridSelector = ({
 
   return (
     <div className="grid-selector">
-      <h3>Standard Floor Zone Selection</h3>
+      <h3>
+        {selectionMode === "entrance"
+          ? "Select Entrance/Lobby Position"
+          : selectionMode === "core"
+          ? "Select Core Circulation Position"
+          : "Standard Floor Zone Selection"}
+      </h3>
       <p>
-        Select the areas that will contain standard floors (guest rooms and
-        core)
+        {selectionMode === "entrance"
+          ? "Click on the grid to place the main entrance/lobby (orange)"
+          : selectionMode === "core"
+          ? "Click on the grid to place vertical circulation cores (red)"
+          : "Select the areas that will contain standard floors (guest rooms and core)"}
       </p>
 
       <div className="canvas-container">
@@ -196,11 +298,18 @@ const GridSelector = ({
 
       <div className="controls">
         <button onClick={clearSelection} className="btn btn-secondary">
-          Clear Selection
+          Clear{" "}
+          {selectionMode === "standard"
+            ? "Selection"
+            : selectionMode === "entrance"
+            ? "Entrance"
+            : "Cores"}
         </button>
-        <button onClick={selectAll} className="btn btn-primary">
-          Select All
-        </button>
+        {selectionMode === "standard" && (
+          <button onClick={selectAll} className="btn btn-primary">
+            Select All
+          </button>
+        )}
       </div>
 
       <div className="statistics">
@@ -208,7 +317,18 @@ const GridSelector = ({
           Building dimensions: {buildingWidth}m × {buildingLength}m
         </p>
         <p>Grid size: {gridSize}m</p>
-        <p>Selected area: {selectedCells.size * gridSize * gridSize}m²</p>
+        {selectionMode === "standard" && (
+          <p>Selected area: {selectedCells.size * gridSize * gridSize}m²</p>
+        )}
+        {selectionMode === "entrance" && (
+          <p>Entrance positions: {entranceCells.size}</p>
+        )}
+        {selectionMode === "core" && <p>Core positions: {coreCells.size}</p>}
+        {selectionMode !== "standard" && (
+          <p>
+            <em>Fixed elements will be saved as exact positions, not zones.</em>
+          </p>
+        )}
       </div>
     </div>
   );

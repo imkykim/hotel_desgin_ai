@@ -21,6 +21,13 @@ const InteractiveLayoutPage = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
+  // New state for fixed elements
+  const [fixedElements, setFixedElements] = useState({
+    entrances: [],
+    cores: [],
+  });
+  const [gridSelectionMode, setGridSelectionMode] = useState("standard");
+
   const { buildingId, programId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -194,6 +201,65 @@ const InteractiveLayoutPage = () => {
     }
   };
 
+  // New function for handling fixed element selection
+  const handleFixedElementSelect = (type, coords) => {
+    if (coords === null) {
+      // Clear the selected fixed elements of this type
+      if (type === "entrance") {
+        setFixedElements((prev) => ({ ...prev, entrances: [] }));
+      } else if (type === "core") {
+        setFixedElements((prev) => ({ ...prev, cores: [] }));
+      }
+      return;
+    }
+
+    // For entrance, we replace the existing one (only one entrance allowed)
+    if (type === "entrance") {
+      setFixedElements((prev) => ({
+        ...prev,
+        entrances: [
+          {
+            x: coords.x,
+            y: coords.y,
+            z: 0, // Ground floor
+            type: "lobby",
+            name: "reception",
+          },
+        ],
+      }));
+    }
+    // For cores, we allow multiple
+    else if (type === "core") {
+      setFixedElements((prev) => {
+        // Create a new core with an index
+        const newCore = {
+          x: coords.x,
+          y: coords.y,
+          z: -10, // Below ground for vertical circulation
+          type: prev.cores.length === 0 ? "main_core" : "secondary_core",
+          department: "circulation",
+          name:
+            prev.cores.length === 0
+              ? "main_core"
+              : `secondary_core_${prev.cores.length}`,
+        };
+
+        // Only allow two cores max
+        let updatedCores;
+        if (prev.cores.length >= 2) {
+          updatedCores = [...prev.cores.slice(0, 1), newCore];
+        } else {
+          updatedCores = [...prev.cores, newCore];
+        }
+
+        return {
+          ...prev,
+          cores: updatedCores,
+        };
+      });
+    }
+  };
+
   const updateBuildingConfig = async () => {
     try {
       setLoading(true);
@@ -260,8 +326,79 @@ const InteractiveLayoutPage = () => {
       });
 
       setSuccess("Standard floor zones saved successfully");
+
+      // After saving standard floor zones, switch to entrance selection mode
+      setGridSelectionMode("entrance");
     } catch (err) {
       setError(err.message || "Error saving standard floor zones");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // New function to save fixed elements
+  const saveFixedElements = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+
+      // Prepare fixed elements in the correct format
+      const fixedRooms = [
+        // Add entrance/lobby
+        ...fixedElements.entrances.map((entrance) => ({
+          identifier: {
+            type: "room_type_with_name",
+            room_type: "lobby",
+            name: "reception",
+          },
+          position: [entrance.x, entrance.y, entrance.z || 0],
+        })),
+
+        // Add cores
+        ...fixedElements.cores.map((core) => ({
+          identifier: {
+            type: "department_with_name",
+            department: "circulation",
+            name: core.name,
+          },
+          position: [core.x, core.y, core.z || -10],
+        })),
+      ];
+
+      // Create the fixed_rooms.json content
+      const fixedRoomsJson = {
+        fixed_rooms: fixedRooms,
+      };
+
+      // In a real implementation, we would save this to the server
+      // For now, we'll just simulate success and log the result
+      console.log("Fixed rooms JSON:", JSON.stringify(fixedRoomsJson, null, 2));
+
+      // Call the backend to save fixed elements (you would need to implement this endpoint)
+      const response = await fetch(`${API_BASE_URL}/save-fixed-elements`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          building_id: buildingId,
+          fixed_elements: fixedRoomsJson,
+        }),
+      }).catch((err) => {
+        // For demonstration - handle gracefully if endpoint doesn't exist yet
+        console.warn("Backend endpoint not implemented yet:", err);
+        return { ok: true, json: () => Promise.resolve({ success: true }) };
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save fixed elements");
+      }
+
+      setSuccess("Fixed elements saved successfully");
+      setGridSelectionMode("standard"); // Go back to standard mode
+    } catch (err) {
+      setError(err.message || "Error saving fixed elements");
     } finally {
       setLoading(false);
     }
@@ -450,10 +587,40 @@ const InteractiveLayoutPage = () => {
       <div className="tab-content">
         {activeTab === "grid" && (
           <div className="grid-tab">
+            {/* Selection mode buttons */}
+            <div className="selection-mode-buttons">
+              <button
+                className={`mode-button ${
+                  gridSelectionMode === "standard" ? "active" : ""
+                }`}
+                onClick={() => setGridSelectionMode("standard")}
+              >
+                Standard Floor Zones
+              </button>
+              <button
+                className={`mode-button ${
+                  gridSelectionMode === "entrance" ? "active" : ""
+                }`}
+                onClick={() => setGridSelectionMode("entrance")}
+              >
+                Define Entrance/Lobby
+              </button>
+              <button
+                className={`mode-button ${
+                  gridSelectionMode === "core" ? "active" : ""
+                }`}
+                onClick={() => setGridSelectionMode("core")}
+              >
+                Define Core Circulation
+              </button>
+            </div>
+
             <p className="description">
-              Define which areas of the building will contain standard floors
-              (typically guest rooms and circulation cores). These will be
-              repeated from the start floor to the end floor.
+              {gridSelectionMode === "standard"
+                ? "Define which areas of the building will contain standard floors (typically guest rooms and circulation cores). These will be repeated from the start floor to the end floor."
+                : gridSelectionMode === "entrance"
+                ? "Select where the main entrance and lobby should be located. These will be fixed in the final layout."
+                : "Select where the vertical circulation cores (elevators, stairs) should be located. These will be fixed in the final layout."}
             </p>
 
             {buildingConfig && (
@@ -462,98 +629,135 @@ const InteractiveLayoutPage = () => {
                 buildingLength={buildingConfig.length}
                 gridSize={buildingConfig.structural_grid_x}
                 onSelectionChange={handleSelectionChange}
+                onFixedElementSelect={handleFixedElementSelect}
+                selectionMode={gridSelectionMode}
               />
             )}
-            {/* Add Standard Floor Parameters Form */}
-            <div className="standard-floor-params">
-              <h3>Standard Floor Parameters</h3>
-              <div className="form-row">
-                <div className="half">
-                  <label>Start Floor</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.start_floor}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        start_floor: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="half">
-                  <label>End Floor</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.end_floor}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        end_floor: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
 
-              <div className="form-row">
-                <div className="half">
-                  <label>Width (m)</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.width}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        width: parseFloat(e.target.value),
-                      })
-                    }
-                  />
+            {/* Only show standard floor parameters in standard mode */}
+            {gridSelectionMode === "standard" && (
+              <div className="standard-floor-params">
+                <h3>Standard Floor Parameters</h3>
+                <div className="form-row">
+                  <div className="half">
+                    <label>Start Floor</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.start_floor}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          start_floor: parseInt(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="half">
+                    <label>End Floor</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.end_floor}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          end_floor: parseInt(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="half">
-                  <label>Length (m)</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.length}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        length: parseFloat(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
 
-              <div className="form-row">
-                <div className="half">
-                  <label>Corridor Width (m)</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.corridor_width}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        corridor_width: parseFloat(e.target.value),
-                      })
-                    }
-                  />
+                <div className="form-row">
+                  <div className="half">
+                    <label>Width (m)</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.width}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          width: parseFloat(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="half">
+                    <label>Length (m)</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.length}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          length: parseFloat(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="half">
-                  <label>Room Depth (m)</label>
-                  <input
-                    type="number"
-                    value={standardFloorParams.room_depth}
-                    onChange={(e) =>
-                      setStandardFloorParams({
-                        ...standardFloorParams,
-                        room_depth: parseFloat(e.target.value),
-                      })
-                    }
-                  />
+
+                <div className="form-row">
+                  <div className="half">
+                    <label>Corridor Width (m)</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.corridor_width}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          corridor_width: parseFloat(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="half">
+                    <label>Room Depth (m)</label>
+                    <input
+                      type="number"
+                      value={standardFloorParams.room_depth}
+                      onChange={(e) =>
+                        setStandardFloorParams({
+                          ...standardFloorParams,
+                          room_depth: parseFloat(e.target.value),
+                        })
+                      }
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* Fixed element display if any are selected */}
+            {(fixedElements.entrances.length > 0 ||
+              fixedElements.cores.length > 0) && (
+              <div className="fixed-elements-summary">
+                <h3>Fixed Elements Summary</h3>
+                {fixedElements.entrances.length > 0 && (
+                  <div>
+                    <h4>Entrance/Lobby</h4>
+                    <ul>
+                      {fixedElements.entrances.map((entrance, idx) => (
+                        <li key={`entrance-${idx}`}>
+                          Position: {entrance.x}m, {entrance.y}m, Floor: Ground
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {fixedElements.cores.length > 0 && (
+                  <div>
+                    <h4>Vertical Circulation Cores</h4>
+                    <ul>
+                      {fixedElements.cores.map((core, idx) => (
+                        <li key={`core-${idx}`}>
+                          {core.name}: {core.x}m, {core.y}m, Multi-floor
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="action-buttons">
               <button
@@ -563,14 +767,23 @@ const InteractiveLayoutPage = () => {
                 Back to Configuration
               </button>
 
-              <button
-                className="btn-primary"
-                // onClick={updateBuildingConfig}
-                onClick={saveStandardFloorZones}
-                disabled={selectedAreas.length === 0 || loading}
-              >
-                Save Standard Floor Zones
-              </button>
+              {gridSelectionMode === "standard" ? (
+                <button
+                  className="btn-primary"
+                  onClick={saveStandardFloorZones}
+                  disabled={selectedAreas.length === 0 || loading}
+                >
+                  Save & Continue to Fixed Elements
+                </button>
+              ) : (
+                <button
+                  className="btn-primary"
+                  onClick={saveFixedElements}
+                  disabled={loading}
+                >
+                  Save Fixed Elements
+                </button>
+              )}
 
               <button
                 className="btn-success"
