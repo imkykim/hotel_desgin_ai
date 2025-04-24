@@ -1,0 +1,250 @@
+{
+  "public": {
+    "lobby": {
+      "area": 700,
+      "room_type": "lobby",
+      "min_width": 20.0,
+      "min_height": 6.0,
+      "requires_natural_light": true,
+      "requires_adjacency": [
+        "entrance"
+      ],
+      "floor": [
+        0
+      ]
+    },
+    "reception": {
+      "area": 100,
+      "room_type": "lobby",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "requires_natural_light": true,
+      "requires_adjacency": [
+        "lobby"
+      ],
+      "floor": [
+        0
+      ]
+    },
+    "logistics_reserve": {
+      "area": 1720,
+      "room_type": "back_of_house",
+      "min_width": 5.0,
+      "min_height": 3.5,
+      "requires_natural_light": false,
+      "requires_separation": [
+        "guest_room",
+        "meeting_room"
+      ],
+      "floor": [
+        -1,
+        -2
+      ]
+    }
+  },
+  "dining": {
+    "restaurant": {
+      "area": 500,
+      "room_type": "restaurant",
+      "min_width": 15.0,
+      "min_height": 4.0,
+      "requires_natural_light": true,
+      "requires_adjacency": [
+        "kitchen"
+      ],
+      "floor": [
+        0
+      ]
+    },
+    "kitchen": {
+      "area": 500,
+      "room_type": "kitchen",
+      "min_width": 20.0,
+      "min_height": 4.0,
+      "requires_exhaust": true,
+      "requires_adjacency": [
+        "restaurant"
+      ],
+      "requires_separation": [
+        "guest_room",
+        "meeting_room"
+      ],
+      "floor": [
+        0,
+        -1
+      ]
+    }
+  },
+  "meeting": {
+    "ballroom": {
+      "area": 800,
+      "room_type": "ballroom",
+      "min_width": 25.0,
+      "min_height": 5.0,
+      "requires_column_free": true,
+      "requires_natural_light": true,
+      "requires_adjacency": [
+        "kitchen"
+      ],
+      "floor": [
+        0
+      ]
+    },
+    "meeting_room": {
+      "area": 300,
+      "room_type": "meeting_room",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "requires_natural_light": true,
+      "floor": [
+        0,
+        1
+      ]
+    }
+  },
+  "recreational": {
+    "fitness": {
+      "area": 300,
+      "room_type": "fitness",
+      "min_width": 15.0,
+      "min_height": 3.0,
+      "requires_natural_light": true,
+      "floor": [
+        1
+      ]
+    },
+    "business_center": {
+      "area": 200,
+      "room_type": "office",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "requires_natural_light": true,
+      "floor": [
+        1
+      ]
+    }
+  },
+  "administrative": {
+    "staff_area": {
+      "area": 400,
+      "room_type": "staff_area",
+      "min_width": 20.0,
+      "min_height": 3.0,
+      "requires_natural_light": false,
+      "floor": [
+        -1
+      ]
+    },
+    "office": {
+      "area": 600,
+      "room_type": "office",
+      "min_width": 20.0,
+      "min_height": 3.0,
+      "requires_natural_light": true,
+      "floor": [
+        1
+      ]
+    }
+  },
+  "engineering": {
+    "laundry": {
+      "area": 300,
+      "room_type": "service_area",
+      "min_width": 15.0,
+      "min_height": 3.0,
+      "requires_exhaust": true,
+      "requires_separation": [
+        "guest_room"
+      ],
+      "floor": [
+        -1
+      ]
+    },
+    "mechanical": {
+      "area": 200,
+      "room_type": "mechanical",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "requires_exhaust": true,
+      "requires_separation": [
+        "guest_room"
+      ],
+      "floor": [
+        -1
+      ]
+    },
+    "waste_management": {
+      "area": 100,
+      "room_type": "maintenance",
+      "min_width": 10.0,
+      "min_height": 3.0,
+      "requires_exhaust": true,
+      "requires_separation": [
+        "guest_room"
+      ],
+      "floor": [
+        -1
+      ]
+    }
+  },
+  "circulation": {
+    "main_core": {
+      "area": 64,
+      "room_type": "vertical_circulation",
+      "min_width": 8.0,
+      "min_height": 20.0,
+      "requires_natural_light": false,
+      "floor": [
+        -2,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "metadata": {
+        "original_name": "Main Circulation Core",
+        "is_core": true
+      }
+    },
+    "secondary_core": {
+      "area": 36,
+      "room_type": "vertical_circulation",
+      "min_width": 6.0,
+      "min_height": 20.0,
+      "requires_natural_light": false,
+      "floor": [
+        -2,
+        -1,
+        0,
+        1,
+        2
+      ],
+      "metadata": {
+        "original_name": "Secondary Circulation",
+        "is_core": true
+      }
+    }
+  },
+  "parking": {
+    "guest_parking": {
+      "area": 1000,
+      "room_type": "parking",
+      "min_width": 20.0,
+      "min_height": 3.0,
+      "requires_natural_light": false,
+      "floor": [
+        -2
+      ]
+    },
+    "staff_parking": {
+      "area": 500,
+      "room_type": "parking",
+      "min_width": 20.0,
+      "min_height": 3.0,
+      "requires_natural_light": false,
+      "floor": [
+        -2
+      ]
+    }
+  }
+}
