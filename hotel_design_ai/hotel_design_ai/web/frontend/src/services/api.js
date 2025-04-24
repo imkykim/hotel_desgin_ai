@@ -362,7 +362,7 @@ export const exportRequirements = async (sessionId) => {
       return { success: false, error: "Invalid session ID" };
     }
 
-    // Call the server endpoint to export requirements
+    // The backend will check for hotel_requirements_{session_id}.json
     const response = await fetch(
       `${API_BASE_URL}/api/chat2plan/export_requirements?session_id=${sessionId}`
     );
