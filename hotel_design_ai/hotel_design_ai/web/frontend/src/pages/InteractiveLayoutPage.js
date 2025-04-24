@@ -2,7 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import GridSelector from "../components/GridSelector";
 import LayoutEditor from "../components/LayoutEditor";
-import { generateLayout, getLayout, modifyLayout } from "../services/api";
+import {
+  generateLayout,
+  getLayout,
+  modifyLayout,
+  getConfiguration,
+} from "../services/api";
 import "../styles/InteractiveLayout.css";
 
 const InteractiveLayoutPage = () => {
@@ -20,6 +25,19 @@ const InteractiveLayoutPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
+  const [standardFloorParams, setStandardFloorParams] = useState({
+    start_floor: 2,
+    end_floor: 20,
+    width: 56,
+    length: 20,
+    position_x: 0,
+    position_y: 32,
+    corridor_width: 4,
+    room_depth: 8,
+  });
+
   // Get layoutId from query params if it exists
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -29,26 +47,42 @@ const InteractiveLayoutPage = () => {
     }
   }, [location]);
 
+  // Add useEffect to load initial values from building config
+  useEffect(() => {
+    if (buildingConfig && buildingConfig.standard_floor) {
+      setStandardFloorParams({
+        start_floor: buildingConfig.standard_floor.start_floor || 2,
+        end_floor: buildingConfig.standard_floor.end_floor || 20,
+        width: buildingConfig.standard_floor.width || 56,
+        length: buildingConfig.standard_floor.length || 20,
+        position_x: buildingConfig.standard_floor.position_x || 0,
+        position_y: buildingConfig.standard_floor.position_y || 32,
+        corridor_width: buildingConfig.standard_floor.corridor_width || 4,
+        room_depth: buildingConfig.standard_floor.room_depth || 8,
+      });
+    }
+  }, [buildingConfig]);
+
   // Fetch building configuration
   useEffect(() => {
     const fetchBuildingConfig = async () => {
       try {
         // If using sample data, load default config
         if (buildingId === "sample" && programId === "sample") {
-          setBuildingConfig({
-            width: 60.0,
-            length: 40.0,
-            height: 30.0,
-            min_floor: -2,
-            max_floor: 5,
-            floor_height: 4.5,
-            structural_grid_x: 8.0,
-            structural_grid_y: 8.0,
-            grid_size: 1.0,
-            main_entry: "front",
-            description: "Sample hotel building for testing",
-            units: "meters",
-          });
+          const response = await getConfiguration("building", buildingId);
+          if (response.success) {
+            setBuildingConfig({
+              width: response.config_data.width,
+              length: response.config_data.length,
+              height: response.config_data.height,
+              min_floor: response.config_data.min_floor,
+              max_floor: response.config_data.max_floor,
+              floor_height: response.config_data.floor_height,
+              structural_grid_x: response.config_data.structural_grid_x,
+              structural_grid_y: response.config_data.structural_grid_y,
+              grid_size: response.config_data.grid_size,
+            });
+          }
           setInitialLayout({
             rooms: {
               1: {
@@ -139,20 +173,96 @@ const InteractiveLayoutPage = () => {
   // Handle grid selection changes
   const handleSelectionChange = (areas) => {
     setSelectedAreas(areas);
+
+    // If areas selected, update standard floor position based on first selection
+    if (areas.length > 0) {
+      // Find the top-left corner of the selection
+      let minX = Infinity;
+      let minY = Infinity;
+
+      areas.forEach((area) => {
+        minX = Math.min(minX, area.x);
+        minY = Math.min(minY, area.y);
+      });
+
+      // Update position_x and position_y in standardFloorParams
+      setStandardFloorParams((prev) => ({
+        ...prev,
+        position_x: minX,
+        position_y: minY,
+      }));
+    }
   };
 
-  // Save standard floor zones
+  const updateBuildingConfig = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Create updated building config
+      const updatedConfig = {
+        ...buildingConfig,
+        standard_floor: {
+          ...standardFloorParams,
+        },
+      };
+
+      // Call API to update building config
+      const response = await fetch(`${API_BASE_URL}/update-building-config`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          building_id: buildingId,
+          building_config: updatedConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update building configuration");
+      }
+
+      const result = await response.json();
+
+      // Update state with new config
+      setBuildingConfig(updatedConfig);
+      setSuccess("Building configuration updated successfully");
+    } catch (err) {
+      setError(err.message || "Error updating building configuration");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Change the saveStandardFloorZones function to incorporate your new parameters
   const saveStandardFloorZones = async () => {
     try {
       setLoading(true);
       setError(null);
       setSuccess(null);
 
-      // In a real implementation, this would call the backend
+      // Create the data to send to the backend
+      const standardFloorData = {
+        session_id: buildingId,
+        floor_zones: selectedAreas,
+        start_floor: standardFloorParams.start_floor,
+        end_floor: standardFloorParams.end_floor,
+        standard_floor: {
+          ...standardFloorParams,
+        },
+      };
+
+      // Call updateBuildingConfig instead of using the old implementation
+      await updateBuildingConfig(buildingId, {
+        ...buildingConfig,
+        standard_floor: standardFloorParams,
+      });
+
       setSuccess("Standard floor zones saved successfully");
-      setLoading(false);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Error saving standard floor zones");
+    } finally {
       setLoading(false);
     }
   };
@@ -354,6 +464,96 @@ const InteractiveLayoutPage = () => {
                 onSelectionChange={handleSelectionChange}
               />
             )}
+            {/* Add Standard Floor Parameters Form */}
+            <div className="standard-floor-params">
+              <h3>Standard Floor Parameters</h3>
+              <div className="form-row">
+                <div className="half">
+                  <label>Start Floor</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.start_floor}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        start_floor: parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="half">
+                  <label>End Floor</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.end_floor}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        end_floor: parseInt(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="half">
+                  <label>Width (m)</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.width}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        width: parseFloat(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="half">
+                  <label>Length (m)</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.length}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        length: parseFloat(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="half">
+                  <label>Corridor Width (m)</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.corridor_width}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        corridor_width: parseFloat(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="half">
+                  <label>Room Depth (m)</label>
+                  <input
+                    type="number"
+                    value={standardFloorParams.room_depth}
+                    onChange={(e) =>
+                      setStandardFloorParams({
+                        ...standardFloorParams,
+                        room_depth: parseFloat(e.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
 
             <div className="action-buttons">
               <button
@@ -365,6 +565,7 @@ const InteractiveLayoutPage = () => {
 
               <button
                 className="btn-primary"
+                // onClick={updateBuildingConfig}
                 onClick={saveStandardFloorZones}
                 disabled={selectedAreas.length === 0 || loading}
               >

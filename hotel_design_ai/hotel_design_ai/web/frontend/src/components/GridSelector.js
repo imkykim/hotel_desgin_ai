@@ -25,6 +25,19 @@ const GridSelector = ({
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
+
+    const aspectRatio = buildingWidth / buildingLength;
+
+    // Set a reasonable canvas size while maintaining proportions
+    const CELL_SIZE = 50; // Increase this value for bigger grid cells (was 15)
+    if (aspectRatio > 1) {
+      canvas.width = Math.min(1200, gridCellsX * CELL_SIZE);
+      canvas.height = canvas.width / aspectRatio;
+    } else {
+      canvas.height = Math.min(900, gridCellsY * CELL_SIZE);
+      canvas.width = canvas.height * aspectRatio;
+    }
+
     const cellSize = Math.min(
       Math.floor(canvas.width / gridCellsX),
       Math.floor(canvas.height / gridCellsY)
@@ -53,7 +66,7 @@ const GridSelector = ({
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
     ctx.strokeRect(0, 0, gridCellsX * cellSize, gridCellsY * cellSize);
-  }, [selectedCells, gridCellsX, gridCellsY]);
+  }, [selectedCells, gridCellsX, gridCellsY, buildingWidth, buildingLength]);
 
   // Handle mouse interactions for selection
   const handleMouseDown = (e) => {
@@ -172,8 +185,8 @@ const GridSelector = ({
       <div className="canvas-container">
         <canvas
           ref={canvasRef}
-          width={gridCellsX * 50} // Scale up for better visibility
-          height={gridCellsY * 50}
+          width={gridCellsX * 100} // Scale up for better visibility
+          height={gridCellsY * 100}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}

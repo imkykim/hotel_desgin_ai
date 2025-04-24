@@ -349,6 +349,47 @@ async def generate_configs(user_input: UserInput = Body(...)):
         )
 
 
+@app.post("/update-building-config")
+async def update_building_config(request: Dict = Body(...)):
+    """Update an existing building configuration."""
+    try:
+        building_id = request.get("building_id")
+        updated_config = request.get("building_config")
+
+        if not building_id or not updated_config:
+            raise HTTPException(
+                status_code=400,
+                detail="Building ID and configuration data are required",
+            )
+
+        # Construct the filepath
+        filepath = BUILDING_DIR / f"{building_id}.json"
+
+        # Check if the file exists
+        if not filepath.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Building configuration {building_id} not found",
+            )
+
+        # Write the updated configuration
+        with open(filepath, "w") as f:
+            json.dump(updated_config, f, indent=2)
+
+        return {
+            "success": True,
+            "message": "Building configuration updated successfully",
+            "building_id": building_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating building config: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error updating building configuration: {str(e)}"
+        )
+
+
 @app.post("/generate-layout")
 async def generate_layout(input_data: DesignGenerationInput = Body(...)):
     """Generate a hotel layout based on configurations."""

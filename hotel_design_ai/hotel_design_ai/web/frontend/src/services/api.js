@@ -402,3 +402,31 @@ export const getChat2PlanLogs = async (sessionId, since = 0) => {
     return { logs: [], total: since };
   }
 };
+
+// In services/api.js
+export const updateBuildingConfig = async (buildingId, configData) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/update-building-config`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        building_id: buildingId,
+        building_config: configData,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return {
+        success: false,
+        error: errorData.detail || "Failed to update building configuration",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
