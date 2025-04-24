@@ -5,7 +5,7 @@ import {
   getChat2PlanState,
   skipStage,
   exportRequirements,
-  getChat2PlanLogs, // <-- add import
+  getChat2PlanLogs,
 } from "../services/api";
 import "../styles/Chat2PlanInterface.css";
 
@@ -97,9 +97,12 @@ const Chat2PlanInterface = ({
     }
   }, [sessionId]);
 
-  // Poll backend logs every 2 seconds when session is active
+  // In your Chat2PlanInterface.js
+  // Find the useEffect hook that polls logs and update it:
+
   useEffect(() => {
     if (!sessionId) return;
+
     let logPoller = null;
     let isUnmounted = false;
 
@@ -109,13 +112,20 @@ const Chat2PlanInterface = ({
         if (!isUnmounted && result.logs && result.logs.length > 0) {
           setBackendLogs((prev) => [...prev, ...result.logs]);
           setBackendLogTotal((prev) => prev + result.logs.length);
+
+          // Scroll to bottom of log container when new logs appear
+          if (logViewerRef.current) {
+            logViewerRef.current.scrollTop = logViewerRef.current.scrollHeight;
+          }
         }
       } catch (e) {
-        // ignore errors
+        console.error("Error fetching logs:", e);
       }
     };
 
-    logPoller = setInterval(pollLogs, 2000);
+    // Poll more frequently for better real-time experience
+    logPoller = setInterval(pollLogs, 1000); // Poll every second
+
     // Initial fetch
     pollLogs();
 
@@ -123,8 +133,7 @@ const Chat2PlanInterface = ({
       isUnmounted = true;
       if (logPoller) clearInterval(logPoller);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, backendLogTotal]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -407,6 +416,8 @@ const Chat2PlanInterface = ({
     }
   };
 
+  const logViewerRef = useRef(null);
+
   // Move the log viewer outside the main chat2plan frame
   // So, do NOT render the log viewer inside the main <div className="chat2plan-interface">
   // Instead, export logs and showLogs/setShowLogs via props if needed, or render the log viewer after Chat2PlanInterface in the parent
@@ -430,6 +441,7 @@ const Chat2PlanInterface = ({
       </button>
       {showLogs && (
         <div
+          ref={logViewerRef}
           style={{
             background: "#222",
             color: "#e0e0e0",
@@ -443,26 +455,54 @@ const Chat2PlanInterface = ({
           }}
           data-testid="log-viewer"
         >
-          {/* Merge backendLogs and UI logs, deduplicate, show newest last */}
           {(() => {
-            // Merge and deduplicate logs (backend first, then UI logs)
+            // Merge and deduplicate logs
             const allLogs = [...backendLogs, ...logs];
             const seen = new Set();
             const deduped = [];
+
             for (const log of allLogs) {
               if (!seen.has(log)) {
                 seen.add(log);
                 deduped.push(log);
               }
             }
+
             return deduped.length === 0 ? (
               <div style={{ color: "#888" }}>No logs yet.</div>
             ) : (
-              deduped.map((log, idx) => (
-                <div key={idx} style={{ marginBottom: "0.25rem" }}>
-                  {log}
-                </div>
-              ))
+              deduped.map((log, idx) => {
+                // Check if log contains JSON
+                let formattedLog = log;
+                if (log.includes("```json")) {
+                  const jsonStart = log.indexOf("```json") + 7;
+                  const jsonEnd = log.indexOf("```", jsonStart);
+                  if (jsonEnd > jsonStart) {
+                    const jsonStr = log.substring(jsonStart, jsonEnd).trim();
+                    try {
+                      const jsonObj = JSON.parse(jsonStr);
+                      formattedLog =
+                        log.substring(0, jsonStart - 7) +
+                        `<span style="color: #8be9fd">JSON: ${JSON.stringify(
+                          jsonObj,
+                          null,
+                          2
+                        )}</span>` +
+                        log.substring(jsonEnd + 3);
+                    } catch (e) {
+                      // If JSON parsing fails, just show the original log
+                    }
+                  }
+                }
+
+                return (
+                  <div
+                    key={idx}
+                    style={{ marginBottom: "0.25rem" }}
+                    dangerouslySetInnerHTML={{ __html: formattedLog }}
+                  />
+                );
+              })
             );
           })()}
         </div>

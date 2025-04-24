@@ -1,7 +1,7 @@
 .chat2plan-interface {
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: 450px; /* Increased from 400px to 600px */
   border: 1px solid #dee2e6;
   border-radius: 8px;
   overflow: hidden;

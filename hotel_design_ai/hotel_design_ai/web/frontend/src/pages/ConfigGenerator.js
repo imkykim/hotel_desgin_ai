@@ -530,11 +530,27 @@ const ConfigGenerator = () => {
                     constraints for your hotel project.
                   </p>
 
-                  <Chat2PlanInterface
-                    onRequirementsUpdate={handleRequirementsUpdate}
-                    onSessionStart={handleSessionStart}
-                    initialContext={formData} // Pass the current form data as context
-                  />
+                  {/* Update this part to capture the log components as an array */}
+                  {(() => {
+                    // Chat2PlanInterface now returns an array where:
+                    // - First element is the chat interface
+                    // - Second element is the log viewer
+                    const chatComponents = (
+                      <Chat2PlanInterface
+                        onRequirementsUpdate={handleRequirementsUpdate}
+                        onSessionStart={handleSessionStart}
+                        initialContext={formData} // Pass the current form data as context
+                      />
+                    );
+
+                    if (Array.isArray(chatComponents)) {
+                      // If it's an array (new version), render both chat interface and logs
+                      return chatComponents;
+                    } else {
+                      // Fallback: just render whatever was returned (old version)
+                      return chatComponents;
+                    }
+                  })()}
                 </div>
               </div>
             </div>
