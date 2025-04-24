@@ -63,11 +63,12 @@ app.add_middleware(
 )
 
 # Define paths to save generated configurations
-DATA_DIR = Path("./data")
+# Changed to use project_root for consistency
+PROJECT_ROOT = Path(__file__).parents[3].absolute()
+DATA_DIR = PROJECT_ROOT / "data"
 BUILDING_DIR = DATA_DIR / "building"
 PROGRAM_DIR = DATA_DIR / "program"
 
-PROJECT_ROOT = Path(__file__).parents[3].absolute()
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
 LAYOUTS_DIR = USER_DATA_DIR / "layouts"
 
@@ -208,15 +209,18 @@ async def generate_building_config(request: Dict = Body(...)):
         if not filename.endswith(".json"):
             filename += ".json"
 
-        # Save to file
-        with open(BUILDING_DIR / filename, "w") as f:
+        # Save to file - modified to use PROJECT_ROOT path
+        filepath = BUILDING_DIR / filename
+        with open(filepath, "w") as f:
             json.dump(building_envelope, f, indent=2)
+
+        logger.info(f"Building configuration saved to: {filepath}")
 
         return {
             "success": True,
             "building_id": filename.replace(".json", ""),
             "filename": filename,
-            "path": str(BUILDING_DIR / filename),
+            "path": str(filepath),
         }
     except Exception as e:
         logger.error(f"Error generating building config: {e}")
@@ -313,23 +317,28 @@ async def generate_configs(user_input: UserInput = Body(...)):
         building_filename = f"{safe_name}_building.json"
         requirements_filename = f"{safe_name}_requirements.json"
 
-        # Save to files
-        with open(BUILDING_DIR / building_filename, "w") as f:
+        # Save to files - using PROJECT_ROOT paths for both files
+        building_filepath = BUILDING_DIR / building_filename
+        with open(building_filepath, "w") as f:
             json.dump(building_envelope, f, indent=2)
 
-        with open(PROGRAM_DIR / requirements_filename, "w") as f:
+        program_filepath = PROGRAM_DIR / requirements_filename
+        with open(program_filepath, "w") as f:
             json.dump(hotel_requirements, f, indent=2)
+
+        logger.info(f"Building configuration saved to: {building_filepath}")
+        logger.info(f"Program configuration saved to: {program_filepath}")
 
         return {
             "success": True,
             "building_envelope": {
                 "filename": building_filename,
-                "path": str(BUILDING_DIR / building_filename),
+                "path": str(building_filepath),
                 "data": building_envelope,
             },
             "hotel_requirements": {
                 "filename": requirements_filename,
-                "path": str(PROGRAM_DIR / requirements_filename),
+                "path": str(program_filepath),
                 "data": hotel_requirements,
             },
         }
