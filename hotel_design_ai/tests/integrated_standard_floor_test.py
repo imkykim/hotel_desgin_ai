@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """
-Integrated test script for generating and visualizing a complete hotel design
-with both podium (裙房) and standard floor (tower) sections.
-
-This script demonstrates how to combine podium and tower portions
-into a complete hotel layout design.
+Example script for integrating the improved standard floor generator with the hotel_design_ai system.
+This script demonstrates how to:
+1. Generate a podium layout first
+2. Find the vertical circulation core
+3. Generate standard floors based on the core
 """
 
 import os
@@ -14,92 +14,82 @@ import json
 import time
 from datetime import datetime
 
-# Add the parent directory to the Python path
+# Add the parent directory to the path
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
-# Import hotel design AI modules
+# Import required modules
 from hotel_design_ai.core.spatial_grid import SpatialGrid
-from hotel_design_ai.core.grid_rule_engine import RuleEngine
+from hotel_design_ai.core.rule_engine import RuleEngine
 from hotel_design_ai.visualization.renderer import LayoutRenderer
 from hotel_design_ai.visualization.export import export_to_json
 from hotel_design_ai.config.config_loader import (
     get_building_envelope,
     create_room_objects_from_program,
 )
+from hotel_design_ai.config.config_loader_grid import create_room_objects_for_section
+from hotel_design_ai.models.room import Room
 from hotel_design_ai.utils.metrics import LayoutMetrics
 
-# Import standard floor module
-# In a real implementation, this would be part of the hotel_design_ai package
+# Import the improved standard floor generator
 from hotel_design_ai.core.standard_floor_generator import (
+    find_vertical_circulation_core,
     generate_standard_floor,
     generate_all_standard_floors,
 )
 
 
-def parse_arguments():
-    """Parse command-line arguments"""
-    parser = argparse.ArgumentParser(description="Integrated Hotel Design Generator")
+def convert_room_dicts_to_room_objects(room_dicts):
+    """Convert room dictionaries to Room objects"""
+    rooms = []
 
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="output",
-        help="Output directory for generated files",
-    )
+    for room_dict in room_dicts:
+        # Create room metadata by combining all available metadata
+        metadata = {"department": room_dict["department"], "id": room_dict["id"]}
 
-    parser.add_argument(
-        "--building-config",
-        type=str,
-        default="default",
-        help="Building configuration name",
-    )
+        # Preserve original name if present
+        if "metadata" in room_dict and room_dict["metadata"]:
+            if "original_name" in room_dict["metadata"]:
+                metadata["original_name"] = room_dict["metadata"]["original_name"]
 
-    parser.add_argument(
-        "--program-config",
-        type=str,
-        default="default",
-        help="Program configuration name",
-    )
+        # If no original_name in metadata but has name, use it
+        if "original_name" not in metadata and "name" in room_dict:
+            metadata["original_name"] = room_dict["name"]
 
-    parser.add_argument(
-        "--podium-only",
-        action="store_true",
-        help="Generate only the podium section (no tower)",
-    )
+        room = Room(
+            width=room_dict["width"],
+            length=room_dict["length"],
+            height=room_dict["height"],
+            room_type=room_dict["room_type"],
+            name=room_dict["name"],
+            floor=room_dict.get("floor"),
+            requires_natural_light=room_dict.get("requires_natural_light", False),
+            requires_exterior_access=False,  # Default value
+            preferred_adjacencies=room_dict.get("requires_adjacency", []),
+            avoid_adjacencies=[],  # Default value
+            metadata=metadata,  # Use the complete metadata
+            id=room_dict["id"],
+        )
 
-    parser.add_argument(
-        "--tower-only",
-        action="store_true",
-        help="Generate only the tower section (no podium)",
-    )
+        rooms.append(room)
 
-    parser.add_argument("--visualize", action="store_true", help="Show visualizations")
-
-    parser.add_argument(
-        "--save-images", action="store_true", help="Save visualization images"
-    )
-
-    parser.add_argument(
-        "--sample-floor", type=int, help="Render only a specific standard floor"
-    )
-
-    return parser.parse_args()
+    return rooms
 
 
-def generate_podium_layout(building_config, program_config):
+def generate_podium_layout(building_config, program_config, fixed_positions=None):
     """
     Generate the podium (裙房) section of the hotel.
 
     Args:
         building_config: Building configuration
         program_config: Program configuration
+        fixed_positions: Optional dictionary of fixed room positions
 
     Returns:
         Tuple of (spatial_grid, rooms)
     """
     print("\nGenerating podium (裙房) layout...")
 
-    # Get podium floor range from the new building config format
+    # Get podium floor range from the building config
     podium_config = building_config.get("podium", {})
     min_floor = podium_config.get("min_floor", building_config.get("min_floor", -2))
     max_floor = podium_config.get("max_floor", 4)
@@ -144,271 +134,235 @@ def generate_podium_layout(building_config, program_config):
         building_config=building_config,
     )
 
-    # Replace spatial grid
+    # Replace spatial grid to ensure proper support
     rule_engine.spatial_grid = spatial_grid
 
-    # Create rooms from program requirements
-    room_dicts = create_room_objects_from_program(program_config)
+    # Filter room dicts for podium section
+    podium_room_dicts = create_room_objects_for_section(
+        program_config, building_config, section="podium"
+    )
 
-    # Filter for podium floors only
-    podium_room_dicts = []
-    for room_dict in room_dicts:
-        # Check if room is in podium floors
-        floor = room_dict.get("floor")
-        if isinstance(floor, list):
-            # If list of floors, check if any are in podium range
-            floors_in_podium = [f for f in floor if min_floor <= f <= max_floor]
-            if floors_in_podium:
-                # Clone room_dict and set floor to first podium floor
-                podium_room = room_dict.copy()
-                podium_room["floor"] = floors_in_podium[0]
-                podium_room_dicts.append(podium_room)
-        elif floor is not None and min_floor <= floor <= max_floor:
-            # Single floor value in podium range
-            podium_room_dicts.append(room_dict)
-
-    print(f"Found {len(podium_room_dicts)} rooms for podium section")
-
-    # Convert to Room objects using helper function
-    from main import convert_room_dicts_to_room_objects
-
+    # Convert to Room objects
     rooms = convert_room_dicts_to_room_objects(podium_room_dicts)
+
+    # Mark core circulation elements in metadata
+    for room in rooms:
+        if room.room_type == "vertical_circulation":
+            if not room.metadata:
+                room.metadata = {}
+            # Mark main vertical circulation cores as "is_core"
+            if "main" in room.name.lower() or "core" in room.name.lower():
+                room.metadata["is_core"] = True
+
+    # Apply fixed positions if provided
+    if fixed_positions:
+        # Create a copy of rooms to avoid modifying the original list
+        modified_rooms = []
+        for room in rooms:
+            room_copy = Room.from_dict(room.to_dict())
+            if room.id in fixed_positions:
+                room_copy.position = fixed_positions[room.id]
+            modified_rooms.append(room_copy)
+        rooms = modified_rooms
 
     # Generate layout
     start_time = time.time()
-    podium_layout = rule_engine.generate_layout(rooms)
+    layout = rule_engine.generate_layout(rooms)
     end_time = time.time()
 
     print(f"Podium layout generated in {end_time - start_time:.2f} seconds")
-    print(f"Placed {len(podium_layout.rooms)} rooms in podium section")
+    print(f"Placed {len(layout.rooms)} rooms in podium section")
 
-    return podium_layout, rooms
+    return layout, rooms
 
 
-def generate_tower_layout(building_config, existing_layout=None):
+def generate_complete_hotel_layout(args):
     """
-    Generate the tower section (standard floors) of the hotel.
+    Generate a complete hotel layout with both podium and standard floor sections.
+    Using the improved standard floor generator.
 
     Args:
-        building_config: Building configuration
-        existing_layout: Optional existing layout to add to
+        args: Command line arguments
 
     Returns:
-        Tuple of (spatial_grid, rooms)
+        Tuple of (combined_layout, all_rooms)
     """
-    print("\nGenerating tower (standard floors) layout...")
-
-    # Get building parameters
-    width = building_config["width"]
-    length = building_config["length"]
-    height = building_config["height"]
-    grid_size = building_config["grid_size"]
-    min_floor = building_config.get("min_floor", -2)
-    floor_height = building_config["floor_height"]
-
-    # Use existing spatial grid or create new one
-    if existing_layout:
-        spatial_grid = existing_layout
-    else:
-        spatial_grid = SpatialGrid(
-            width=width,
-            length=length,
-            height=height,
-            grid_size=grid_size,
-            min_floor=min_floor,
-            floor_height=floor_height,
-        )
-
-    # Generate standard floors
-    start_time = time.time()
-    tower_layout, rooms = generate_all_standard_floors(
-        building_config=building_config, spatial_grid=spatial_grid
-    )
-    end_time = time.time()
-
-    print(f"Tower layout generated in {end_time - start_time:.2f} seconds")
-    print(f"Added {len(rooms)} rooms to tower section")
-
-    return tower_layout, rooms
-
-
-def main():
-    """Main function"""
-    print("Integrated Hotel Design Generator")
-    print("================================")
-
-    # Parse arguments
-    args = parse_arguments()
-
-    # Create output directory
-    os.makedirs(args.output, exist_ok=True)
+    print("\nGenerating complete hotel layout...")
 
     # Get building configuration
     building_config = get_building_envelope(args.building_config)
 
-    # Set up spatial grid that will hold the complete design
-    width = building_config["width"]
-    length = building_config["length"]
-    height = building_config["height"]
-    grid_size = building_config["grid_size"]
-    min_floor = building_config.get("min_floor", -2)
-    floor_height = building_config["floor_height"]
-
-    complete_layout = SpatialGrid(
-        width=width,
-        length=length,
-        height=height,
-        grid_size=grid_size,
-        min_floor=min_floor,
-        floor_height=floor_height,
+    # Step 1: Generate podium section
+    print("Step 1: Generating podium (裙房) section...")
+    podium_layout, podium_rooms = generate_podium_layout(
+        building_config, args.program_config, args.fixed_positions
     )
 
-    all_rooms = []
+    # Print debug info about the podium layout
+    podium_floors = {}
+    for room_id, room_data in podium_layout.rooms.items():
+        floor = int(room_data["position"][2] / building_config["floor_height"])
+        if floor not in podium_floors:
+            podium_floors[floor] = 0
+        podium_floors[floor] += 1
 
-    # Generate podium section if requested
-    if not args.tower_only:
-        podium_layout, podium_rooms = generate_podium_layout(
-            building_config, args.program_config
-        )
+    print("\nPodium layout room distribution by floor:")
+    for floor in sorted(podium_floors.keys()):
+        print(f"  Floor {floor}: {podium_floors[floor]} rooms")
 
-        # Copy podium rooms to complete layout
-        for room_id, room_data in podium_layout.rooms.items():
-            complete_layout.rooms[room_id] = room_data.copy()
+    # Step 2: Find vertical circulation core
+    print("\nStep 2: Finding vertical circulation core from podium...")
+    circulation_core = find_vertical_circulation_core(podium_layout, building_config)
 
-        all_rooms.extend(podium_rooms)
+    if circulation_core:
+        print(f"Found vertical circulation core to extend to standard floors:")
+        print(f"  Position: {circulation_core['position']}")
+        print(f"  Dimensions: {circulation_core['dimensions']}")
+        if "metadata" in circulation_core and circulation_core["metadata"]:
+            print(f"  Name: {circulation_core['metadata'].get('name', 'Unnamed')}")
+    else:
+        print("No suitable vertical circulation core found in podium")
+        print("Will create a new core for standard floors")
 
-    # Generate tower section if requested
-    if not args.podium_only:
-        tower_layout, tower_rooms = generate_tower_layout(
-            building_config, complete_layout
-        )
+    # Step 3: Generate standard floor section
+    print("\nStep 3: Generating standard floor (tower) section...")
 
-        # If using separate layouts, copy tower rooms to complete layout
-        if args.tower_only:
-            for room_id, room_data in tower_layout.rooms.items():
-                complete_layout.rooms[room_id] = room_data.copy()
+    # Set target room count
+    target_room_count = args.target_room_count
 
-        all_rooms.extend(tower_rooms)
+    # Use our improved generator for standard floors
+    standard_layout, standard_rooms = generate_all_standard_floors(
+        building_config=building_config,
+        spatial_grid=podium_layout,  # Use podium as starting point
+        target_room_count=target_room_count,
+    )
 
-    # Create timestamp for filenames
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Print debug info after standard floor generation
+    print(f"Generated {len(standard_rooms)} rooms on standard floors")
+    print(f"Total rooms after standard floors: {len(standard_layout.rooms)}")
 
-    # Export to JSON
-    json_file = os.path.join(args.output, f"hotel_design_{timestamp}.json")
-    export_to_json(complete_layout, json_file)
-    print(f"\nExported complete layout to: {json_file}")
+    # Count guest rooms
+    guest_rooms = sum(1 for room in standard_rooms if room.room_type == "guest_room")
+    print(f"Generated {guest_rooms} guest rooms on standard floors")
 
-    # Print basic metrics
-    print("\nLayout metrics:")
-    metrics = LayoutMetrics(complete_layout, building_config=building_config)
-    space_utilization = metrics.space_utilization() * 100
-    print(f"Space utilization: {space_utilization:.1f}%")
+    # Combine all rooms (podium + standard floors)
+    all_rooms = podium_rooms + standard_rooms
 
-    # Count rooms by type
+    print(f"\nComplete layout generated with {len(standard_layout.rooms)} rooms:")
+    print(f"  - Podium section: {len(podium_layout.rooms)} rooms")
+    print(f"  - Standard floor section: {len(standard_rooms)} rooms")
+
+    # Calculate metrics
     room_types = {}
-    for room_id, room_data in complete_layout.rooms.items():
+    for room_id, room_data in standard_layout.rooms.items():
         room_type = room_data["type"]
         if room_type not in room_types:
             room_types[room_type] = 0
         room_types[room_type] += 1
 
-    print("\nRoom counts by type:")
+    print("\nRoom type distribution:")
     for room_type, count in sorted(room_types.items()):
-        print(f"  {room_type}: {count}")
+        print(f"  {room_type}: {count} rooms")
 
-    # Visualize layout
-    if args.visualize or args.save_images:
-        print("\nCreating visualizations...")
+    return standard_layout, all_rooms
 
-        # Create renderer
-        renderer = LayoutRenderer(complete_layout, building_config=building_config)
 
-        # Render 3D view
-        fig_3d, ax_3d = renderer.render_3d(show_labels=True)
-        fig_3d.suptitle("Complete Hotel Design - 3D View")
+def main():
+    """Main function"""
+    parser = argparse.ArgumentParser(
+        description="Hotel Design AI - Improved Standard Floor Generator Example"
+    )
 
-        # Determine which floors to render
-        if args.sample_floor:
-            # Render only the specified standard floor
-            floors_to_render = [args.sample_floor]
-        else:
-            # Render one floor from each section using updated building config format
-            podium_config = building_config.get("podium", {})
-            podium_min = podium_config.get(
-                "min_floor", building_config.get("min_floor", -2)
-            )
-            podium_max = podium_config.get("max_floor", 4)
+    # Basic arguments
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="output",
+        help="Output directory for generated files",
+    )
+    parser.add_argument(
+        "--building-config",
+        type=str,
+        default="default",
+        help="Building configuration name",
+    )
+    parser.add_argument(
+        "--program-config",
+        type=str,
+        default="default",
+        help="Program configuration name",
+    )
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Show visualizations",
+    )
+    parser.add_argument(
+        "--target-room-count",
+        type=int,
+        default=380,
+        help="Target number of guest rooms",
+    )
+    parser.add_argument(
+        "--fixed-positions",
+        type=str,
+        default=None,
+        help="JSON file with fixed room positions",
+    )
 
-            std_floor_config = building_config.get("standard_floor", {})
-            std_min = std_floor_config.get("start_floor", 5)
-            std_max = std_floor_config.get("end_floor", 20)
+    args = parser.parse_args()
 
-            # Ensure there's no overlap
-            if podium_max >= std_min:
-                podium_max = std_min - 1
+    # Load fixed positions if specified
+    if args.fixed_positions and os.path.exists(args.fixed_positions):
+        with open(args.fixed_positions, "r") as f:
+            args.fixed_positions = json.load(f)
+    else:
+        args.fixed_positions = {}
 
-            # Pick representative floors
-            floors_to_render = [
-                podium_min,  # Lowest basement
-                0,  # Ground floor
-                podium_max,  # Top of podium
-                std_min,  # First standard floor
-                (std_min + std_max) // 2,  # Middle standard floor
-                std_max,  # Top floor
-            ]
+    # Generate complete hotel layout (podium + standard floors)
+    layout, all_rooms = generate_complete_hotel_layout(args)
 
-        # Render floor plans
-        floor_figs = []
-        for floor in floors_to_render:
-            fig, ax = renderer.render_floor_plan(floor=floor)
-            fig.suptitle(f"Hotel Design - Floor {floor}")
-            floor_figs.append((fig, floor))
+    # Create output directory
+    os.makedirs(args.output, exist_ok=True)
 
-        # Save images if requested
-        if args.save_images:
-            # Save 3D view
-            fig_3d.savefig(
-                os.path.join(args.output, f"hotel_design_3d_{timestamp}.png"),
-                dpi=300,
-                bbox_inches="tight",
-            )
+    # Save the layout to JSON
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(args.output, f"hotel_layout_{timestamp}.json")
+    export_to_json(layout, output_file)
+    print(f"\nLayout exported to: {output_file}")
 
-            # Save floor plans
-            for fig, floor in floor_figs:
-                # Name basements and standard floors appropriately
-                if floor < 0:
-                    floor_name = f"basement{abs(floor)}"
-                elif floor >= building_config.get("standard_floor", {}).get(
-                    "start_floor", 5
-                ):
-                    floor_name = f"std_floor_{floor}"
-                else:
-                    floor_name = f"floor_{floor}"
-
-                fig.savefig(
-                    os.path.join(
-                        args.output, f"hotel_design_{floor_name}_{timestamp}.png"
-                    ),
-                    dpi=300,
-                    bbox_inches="tight",
-                )
-
-            print(f"Saved visualizations to {args.output}")
-
-        # Show visualizations if requested
-        if args.visualize:
+    # Visualize the layout if requested
+    if args.visualize:
+        try:
             import matplotlib.pyplot as plt
+
+            # Get building parameters
+            building_config = get_building_envelope(args.building_config)
+
+            # Create renderer
+            renderer = LayoutRenderer(layout, building_config=building_config)
+
+            # Create 3D visualization
+            fig1, ax1 = renderer.render_3d(show_labels=True)
+            fig1.suptitle("Complete Hotel Layout - 3D View")
+
+            # Get standard floor info
+            std_floor_config = building_config.get("standard_floor", {})
+            start_floor = std_floor_config.get("start_floor", 5)
+
+            # Create floor plans for key floors
+            # Ground floor (podium)
+            fig2, ax2 = renderer.render_floor_plan(floor=0)
+            fig2.suptitle("Hotel Layout - Ground Floor (Podium)")
+
+            # First standard floor
+            fig3, ax3 = renderer.render_floor_plan(floor=start_floor)
+            fig3.suptitle(f"Hotel Layout - Floor {start_floor} (First Standard Floor)")
 
             plt.show()
-        else:
-            # Close figures to free memory
-            import matplotlib.pyplot as plt
-
-            plt.close(fig_3d)
-            for fig, _ in floor_figs:
-                plt.close(fig)
-
-    print("\nDone!")
+        except ImportError:
+            print("Could not visualize: matplotlib is required")
+            print("Install matplotlib with: pip install matplotlib")
 
 
 if __name__ == "__main__":
