@@ -132,6 +132,9 @@ class DesignGenerationInput(BaseModel):
     fixed_positions: Optional[Dict[str, List[float]]] = Field(
         None, description="Fixed room positions {room_id: [x, y, z]}"
     )
+    fixed_elements_file: Optional[str] = Field(
+        None, description="Path to fixed elements JSON file"
+    )
     include_standard_floors: bool = Field(
         False, description="Whether to include standard floors"
     )
@@ -364,21 +367,40 @@ async def update_building_config(request: Dict = Body(...)):
         # Construct the filepath
         filepath = BUILDING_DIR / f"{building_id}.json"
 
+        logger.info(f"Updating building configuration at: {filepath}")
+        logger.info(f"Updated config: {updated_config}")
+
         # Check if the file exists
         if not filepath.exists():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Building configuration {building_id} not found",
+            logger.warning(
+                f"Building configuration {building_id} not found, creating new file"
             )
+
+        # Make sure we have a standard_floor section to update
+        if "standard_floor" not in updated_config:
+            logger.warning("No standard_floor section in updated config")
+            updated_config["standard_floor"] = {
+                "start_floor": 2,
+                "end_floor": 20,
+                "width": 56.0,
+                "length": 20.0,
+                "position_x": 0.0,
+                "position_y": 32.0,
+                "corridor_width": 4.0,
+                "room_depth": 8.0,
+            }
 
         # Write the updated configuration
         with open(filepath, "w") as f:
             json.dump(updated_config, f, indent=2)
 
+        logger.info(f"Successfully updated building configuration at: {filepath}")
+
         return {
             "success": True,
             "message": "Building configuration updated successfully",
             "building_id": building_id,
+            "filepath": str(filepath),
         }
     except HTTPException:
         raise
@@ -391,7 +413,7 @@ async def update_building_config(request: Dict = Body(...)):
 
 @app.post("/save-fixed-elements")
 async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
-    """Save fixed elements to a JSON file."""
+    """Save fixed elements to a JSON file without modifying the reference file."""
     try:
         building_id = data.get("building_id")
         fixed_elements = data.get("fixed_elements")
@@ -402,11 +424,11 @@ async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
                 detail="Building ID and fixed elements data are required",
             )
 
-        # Create filename
+        # Create filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{building_id}_{timestamp}_fixed_rooms.json"
 
-        # Save to file
+        # Save to file in the fix directory
         filepath = FIX_DIR / filename
 
         with open(filepath, "w") as f:
@@ -414,17 +436,12 @@ async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
 
         logger.info(f"Fixed elements saved to: {filepath}")
 
-        # Also save to the default fixed_rooms.json which is loaded by the engine
-        default_filepath = FIX_DIR / "fixed_rooms.json"
-        with open(default_filepath, "w") as f:
-            json.dump(fixed_elements, f, indent=2)
-
-        logger.info(f"Fixed elements also saved to default path: {default_filepath}")
-
+        # Return the filepath so the frontend can use it for layout generation
         return {
             "success": True,
             "message": "Fixed elements saved successfully",
             "filepath": str(filepath),
+            "filename": filename,
         }
     except Exception as e:
         logger.error(f"Error saving fixed elements: {e}")
@@ -437,13 +454,39 @@ async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
 async def generate_layout(input_data: DesignGenerationInput = Body(...)):
     """Generate a hotel layout based on configurations."""
     try:
-        # Convert string fixed positions to int keys with float value tuples
+        # Use the specified fixed elements file if provided
         fixed_positions = None
-        if input_data.fixed_positions:
+        if input_data.fixed_elements_file:
+            # Load the fixed elements file
+            try:
+                fixed_file_path = Path(input_data.fixed_elements_file)
+                if fixed_file_path.exists():
+                    logger.info(f"Loading fixed elements from: {fixed_file_path}")
+                    with open(fixed_file_path, "r") as f:
+                        fixed_data = json.load(f)
+
+                    # Extract fixed rooms data
+                    if "fixed_rooms" in fixed_data:
+                        # This is the enhanced format with identifiers, which will be handled
+                        # by match_fixed_rooms_to_actual later in the process
+                        fixed_positions = fixed_data["fixed_rooms"]
+                    else:
+                        # Direct format with room ID to position mapping
+                        fixed_positions = {
+                            int(k): tuple(v) for k, v in fixed_data.items()
+                        }
+                else:
+                    logger.warning(f"Fixed elements file not found: {fixed_file_path}")
+            except Exception as e:
+                logger.error(f"Error loading fixed elements file: {e}")
+                # Continue without fixed positions if there was an error
+        elif input_data.fixed_positions:
+            # If no file is provided but direct positions are, use those
             fixed_positions = {
                 int(k): tuple(v) for k, v in input_data.fixed_positions.items()
             }
 
+        # Rest of the function remains mostly unchanged...
         # Get building envelope parameters
         building_config = get_building_envelope(input_data.building_config)
         width = building_config["width"]
@@ -486,6 +529,13 @@ async def generate_layout(input_data: DesignGenerationInput = Body(...)):
 
         # Apply fixed positions if provided
         if fixed_positions:
+            # If fixed_positions is a list, it's in the enhanced format with identifiers
+            if isinstance(fixed_positions, list):
+                from hotel_design_ai.main import match_fixed_rooms_to_actual
+
+                fixed_positions = match_fixed_rooms_to_actual(fixed_positions, rooms)
+
+            # Apply positions to rooms
             modified_rooms = []
             for room in rooms:
                 room_copy = Room.from_dict(room.to_dict())

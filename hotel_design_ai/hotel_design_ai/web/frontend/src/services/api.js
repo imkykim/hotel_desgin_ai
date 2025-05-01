@@ -403,9 +403,23 @@ export const getChat2PlanLogs = async (sessionId, since = 0) => {
   }
 };
 
-// In services/api.js
 export const updateBuildingConfig = async (buildingId, configData) => {
   try {
+    console.log("Updating building config:", buildingId);
+    console.log("Config data:", configData);
+
+    // Make sure we don't send undefined values
+    if (!buildingId) {
+      console.error("Building ID is undefined");
+      return {
+        success: false,
+        error: "Building ID is undefined",
+      };
+    }
+
+    // Ensure we have a clean object to send
+    const cleanedConfigData = JSON.parse(JSON.stringify(configData));
+
     const response = await fetch(`${API_BASE_URL}/update-building-config`, {
       method: "POST",
       headers: {
@@ -413,21 +427,55 @@ export const updateBuildingConfig = async (buildingId, configData) => {
       },
       body: JSON.stringify({
         building_id: buildingId,
-        building_config: configData,
+        building_config: cleanedConfigData,
       }),
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
+    // Get response text first to debug any parsing issues
+    const responseText = await response.text();
+    console.log("Raw API response:", responseText);
+
+    // Try to parse as JSON
+    let responseData;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Failed to parse API response as JSON:", parseError);
       return {
         success: false,
-        error: errorData.detail || "Failed to update building configuration",
+        error: `Failed to parse API response: ${responseText.substring(
+          0,
+          100
+        )}...`,
       };
     }
 
-    return await response.json();
+    if (!response.ok) {
+      console.error("Error updating building config:", responseData);
+      return {
+        success: false,
+        error:
+          responseData?.detail ||
+          `Failed to update building configuration (${response.status})`,
+      };
+    }
+
+    console.log("Building config update successful:", responseData);
+
+    return {
+      success: true,
+      message:
+        responseData?.message || "Building configuration updated successfully",
+      filepath: responseData?.filepath,
+    };
   } catch (error) {
-    return handleApiError(error);
+    console.error("Exception updating building config:", error);
+    return {
+      success: false,
+      error:
+        error?.message ||
+        "Unknown error occurred while updating building configuration",
+    };
   }
 };
 
