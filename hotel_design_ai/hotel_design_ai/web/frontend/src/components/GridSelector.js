@@ -10,6 +10,7 @@ const GridSelector = ({
   selectionMode = "standard", // 'standard', 'entrance', 'core'
 }) => {
   // Calculate grid dimensions
+  // Use structural grid size for the cell dimensions, not the fine-grained grid_size
   const gridCellsX = Math.floor(buildingWidth / gridSize);
   const gridCellsY = Math.floor(buildingLength / gridSize);
 
@@ -23,6 +24,13 @@ const GridSelector = ({
 
   const canvasRef = useRef(null);
 
+  // Log grid information for debugging (but don't display to user)
+  useEffect(() => {
+    console.log(`Building dimensions: ${buildingWidth}m × ${buildingLength}m`);
+    console.log(`Grid size (structural grid): ${gridSize}m`);
+    console.log(`Grid cells: ${gridCellsX} × ${gridCellsY}`);
+  }, [buildingWidth, buildingLength, gridSize, gridCellsX, gridCellsY]);
+
   // Draw the grid
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -33,26 +41,42 @@ const GridSelector = ({
     const aspectRatio = buildingWidth / buildingLength;
 
     // Set a reasonable canvas size while maintaining proportions
-    const CELL_SIZE = 50; // Increase this value for bigger grid cells
+    // Each grid cell should be a reasonable size on screen
+    const CELL_DISPLAY_SIZE = 50; // Pixels per cell on screen
     if (aspectRatio > 1) {
-      canvas.width = Math.min(1200, gridCellsX * CELL_SIZE);
+      canvas.width = Math.min(1200, gridCellsX * CELL_DISPLAY_SIZE);
       canvas.height = canvas.width / aspectRatio;
     } else {
-      canvas.height = Math.min(900, gridCellsY * CELL_SIZE);
+      canvas.height = Math.min(900, gridCellsY * CELL_DISPLAY_SIZE);
       canvas.width = canvas.height * aspectRatio;
     }
 
-    const cellSize = Math.min(
-      Math.floor(canvas.width / gridCellsX),
-      Math.floor(canvas.height / gridCellsY)
-    );
+    // Calculate how many screen pixels represent one grid cell
+    const cellSizeX = canvas.width / gridCellsX;
+    const cellSizeY = canvas.height / gridCellsY;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw grid
+    // Draw grid lines
     ctx.strokeStyle = "#ccc";
     ctx.lineWidth = 0.5;
+
+    // Draw vertical grid lines
+    for (let x = 0; x <= gridCellsX; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * cellSizeX, 0);
+      ctx.lineTo(x * cellSizeX, canvas.height);
+      ctx.stroke();
+    }
+
+    // Draw horizontal grid lines
+    for (let y = 0; y <= gridCellsY; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * cellSizeY);
+      ctx.lineTo(canvas.width, y * cellSizeY);
+      ctx.stroke();
+    }
 
     // Draw cells
     for (let x = 0; x < gridCellsX; x++) {
@@ -85,15 +109,17 @@ const GridSelector = ({
           ctx.strokeStyle = "#000";
         }
 
-        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        ctx.fillRect(x * cellSizeX, y * cellSizeY, cellSizeX, cellSizeY);
+        ctx.strokeRect(x * cellSizeX, y * cellSizeY, cellSizeX, cellSizeY);
+
+        // Removed coordinate labels as requested
       }
     }
 
     // Draw building outline
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, gridCellsX * cellSize, gridCellsY * cellSize);
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
   }, [
     selectedCells,
     entranceCells,
@@ -109,13 +135,18 @@ const GridSelector = ({
   const handleMouseDown = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const cellSize = Math.min(
-      Math.floor(canvas.width / gridCellsX),
-      Math.floor(canvas.height / gridCellsY)
-    );
 
-    const x = Math.floor((e.clientX - rect.left) / cellSize);
-    const y = Math.floor((e.clientY - rect.top) / cellSize);
+    // Calculate cell size in screen pixels
+    const cellSizeX = canvas.width / gridCellsX;
+    const cellSizeY = canvas.height / gridCellsY;
+
+    const x = Math.floor((e.clientX - rect.left) / cellSizeX);
+    const y = Math.floor((e.clientY - rect.top) / cellSizeY);
+
+    // Make sure we're within grid bounds
+    if (x < 0 || x >= gridCellsX || y < 0 || y >= gridCellsY) {
+      return;
+    }
 
     setIsSelecting(true);
     setSelectionStart({ x, y });
@@ -175,13 +206,23 @@ const GridSelector = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const cellSize = Math.min(
-      Math.floor(canvas.width / gridCellsX),
-      Math.floor(canvas.height / gridCellsY)
-    );
 
-    const currentX = Math.floor((e.clientX - rect.left) / cellSize);
-    const currentY = Math.floor((e.clientY - rect.top) / cellSize);
+    // Calculate cell size in screen pixels
+    const cellSizeX = canvas.width / gridCellsX;
+    const cellSizeY = canvas.height / gridCellsY;
+
+    const currentX = Math.floor((e.clientX - rect.left) / cellSizeX);
+    const currentY = Math.floor((e.clientY - rect.top) / cellSizeY);
+
+    // Ensure we're within bounds
+    if (
+      currentX < 0 ||
+      currentX >= gridCellsX ||
+      currentY < 0 ||
+      currentY >= gridCellsY
+    ) {
+      return;
+    }
 
     // Calculate selection rectangle
     const startX = Math.min(selectionStart.x, currentX);
@@ -284,6 +325,18 @@ const GridSelector = ({
           : "Select the areas that will contain standard floors (guest rooms and core)"}
       </p>
 
+      <div className="grid-info">
+        <p>
+          Building: {buildingWidth}m × {buildingLength}m
+        </p>
+        <p>
+          Grid size: {gridSize}m × {gridSize}m
+        </p>
+        <p>
+          Grid cells: {gridCellsX} × {gridCellsY}
+        </p>
+      </div>
+
       <div className="canvas-container">
         <canvas
           ref={canvasRef}
@@ -313,10 +366,6 @@ const GridSelector = ({
       </div>
 
       <div className="statistics">
-        <p>
-          Building dimensions: {buildingWidth}m × {buildingLength}m
-        </p>
-        <p>Grid size: {gridSize}m</p>
         {selectionMode === "standard" && (
           <p>Selected area: {selectedCells.size * gridSize * gridSize}m²</p>
         )}

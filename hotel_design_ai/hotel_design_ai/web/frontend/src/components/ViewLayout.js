@@ -13,6 +13,7 @@ const ViewLayout = () => {
   const [imageUrls, setImageUrls] = useState({ floor_plans: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [activeView, setActiveView] = useState("3d");
   const [imageErrors, setImageErrors] = useState({});
   const { layoutId } = useParams();
@@ -417,22 +418,25 @@ const ViewLayout = () => {
       ? `No Basement ${Math.abs(floorNum)} Plan Available`
       : `No Floor ${floorNum} Plan Available`;
   };
+  // In your ViewLayout component
   const handleExportToRhino = async () => {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
 
       const result = await exportLayoutToRhinoScript(layoutId);
 
       if (result.success) {
         setSuccess(
-          "Rhino script exported successfully. Open the script in Rhino using the RunPythonScript command."
+          "Rhino script downloaded successfully. Open the script in Rhino using the RunPythonScript command."
         );
       } else {
         setError(result.error || "Failed to export Rhino script");
       }
     } catch (err) {
-      setError("Error exporting to Rhino: " + err.message);
+      console.error("Error in handleExportToRhino:", err);
+      setError("Error exporting to Rhino: " + (err.message || String(err)));
     } finally {
       setLoading(false);
     }

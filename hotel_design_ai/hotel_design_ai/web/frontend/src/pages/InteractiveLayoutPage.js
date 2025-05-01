@@ -74,22 +74,24 @@ const InteractiveLayoutPage = () => {
   useEffect(() => {
     const fetchBuildingConfig = async () => {
       try {
+        setLoading(true);
+        console.log(`Fetching building configuration for: ${buildingId}`);
+
         // If using sample data, load default config
         if (buildingId === "sample" && programId === "sample") {
-          const response = await getConfiguration("building", buildingId);
-          if (response.success) {
-            setBuildingConfig({
-              width: response.config_data.width,
-              length: response.config_data.length,
-              height: response.config_data.height,
-              min_floor: response.config_data.min_floor,
-              max_floor: response.config_data.max_floor,
-              floor_height: response.config_data.floor_height,
-              structural_grid_x: response.config_data.structural_grid_x,
-              structural_grid_y: response.config_data.structural_grid_y,
-              grid_size: response.config_data.grid_size,
-            });
-          }
+          console.log("Using sample configuration");
+          setBuildingConfig({
+            width: 60,
+            length: 80,
+            height: 100,
+            min_floor: -2,
+            max_floor: 20,
+            floor_height: 4.5,
+            structural_grid_x: 8.0,
+            structural_grid_y: 8.0,
+            grid_size: 1.0,
+          });
+
           setInitialLayout({
             rooms: {
               1: {
@@ -122,15 +124,15 @@ const InteractiveLayoutPage = () => {
               },
             },
           });
+          setLoading(false);
           return;
         }
 
-        // For real data, fetch from backend
-        setLoading(true);
-
         // If we have a layoutId, fetch that specific layout
         if (layoutId) {
+          console.log(`Fetching layout: ${layoutId}`);
           const layoutData = await getLayout(layoutId);
+
           if (layoutData.success) {
             setBuildingConfig({
               width: layoutData.layout_data.width || 60,
@@ -149,32 +151,58 @@ const InteractiveLayoutPage = () => {
             setActiveTab("layout");
           }
         } else {
-          // Otherwise use configuration info from params
-          // In a real app, we'd fetch these from the backend
-          setBuildingConfig({
-            width: 60.0,
-            length: 80.0,
-            height: 30.0,
-            min_floor: -2,
-            max_floor: 5,
-            floor_height: 4.5,
-            structural_grid_x: 8.0,
-            structural_grid_y: 8.0,
-            grid_size: 1.0,
-            main_entry: "front",
-            description: "Hotel building generated from parameters",
-            units: "meters",
-          });
+          // Fetch the actual building configuration using the buildingId
+          console.log(`Fetching building config: ${buildingId}`);
+          const configResponse = await getConfiguration("building", buildingId);
+
+          if (configResponse.success) {
+            console.log("Building config loaded:", configResponse.config_data);
+
+            // Use the data from the fetched configuration
+            setBuildingConfig({
+              width: configResponse.config_data.width || 60.0,
+              length: configResponse.config_data.length || 80.0,
+              height: configResponse.config_data.height || 100.0,
+              min_floor: configResponse.config_data.min_floor || -2,
+              max_floor: configResponse.config_data.max_floor || 20,
+              floor_height: configResponse.config_data.floor_height || 4.5,
+              structural_grid_x:
+                configResponse.config_data.structural_grid_x || 8.0,
+              structural_grid_y:
+                configResponse.config_data.structural_grid_y || 8.0,
+              grid_size: configResponse.config_data.grid_size || 1.0,
+              description:
+                configResponse.config_data.description || "Hotel building",
+            });
+          } else {
+            // Fallback to default if config not found
+            console.log("Using default building configuration");
+            setBuildingConfig({
+              width: 60.0,
+              length: 80.0,
+              height: 100.0,
+              min_floor: -2,
+              max_floor: 20,
+              floor_height: 4.5,
+              structural_grid_x: 8.0,
+              structural_grid_y: 8.0,
+              grid_size: 1.0,
+              description: "Default hotel building configuration",
+            });
+          }
         }
 
         setLoading(false);
       } catch (err) {
-        setError(err.message);
+        console.error("Error fetching configuration:", err);
+        setError(err.message || "Failed to load building configuration");
         setLoading(false);
       }
     };
 
-    fetchBuildingConfig();
+    if (buildingId) {
+      fetchBuildingConfig();
+    }
   }, [buildingId, programId, layoutId]);
 
   // Handle grid selection changes
@@ -371,11 +399,7 @@ const InteractiveLayoutPage = () => {
         fixed_rooms: fixedRooms,
       };
 
-      // In a real implementation, we would save this to the server
-      // For now, we'll just simulate success and log the result
-      console.log("Fixed rooms JSON:", JSON.stringify(fixedRoomsJson, null, 2));
-
-      // Call the backend to save fixed elements (you would need to implement this endpoint)
+      // Call the backend to save fixed elements
       const response = await fetch(`${API_BASE_URL}/save-fixed-elements`, {
         method: "POST",
         headers: {

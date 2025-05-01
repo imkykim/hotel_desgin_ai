@@ -76,3 +76,15 @@
   font-size: 14px;
   color: #343a40;
 }
+.grid-info {
+  margin: 15px 0;
+  padding: 10px 15px;
+  background-color: #e9ecef;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #495057;
+}
+
+.grid-info p {
+  margin: 5px 0;
+}
