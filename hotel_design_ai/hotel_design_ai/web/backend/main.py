@@ -183,6 +183,29 @@ def convert_room_dicts_to_room_objects(room_dicts: List[Dict[str, Any]]) -> List
     return rooms
 
 
+def match_fixed_rooms_to_actual(fixed_rooms: list, rooms: list) -> dict:
+    """
+    Match fixed room identifiers to actual Room objects by id or name.
+    Returns a dict {room.id: position}.
+    """
+    id_map = {room.id: room for room in rooms}
+    name_map = {getattr(room, "name", None): room for room in rooms}
+    result = {}
+    for entry in fixed_rooms:
+        # Each entry should have at least an 'id' or 'name' and a 'position'
+        room_id = entry.get("id")
+        room_name = entry.get("name")
+        position = entry.get("position")
+        matched_room = None
+        if room_id is not None and room_id in id_map:
+            matched_room = id_map[room_id]
+        elif room_name is not None and room_name in name_map:
+            matched_room = name_map[room_name]
+        if matched_room is not None and position is not None:
+            result[matched_room.id] = position
+    return result
+
+
 @app.get("/")
 async def root():
     """Root endpoint to check if the API is running."""
@@ -531,8 +554,6 @@ async def generate_layout(input_data: DesignGenerationInput = Body(...)):
         if fixed_positions:
             # If fixed_positions is a list, it's in the enhanced format with identifiers
             if isinstance(fixed_positions, list):
-                from hotel_design_ai.main import match_fixed_rooms_to_actual
-
                 fixed_positions = match_fixed_rooms_to_actual(fixed_positions, rooms)
 
             # Apply positions to rooms
