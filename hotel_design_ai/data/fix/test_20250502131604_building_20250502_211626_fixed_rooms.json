@@ -1,0 +1,28 @@
+{
+  "fixed_rooms": [
+    {
+      "identifier": {
+        "type": "room_type_with_name",
+        "room_type": "lobby",
+        "name": "reception"
+      },
+      "position": [
+        16,
+        48,
+        0
+      ]
+    },
+    {
+      "identifier": {
+        "type": "department_with_name",
+        "department": "circulation",
+        "name": "main_core"
+      },
+      "position": [
+        16,
+        8,
+        -10
+      ]
+    }
+  ]
+}

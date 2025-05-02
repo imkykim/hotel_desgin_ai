@@ -77,6 +77,14 @@ const FloorSelector = ({ buildingConfig, currentFloor, onFloorChange }) => {
           {floor < 0 ? `B${Math.abs(floor)}` : floor}
         </button>
       ))}
+      {/* Add a 3D view button */}
+      <button
+        key="floor-3d"
+        className={`floor-button ${currentFloor === "3d" ? "active" : ""}`}
+        onClick={() => onFloorChange("3d")}
+      >
+        3D View
+      </button>
     </div>
   );
 };
@@ -85,6 +93,7 @@ const FloorSelector = ({ buildingConfig, currentFloor, onFloorChange }) => {
 const LayoutEditor = ({
   initialLayout,
   buildingConfig,
+  layoutId,
   onLayoutChange = () => {},
   onTrainRL = () => {},
 }) => {
@@ -94,8 +103,11 @@ const LayoutEditor = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [userFeedback, setUserFeedback] = useState(5); // 0-10 rating
+  const [showFloorPlan, setShowFloorPlan] = useState(true);
+  const [show3DView, setShow3DView] = useState(false);
 
   const canvasRef = useRef(null);
+  const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
   // Extract building dimensions from config
   const { width, length, floor_height } = buildingConfig || {
@@ -122,6 +134,9 @@ const LayoutEditor = ({
 
     // Draw rooms for the current floor
     Object.entries(layout.rooms || {}).forEach(([roomId, roomData]) => {
+      // Skip if we're in 3D view mode
+      if (currentFloor === "3d") return;
+
       const roomFloor = Math.floor(roomData.position[2] / floor_height);
 
       // Skip rooms not on the current floor
@@ -161,12 +176,28 @@ const LayoutEditor = ({
 
   // Draw the layout when component updates
   useEffect(() => {
-    drawLayout();
+    if (currentFloor === "3d") {
+      setShowFloorPlan(false);
+      setShow3DView(true);
+    } else {
+      setShowFloorPlan(true);
+      setShow3DView(false);
+      drawLayout();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout, selectedRoom, currentFloor, width, length, floor_height]);
 
+  // Handle floor change
+  const handleFloorChange = (floor) => {
+    setCurrentFloor(floor);
+    setSelectedRoom(null);
+  };
+
   // Handle mouse down for room selection and dragging
   const handleMouseDown = (e) => {
+    // Don't handle mouse events when in 3D view
+    if (currentFloor === "3d") return;
+
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     const scale = Math.min(canvas.width / width, canvas.height / length);
@@ -202,7 +233,7 @@ const LayoutEditor = ({
 
   // Handle mouse move for dragging rooms
   const handleMouseMove = (e) => {
-    if (!isDragging || selectedRoom === null) return;
+    if (!isDragging || selectedRoom === null || currentFloor === "3d") return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -248,12 +279,6 @@ const LayoutEditor = ({
     }
   };
 
-  // Handle floor change
-  const handleFloorChange = (floor) => {
-    setCurrentFloor(floor);
-    setSelectedRoom(null);
-  };
-
   // Submit layout for RL training
   const handleTrainRL = () => {
     onTrainRL({
@@ -272,12 +297,19 @@ const LayoutEditor = ({
     };
   };
 
+  // Get 3D view image URL
+  const get3DImageUrl = () => {
+    if (!layoutId) return null;
+    return `${apiBaseUrl}/layouts/${layoutId}/hotel_layout_3d.png`;
+  };
+
   return (
     <div className="layout-editor">
       <h3>Interactive Layout Editor</h3>
       <p>
-        Drag rooms to modify the layout. When satisfied, rate the layout and
-        submit for RL training.
+        {currentFloor === "3d"
+          ? "3D visualization of the layout. Switch to floor view to modify rooms."
+          : "Drag rooms to modify the layout. When satisfied, rate the layout and submit for RL training."}
       </p>
 
       <FloorSelector
@@ -286,17 +318,40 @@ const LayoutEditor = ({
         onFloorChange={handleFloorChange}
       />
 
-      <div className="canvas-container">
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={600}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        />
-      </div>
+      {showFloorPlan && (
+        <div className="canvas-container">
+          <canvas
+            ref={canvasRef}
+            width={800}
+            height={600}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          />
+        </div>
+      )}
+
+      {show3DView && (
+        <div className="view-3d-container">
+          {layoutId ? (
+            <img
+              src={get3DImageUrl()}
+              alt="3D View of Layout"
+              className="layout-3d-image"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src =
+                  "https://via.placeholder.com/800x600?text=No+3D+View+Available";
+              }}
+            />
+          ) : (
+            <div className="placeholder-image">
+              3D view not available. Save layout first.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="room-info">
         <RoomInfo room={getSelectedRoomData()} />

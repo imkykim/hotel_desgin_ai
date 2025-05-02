@@ -479,6 +479,85 @@ export const updateBuildingConfig = async (buildingId, configData) => {
   }
 };
 
+// Generate improved layout with RL
+export const generateImprovedLayout = async (
+  buildingId,
+  programId,
+  referenceLayoutId
+) => {
+  try {
+    // Try using a GET request with query parameters instead of POST
+    const url = new URL(`${API_BASE_URL}/engine/generate-improved`);
+
+    // Add query parameters
+    url.searchParams.append("building_id", buildingId);
+    url.searchParams.append("program_id", programId);
+    if (referenceLayoutId) {
+      url.searchParams.append("reference_layout_id", referenceLayoutId);
+    }
+
+    const response = await fetch(url, {
+      method: "GET", // Change to GET
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({
+        detail: `HTTP error ${response.status}: ${response.statusText}`,
+      }));
+
+      return {
+        success: false,
+        error:
+          errorData.detail ||
+          `Failed to generate improved layout (${response.status})`,
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+export const generateLayoutWithReference = async (
+  buildingId,
+  programId,
+  referenceLayoutId
+) => {
+  try {
+    // Use the standard generateLayout endpoint which is more likely to work
+    const response = await fetch(`${API_BASE_URL}/generate-layout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        building_config: buildingId,
+        program_config: programId,
+        mode: "rl", // Use RL mode
+        include_standard_floors: true,
+        reference_layout_id: referenceLayoutId, // Reference the previous layout
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ detail: `HTTP error ${response.status}` }));
+
+      return {
+        success: false,
+        error: errorData.detail || "Failed to generate layout",
+      };
+    }
+
+    return await response.json();
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
 // Export layout to Rhino script
 export const exportLayoutToRhinoScript = async (layoutId) => {
   try {
