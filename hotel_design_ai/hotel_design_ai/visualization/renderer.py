@@ -264,7 +264,7 @@ class LayoutRenderer:
 
         # Set axis limits
         ax.set_xlim(0, self.layout.width)
-        ax.set_ylim(0, self.layout.length)
+        ax.set_ylim(self.layout.length, 0)
 
     def _draw_bounding_box(self, ax):
         """Draw the building bounding box."""
