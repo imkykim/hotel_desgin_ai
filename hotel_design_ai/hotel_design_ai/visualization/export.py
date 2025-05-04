@@ -413,7 +413,9 @@ def create_room(name, room_type, x, y, z, width, length, height):
         rooms = layout  # Assume it's already a rooms dictionary
 
     # Add create_room calls for each room
-    room_creation_calls = []
+    script_content += "\n# Create each room\n"
+    script_content += "standard_floor_objs = []\n"
+    script_content += "podium_objs = []\n"
     for room_id, room_data in rooms.items():
         # Make sure room_id is a string
         room_id_str = str(room_id)
@@ -452,16 +454,26 @@ def create_room(name, room_type, x, y, z, width, length, height):
             dimensions.append(0)
 
         # Format the create_room call
-        room_call = f'create_room("{name}", "{room_type}", {position[0]}, {position[1]}, {position[2]}, {dimensions[0]}, {dimensions[1]}, {dimensions[2]})'
-        room_creation_calls.append(room_call)
+        room_call = f'obj = create_room("{name}", "{room_type}", {position[0]}, {-position[1]}, {position[2]}, {dimensions[0]}, {-dimensions[1]}, {dimensions[2]})'
+        script_content += room_call + "\n"
+        # Grouping logic
+        if "standard_floor" in room_type:
+            script_content += "standard_floor_objs.append(obj)\n"
+        elif "podium" in room_type:
+            script_content += "podium_objs.append(obj)\n"
 
-    # Add room creation calls to the script
-    script_content += "\n# Create each room\n"
-    script_content += "\n".join(room_creation_calls)
-
-    # Add final setup commands
+    # Add grouping commands
     script_content += """
+# Group standard floor rooms
+if standard_floor_objs:
+    group_id = rs.AddGroup("StandardFloorGroup")
+    rs.AddObjectsToGroup(standard_floor_objs, group_id)
 
+# Group podium rooms
+if podium_objs:
+    group_id = rs.AddGroup("PodiumGroup")
+    rs.AddObjectsToGroup(podium_objs, group_id)
+    
 # Set up a good view
 rs.Command("_-NamedView _Save HotelOverview _Enter", False)
 rs.Command("_-View _Top", False)

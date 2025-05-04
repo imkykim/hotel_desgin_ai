@@ -391,7 +391,19 @@ async def update_building_config(request: Dict = Body(...)):
         filepath = BUILDING_DIR / f"{building_id}.json"
 
         logger.info(f"Updating building configuration at: {filepath}")
-        logger.info(f"Updated config: {updated_config}")
+
+        # Log the standard_floor section specifically for debugging
+        if "standard_floor" in updated_config:
+            std_floor = updated_config["standard_floor"]
+            logger.info(
+                f"Standard floor parameters: width={std_floor.get('width')}, length={std_floor.get('length')}, "
+                f"position_x={std_floor.get('position_x')}, position_y={std_floor.get('position_y')}"
+            )
+        else:
+            logger.warning("No standard_floor section in updated config")
+
+        # Full config logging at debug level
+        logger.debug(f"Updated config: {updated_config}")
 
         # Check if the file exists
         if not filepath.exists():
@@ -401,7 +413,7 @@ async def update_building_config(request: Dict = Body(...)):
 
         # Make sure we have a standard_floor section to update
         if "standard_floor" not in updated_config:
-            logger.warning("No standard_floor section in updated config")
+            logger.warning("Adding default standard_floor section")
             updated_config["standard_floor"] = {
                 "start_floor": 2,
                 "end_floor": 20,
