@@ -1,6 +1,7 @@
 """
 Optimized standard floor generator for hotel tower designs.
 This module generates standard floor layouts based on the podium's vertical circulation core.
+Supports both horizontal and vertical room arrangements based on the dimensions.
 """
 
 from typing import Dict, List, Tuple, Any, Optional
@@ -82,15 +83,18 @@ def _generate_suite_rooms(
     building_config: Dict[str, Any],
     spatial_grid: SpatialGrid,
     room_id_offset: int,
+    is_horizontal_layout: bool,
 ) -> List[Room]:
     """
     Generate suite rooms at the corners of the standard floor boundary.
+    Supports both horizontal and vertical layouts.
 
     Args:
         floor_number: The floor number to generate.
         building_config: Building configuration data.
         spatial_grid: The spatial grid to place rooms.
         room_id_offset: Offset for room IDs to avoid conflicts.
+        is_horizontal_layout: Whether the layout is horizontal (True) or vertical (False)
 
     Returns:
         List[Room]: List of suite room objects.
@@ -108,7 +112,7 @@ def _generate_suite_rooms(
     boundary_x = std_floor_config.get("position_x", 0.0)
     boundary_y = std_floor_config.get("position_y", 24.0)
 
-    # Define suite room positions (one at each edge)
+    # Define suite room positions (one at each corner)
     suite_positions = [
         (boundary_x, boundary_y),  # Bottom-left corner
         (boundary_x + boundary_width - suite_width, boundary_y),  # Bottom-right corner
@@ -121,20 +125,27 @@ def _generate_suite_rooms(
 
     for i, (suite_x, suite_y) in enumerate(suite_positions):
         suite_id = room_id_offset + 100 + i
+
+        # For vertical layout, swap width and length of suites for better corridor alignment
+        if not is_horizontal_layout:
+            room_width, room_length = suite_length, suite_width
+        else:
+            room_width, room_length = suite_width, suite_length
+
         spatial_grid.place_room(
             room_id=suite_id,
             x=suite_x,
             y=suite_y,
             z=floor_number * building_config.get("floor_height", 4.0),
-            width=suite_width,
-            length=suite_length,
+            width=room_width,
+            length=room_length,
             height=building_config.get("floor_height", 4.0),
             room_type="suite_room",
             metadata={"name": f"Suite Room {i + 1}", "is_suite": True},
         )
         suite_room = Room(
-            width=suite_width,
-            length=suite_length,
+            width=room_width,
+            length=room_length,
             height=building_config.get("floor_height", 4.0),
             room_type="suite_room",
             name=f"Suite Room {i + 1}",
@@ -158,9 +169,11 @@ def _generate_single_rooms(
     spatial_grid: SpatialGrid,
     circulation_core: Dict[str, Any],
     room_id_offset: int,
+    is_horizontal_layout: bool,
 ) -> List[Room]:
     """
-    Generate single rooms along the long sides of the standard floor.
+    Generate single rooms along the sides of the standard floor.
+    Supports both horizontal (rooms on north/south) and vertical (rooms on east/west) layouts.
 
     Args:
         floor_number: The floor number to generate.
@@ -168,100 +181,171 @@ def _generate_single_rooms(
         spatial_grid: The spatial grid to place rooms.
         circulation_core: Data for the vertical circulation core.
         room_id_offset: Offset for room IDs to avoid conflicts.
+        is_horizontal_layout: Whether the layout is horizontal (True) or vertical (False)
 
     Returns:
         List[Room]: List of single room objects.
     """
     single_rooms = []
-    single_width = building_config.get("structural_grid_x", 8.0) / 2  # Half grid width
-    single_length = building_config.get("structural_grid_y", 8.0)  # Full grid length
+    structural_grid_x = building_config.get("structural_grid_x", 8.0)
+    structural_grid_y = building_config.get("structural_grid_y", 8.0)
     std_floor_config = building_config.get("standard_floor", {})
     boundary_width = std_floor_config.get("width", 56.0)
     boundary_length = std_floor_config.get("length", 20.0)
     boundary_x = std_floor_config.get("position_x", 0.0)
     boundary_y = std_floor_config.get("position_y", 32.0)
+    room_depth = std_floor_config.get("room_depth", 8.0)
+
+    # Get floor height for z coordinate calculation
+    floor_height = building_config.get("floor_height", 4.0)
+    z_position = floor_number * floor_height
 
     # Get circulation core dimensions and position
     core_x, core_y, _ = circulation_core["position"]
     core_width, core_length, _ = circulation_core["dimensions"]
 
-    # Define placement ranges
-    south_start_x = boundary_x  # Start after the core on the south side
-    south_end_x = (
-        boundary_x + boundary_width - single_width
-    )  # End before the south suite room
-    north_start_x = boundary_x  # Start at the north boundary
-    north_end_x = (
-        boundary_x + boundary_width - single_width
-    )  # End before the north suite room
+    # Different room generation based on layout orientation
+    if is_horizontal_layout:
+        # HORIZONTAL LAYOUT (corridor east-west, rooms north-south)
+        single_width = structural_grid_x / 2  # Half grid width
+        single_length = room_depth  # Use room depth for north-south facing rooms
 
-    # Place rooms on the south side
-    current_x = south_start_x
-    while current_x + single_width <= south_end_x:
-        room_id = room_id_offset + len(single_rooms) + 1
-        spatial_grid.place_room(
-            room_id=room_id,
-            x=current_x,
-            y=boundary_y,  # Move down to contact the boundary edge
-            z=floor_number * building_config.get("floor_height", 4.0),
-            width=single_width,
-            length=single_length,
-            height=building_config.get("floor_height", 4.0),
-            room_type="single_room",
-            metadata={"name": f"Single Room South {len(single_rooms) + 1}"},
-        )
-        single_room = Room(
-            width=single_width,
-            length=single_length,
-            height=building_config.get("floor_height", 4.0),
-            room_type="single_room",
-            name=f"Single Room South {len(single_rooms) + 1}",
-            floor=floor_number,
-            id=room_id,
-            metadata={},
-        )
-        single_room.position = (
-            current_x,
-            boundary_y - single_length,
-            floor_number * building_config.get("floor_height", 4.0),
-        )
-        single_rooms.append(single_room)
-        current_x += single_width
+        # South side rooms
+        current_x = boundary_x
+        while current_x + single_width <= boundary_x + boundary_width - single_width:
+            room_id = room_id_offset + len(single_rooms) + 1
+            room_x = current_x
+            room_y = boundary_y  # Bottom edge
 
-    # Place rooms on the north side
-    current_x = north_start_x
-    while current_x + single_width <= north_end_x:
-        room_id = room_id_offset + len(single_rooms) + 1
-        spatial_grid.place_room(
-            room_id=room_id,
-            x=current_x,
-            y=boundary_y
-            + boundary_length
-            - single_length,  # Inside the boundary on the north side
-            z=floor_number * building_config.get("floor_height", 4.0),
-            width=single_width,
-            length=single_length,
-            height=building_config.get("floor_height", 4.0),
-            room_type="single_room",
-            metadata={"name": f"Single Room North {len(single_rooms) + 1}"},
-        )
-        single_room = Room(
-            width=single_width,
-            length=single_length,
-            height=building_config.get("floor_height", 4.0),
-            room_type="single_room",
-            name=f"Single Room North {len(single_rooms) + 1}",
-            floor=floor_number,
-            id=room_id,
-            metadata={},
-        )
-        single_room.position = (
-            current_x,
-            boundary_y + boundary_length - single_length,
-            floor_number * building_config.get("floor_height", 4.0),
-        )
-        single_rooms.append(single_room)
-        current_x += single_width
+            spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                metadata={"name": f"Single Room South {len(single_rooms) + 1}"},
+            )
+
+            single_room = Room(
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                name=f"Single Room South {len(single_rooms) + 1}",
+                floor=floor_number,
+                id=room_id,
+                metadata={},
+            )
+            single_room.position = (room_x, room_y, z_position)
+            single_rooms.append(single_room)
+            current_x += single_width
+
+        # North side rooms
+        current_x = boundary_x
+        while current_x + single_width <= boundary_x + boundary_width - single_width:
+            room_id = room_id_offset + len(single_rooms) + 1
+            room_x = current_x
+            room_y = boundary_y + boundary_length - single_length  # Top edge
+
+            spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                metadata={"name": f"Single Room North {len(single_rooms) + 1}"},
+            )
+
+            single_room = Room(
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                name=f"Single Room North {len(single_rooms) + 1}",
+                floor=floor_number,
+                id=room_id,
+                metadata={},
+            )
+            single_room.position = (room_x, room_y, z_position)
+            single_rooms.append(single_room)
+            current_x += single_width
+
+    else:
+        # VERTICAL LAYOUT (corridor north-south, rooms east-west)
+        single_length = structural_grid_y / 2  # Half grid length
+        single_width = room_depth  # Use room depth for east-west facing rooms
+
+        # East side rooms
+        current_y = boundary_y
+        while current_y + single_length <= boundary_y + boundary_length - single_length:
+            room_id = room_id_offset + len(single_rooms) + 1
+            room_y = current_y
+            room_x = boundary_x  # Left edge
+
+            spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                metadata={"name": f"Single Room East {len(single_rooms) + 1}"},
+            )
+
+            single_room = Room(
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                name=f"Single Room East {len(single_rooms) + 1}",
+                floor=floor_number,
+                id=room_id,
+                metadata={},
+            )
+            single_room.position = (room_x, room_y, z_position)
+            single_rooms.append(single_room)
+            current_y += single_length
+
+        # West side rooms
+        current_y = boundary_y
+        while current_y + single_length <= boundary_y + boundary_length - single_length:
+            room_id = room_id_offset + len(single_rooms) + 1
+            room_y = current_y
+            room_x = boundary_x + boundary_width - single_width  # Right edge
+
+            spatial_grid.place_room(
+                room_id=room_id,
+                x=room_x,
+                y=room_y,
+                z=z_position,
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                metadata={"name": f"Single Room West {len(single_rooms) + 1}"},
+            )
+
+            single_room = Room(
+                width=single_width,
+                length=single_length,
+                height=floor_height,
+                room_type="single_room",
+                name=f"Single Room West {len(single_rooms) + 1}",
+                floor=floor_number,
+                id=room_id,
+                metadata={},
+            )
+            single_room.position = (room_x, room_y, z_position)
+            single_rooms.append(single_room)
+            current_y += single_length
 
     return single_rooms
 
@@ -271,15 +355,18 @@ def _generate_corridor(
     building_config: Dict[str, Any],
     spatial_grid: SpatialGrid,
     room_id_offset: int,
+    is_horizontal_layout: bool,
 ) -> Room:
     """
     Generate the corridor between rows of double-loaded rooms.
+    Supports both horizontal and vertical layouts.
 
     Args:
         floor_number: The floor number to generate.
         building_config: Building configuration data.
         spatial_grid: The spatial grid to place the corridor.
         room_id_offset: Offset for room IDs to avoid conflicts.
+        is_horizontal_layout: Whether the layout is horizontal (True) or vertical (False)
 
     Returns:
         Room: The corridor room object.
@@ -290,10 +377,21 @@ def _generate_corridor(
     boundary_x = std_floor_config.get("position_x", 0.0)
     boundary_y = std_floor_config.get("position_y", 32.0)
     corridor_width = std_floor_config.get("corridor_width", 4.0)
+    floor_height = building_config.get("floor_height", 4.0)
+    z_position = floor_number * floor_height
 
-    # Calculate corridor position
-    corridor_x = boundary_x
-    corridor_y = boundary_y + (boundary_length - corridor_width) / 2
+    if is_horizontal_layout:
+        # HORIZONTAL LAYOUT - corridor runs east-west through the center
+        corridor_x = boundary_x
+        corridor_y = boundary_y + (boundary_length - corridor_width) / 2
+        corridor_length = corridor_width
+        corridor_width = boundary_width  # Full width of standard floor
+    else:
+        # VERTICAL LAYOUT - corridor runs north-south through the center
+        corridor_x = boundary_x + (boundary_width - corridor_width) / 2
+        corridor_y = boundary_y
+        corridor_length = boundary_length  # Full length of standard floor
+        corridor_width = corridor_width  # Width as specified in config
 
     # Place the corridor
     corridor_id = room_id_offset
@@ -301,28 +399,25 @@ def _generate_corridor(
         room_id=corridor_id,
         x=corridor_x,
         y=corridor_y,
-        z=floor_number * building_config.get("floor_height", 4.0),
-        width=boundary_width,
-        length=corridor_width,
-        height=building_config.get("floor_height", 4.0),
+        z=z_position,
+        width=corridor_width,
+        length=corridor_length,
+        height=floor_height,
         room_type="corridor",
         metadata={"name": f"Corridor Floor {floor_number}"},
     )
+
     corridor_room = Room(
-        width=boundary_width,
-        length=corridor_width,
-        height=building_config.get("floor_height", 4.0),
+        width=corridor_width,
+        length=corridor_length,
+        height=floor_height,
         room_type="corridor",
         name=f"Corridor Floor {floor_number}",
         floor=floor_number,
         id=corridor_id,
         metadata={},
     )
-    corridor_room.position = (
-        corridor_x,
-        corridor_y,
-        floor_number * building_config.get("floor_height", 4.0),
-    )
+    corridor_room.position = (corridor_x, corridor_y, z_position)
 
     return corridor_room
 
@@ -336,6 +431,7 @@ def generate_standard_floor(
 ) -> Tuple[SpatialGrid, List[Room]]:
     """
     Generate a standard floor layout anchored to the vertical circulation core.
+    Automatically determines optimal orientation based on standard floor dimensions.
     """
     # Initialize spatial grid if not provided
     if spatial_grid is None:
@@ -347,6 +443,17 @@ def generate_standard_floor(
             min_floor=building_config.get("min_floor", -2),
             floor_height=building_config.get("floor_height", 4.0),
         )
+
+    # Get standard floor dimensions to determine orientation
+    std_floor_config = building_config.get("standard_floor", {})
+    boundary_width = std_floor_config.get("width", 56.0)
+    boundary_length = std_floor_config.get("length", 20.0)
+
+    # Determine layout orientation - horizontal if width >= length, vertical otherwise
+    is_horizontal_layout = boundary_width >= boundary_length
+
+    print(f"Standard floor dimensions: {boundary_width}m x {boundary_length}m")
+    print(f"Using {'horizontal' if is_horizontal_layout else 'vertical'} layout")
 
     # Place vertical circulation core
     core = circulation_core or find_vertical_circulation_core(
@@ -373,6 +480,7 @@ def generate_standard_floor(
         building_config=building_config,
         spatial_grid=spatial_grid,
         room_id_offset=room_id_offset,
+        is_horizontal_layout=is_horizontal_layout,
     )
 
     # Place single rooms
@@ -382,6 +490,7 @@ def generate_standard_floor(
         spatial_grid=spatial_grid,
         circulation_core=core,
         room_id_offset=room_id_offset + 200,  # Offset to avoid ID conflicts
+        is_horizontal_layout=is_horizontal_layout,
     )
 
     # Place corridor
@@ -390,6 +499,7 @@ def generate_standard_floor(
         building_config=building_config,
         spatial_grid=spatial_grid,
         room_id_offset=room_id_offset + 500,  # Offset to avoid ID conflicts
+        is_horizontal_layout=is_horizontal_layout,
     )
 
     # Combine all rooms
