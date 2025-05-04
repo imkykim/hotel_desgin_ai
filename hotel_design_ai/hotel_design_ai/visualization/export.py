@@ -457,7 +457,7 @@ def create_room(name, room_type, x, y, z, width, length, height):
         room_call = f'obj = create_room("{name}", "{room_type}", {position[0]}, {-position[1]}, {position[2]}, {dimensions[0]}, {-dimensions[1]}, {dimensions[2]})'
         script_content += room_call + "\n"
         # Grouping logic
-        if "standard_floor" in room_type:
+        if "suite_room" or "guest_room" in room_type:
             script_content += "standard_floor_objs.append(obj)\n"
         elif "podium" in room_type:
             script_content += "podium_objs.append(obj)\n"
@@ -473,7 +473,7 @@ if standard_floor_objs:
 if podium_objs:
     group_id = rs.AddGroup("PodiumGroup")
     rs.AddObjectsToGroup(podium_objs, group_id)
-    
+
 # Set up a good view
 rs.Command("_-NamedView _Save HotelOverview _Enter", False)
 rs.Command("_-View _Top", False)

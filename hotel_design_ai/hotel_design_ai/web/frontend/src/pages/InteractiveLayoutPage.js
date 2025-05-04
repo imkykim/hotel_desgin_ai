@@ -9,6 +9,7 @@ import {
   getConfiguration,
   generateImprovedLayout,
   generateLayoutWithReference,
+  generateLayoutWithZones, // <-- import the new helper
 } from "../services/api";
 import "../styles/InteractiveLayout.css";
 
@@ -520,34 +521,66 @@ const InteractiveLayoutPage = () => {
       setError(null);
       setSuccess(null);
 
-      // Call the backend to generate a layout
-      const result = await generateLayout({
-        building_config: buildingId,
-        program_config: programId,
-        mode: "rule",
-        include_standard_floors: true,
-        fixed_positions: {}, // We can add fixed positions here if needed
-      });
+      // 1. Save standard floor zones first
+      if (selectedAreas.length === 0) {
+        setError("Please select at least one grid cell for standard floors");
+        setLoading(false);
+        return;
+      }
+
+      // Calculate bounding box for each selected area (or treat each as a zone)
+      const floor_zones = selectedAreas.map((area) => ({
+        x: area.x,
+        y: area.y,
+        width: area.width,
+        height: area.height,
+      }));
+
+      // Use start/end floor from standardFloorParams
+      const zoneConfig = {
+        building_id: buildingId,
+        floor_zones,
+        start_floor: standardFloorParams.start_floor,
+        end_floor: standardFloorParams.end_floor,
+      };
+
+      // Save zones to backend
+      const saveZonesResp = await fetch(
+        `${API_BASE_URL}/engine/standard-floor-zones`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(zoneConfig),
+        }
+      );
+      const saveZonesData = await saveZonesResp.json();
+      if (!saveZonesResp.ok || !saveZonesData.success) {
+        throw new Error(
+          saveZonesData.message ||
+            saveZonesData.detail ||
+            "Failed to save standard floor zones"
+        );
+      }
+
+      // 2. Now call generate-with-zones
+      const result = await generateLayoutWithZones(buildingId, programId);
 
       if (result.success) {
         setLayoutId(result.layout_id);
         setInitialLayout({
-          rooms: result.rooms,
+          rooms: result.layout_data?.rooms || result.rooms,
         });
         setModifiedLayout({
-          rooms: result.rooms,
+          rooms: result.layout_data?.rooms || result.rooms,
         });
         setSuccess("Layout generated successfully");
-
-        // Switch to layout editor tab
         setActiveTab("layout");
       } else {
-        throw new Error("Failed to generate layout");
+        throw new Error(result.error || "Failed to generate layout");
       }
-
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -645,7 +678,7 @@ const InteractiveLayoutPage = () => {
 
       console.log("Attempting to generate improved layout...");
 
-      // First attempt: Try the generateImprovedLayout endpoint
+      // Always pass buildingId, programId, and layoutId as reference_layout_id
       let result = await generateImprovedLayout(
         buildingId,
         programId,
@@ -656,7 +689,7 @@ const InteractiveLayoutPage = () => {
       if (!result.success) {
         console.log("First approach failed, trying fallback method...");
 
-        // Try the alternative approach
+        // Try the alternative approach (same endpoint, but fallback for robustness)
         result = await generateLayoutWithReference(
           buildingId,
           programId,

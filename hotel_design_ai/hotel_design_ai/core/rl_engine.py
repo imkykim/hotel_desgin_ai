@@ -1038,8 +1038,13 @@ class RLEngine(BaseEngine):
     def load_model(self, path: str):
         """Load the RL model from disk"""
         checkpoint = torch.load(path)
-        self.policy_network.load_state_dict(checkpoint["policy_network"])
-        self.target_network.load_state_dict(checkpoint["target_network"])
+        try:
+            self.policy_network.load_state_dict(checkpoint["policy_network"])
+            self.target_network.load_state_dict(checkpoint["target_network"])
+        except RuntimeError as e:
+            print(f"WARNING: Could not load RL model due to shape mismatch: {e}")
+            print("The model will be re-initialized and trained from scratch.")
+            return  # Skip loading the model if incompatible
         self.exploration_rate = checkpoint["exploration_rate"]
         self.training_iterations = checkpoint["training_iterations"]
         self.average_reward = checkpoint["average_reward"]

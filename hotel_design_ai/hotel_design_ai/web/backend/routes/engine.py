@@ -129,14 +129,42 @@ async def generate_with_zones(
         # Check if standard floor config exists
         std_floor_config = DATA_DIR / "building" / f"{building_id}_std_floors.json"
         if not std_floor_config.exists():
-            raise HTTPException(
-                status_code=404, detail="Standard floor configuration not found"
-            )
+            # Fallback: try to extract from building config
+            building_config_file = DATA_DIR / "building" / f"{building_id}.json"
+            if building_config_file.exists():
+                with open(building_config_file, "r") as f:
+                    building_config = json.load(f)
+                std = building_config.get("standard_floor")
+                if std:
+                    # Convert standard_floor to zones format and save
+                    zone = {
+                        "x": std.get("position_x", 0),
+                        "y": std.get("position_y", 0),
+                        "width": std.get("width", 0),
+                        "height": std.get("length", 0),
+                    }
+                    zones_data = {
+                        "building_id": building_id,
+                        "floor_zones": [zone],
+                        "start_floor": std.get("start_floor", 2),
+                        "end_floor": std.get("end_floor", 20),
+                    }
+                    with open(std_floor_config, "w") as f:
+                        json.dump(zones_data, f, indent=2)
+                    logger.info(f"Generated {std_floor_config} from building config")
+                else:
+                    raise HTTPException(
+                        status_code=404, detail="Standard floor configuration not found"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=404, detail="Standard floor configuration not found"
+                )
 
         # Run the main.py script with appropriate arguments
         command = [
             "python",
-            "../main.py",
+            "../../../main.py",  # <-- updated relative path
             "--building-config",
             building_id,
             "--program-config",
@@ -209,7 +237,7 @@ async def train_rl_with_feedback(feedback: LayoutFeedback):
         # Run RL training with feedback
         command = [
             "python",
-            "../main.py",
+            "../../../main.py",  # <-- fix path to main.py (was "../main.py")
             "--mode",
             "rl",
             "--modified-layout",
@@ -247,7 +275,7 @@ async def generate_improved_layout(
         # Build command for generating an improved layout
         command = [
             "python",
-            "../main.py",
+            "../../../main.py",  # <-- fix path to main.py (was "../main.py")
             "--mode",
             "rl",
             "--building-config",

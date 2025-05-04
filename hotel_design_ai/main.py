@@ -967,29 +967,14 @@ def main():
         random.seed(args.seed)
         np.random.seed(args.seed)
 
+    # --- Standard floor zones loading ---
+    standard_floor_zones = None
+    fixed_positions = None  # <-- Add this line to define fixed_positions
     if args.standard_floor_zones and os.path.exists(args.standard_floor_zones):
         print(f"Loading standard floor zones from: {args.standard_floor_zones}")
         with open(args.standard_floor_zones, "r") as f:
             standard_floor_zones = json.load(f)
-
-        # Update rule engine with standard floor zones
-        RuleEngine.set_standard_floor_zones = standard_floor_zones["floor_zones"]
-        # Update RL engine with standard floor zones if needed
-        if "RLEngine" in globals():
-            RLEngine.set_standard_floor_zones = standard_floor_zones["floor_zones"]
-
-    # Handle modified layout
-    fixed_positions = {}
-    if args.modified_layout and os.path.exists(args.modified_layout):
-        print(f"Loading modified layout from: {args.modified_layout}")
-        with open(args.modified_layout, "r") as f:
-            modified_layout = json.load(f)
-
-        # Extract fixed positions from modified layout
-        if "rooms" in modified_layout:
-            for room_id, room_data in modified_layout["rooms"].items():
-                if "position" in room_data:
-                    fixed_positions[int(room_id)] = tuple(room_data["position"])
+    # ...existing code for fixed_positions...
 
     # Create rooms from program requirements with the specified config
     from hotel_design_ai.config.config_loader import create_room_objects_from_program
@@ -1000,22 +985,12 @@ def main():
     # Convert to Room objects
     rooms = convert_room_dicts_to_room_objects(room_dicts)
 
-    # Load fixed room positions if specified
-    if args.fixed_rooms:
-        try:
-            fixed_data = load_fixed_rooms(args.fixed_rooms)
+    # ...existing code for fixed_positions...
 
-            # If using the enhanced format, match to actual rooms
-            if not isinstance(fixed_data, dict):
-                fixed_positions = match_fixed_rooms_to_actual(fixed_data, rooms)
-            else:
-                # Original format already gives us a room_id -> position mapping
-                fixed_positions = fixed_data
+    # --- Main layout generation ---
+    building_config = get_building_envelope(args.building_config)
 
-            print(f"Fixed {len(fixed_positions)} room positions")
-        except Exception as e:
-            print(f"Error loading fixed rooms: {e}")
-
+    # Generate podium/rule-based layout first
     if args.complete:
         print("\nGenerating complete hotel with podium and standard floors...")
         layout, all_rooms = generate_complete_hotel_layout(args, fixed_positions)
@@ -1031,6 +1006,51 @@ def main():
         else:
             print(f"Error: Unknown mode '{args.mode}'")
             return
+
+    # --- Standard floor generation if needed ---
+    # Only add standard floors if not already done in generate_complete_hotel_layout
+    if not args.complete:
+        # Check if standard floor config or zones exist
+        std_floor_config = building_config.get("standard_floor")
+        if (args.standard_floor_zones and standard_floor_zones) or std_floor_config:
+            print("\nGenerating standard floors (tower section)...")
+            from hotel_design_ai.core.standard_floor_generator import (
+                generate_all_standard_floors,
+            )
+
+            # If standard_floor_zones provided, update config accordingly
+            if standard_floor_zones:
+                # Use the first zone as the standard floor boundary
+                zone = standard_floor_zones["floor_zones"][0]
+                std_floor_params = {
+                    "start_floor": standard_floor_zones.get("start_floor", 2),
+                    "end_floor": standard_floor_zones.get("end_floor", 20),
+                    "width": zone["width"],
+                    "length": zone["height"],
+                    "position_x": zone["x"],
+                    "position_y": zone["y"],
+                    "corridor_width": (
+                        std_floor_config.get("corridor_width", 4.0)
+                        if std_floor_config
+                        else 4.0
+                    ),
+                    "room_depth": (
+                        std_floor_config.get("room_depth", 8.0)
+                        if std_floor_config
+                        else 8.0
+                    ),
+                }
+                building_config["standard_floor"] = std_floor_params
+
+            # Generate standard floors and merge into layout
+            layout, standard_rooms = generate_all_standard_floors(
+                building_config=building_config,
+                spatial_grid=layout,
+                target_room_count=building_config.get("target_room_count", 100),
+            )
+            # Optionally, extend rooms list if you want metrics to include standard rooms
+            rooms.extend(standard_rooms)
+            print(f"Added {len(standard_rooms)} standard floor rooms.")
 
     # Evaluate layout
     metrics = evaluate_layout(layout, rooms)

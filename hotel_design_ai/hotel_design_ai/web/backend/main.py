@@ -47,7 +47,8 @@ for dir_path in [
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Import core functionality
-from hotel_design_ai.core.rule_engine import RuleEngine
+from hotel_design_ai.core.grid_rule_engine import RuleEngine
+from hotel_design_ai.core.grid_rl_engine import RLEngine
 from hotel_design_ai.core.spatial_grid import SpatialGrid
 from hotel_design_ai.models.room import Room
 from hotel_design_ai.models.layout import Layout
@@ -66,6 +67,7 @@ from routes import visualization_routes
 from routes import configuration_routes
 from routes import layout_visualization_routes
 from routes import chat2plan_routes
+from routes import engine  # <-- Import the engine router
 
 # Initialize FastAPI app
 app = FastAPI(title="Hotel Design AI Configuration Generator")
@@ -96,6 +98,7 @@ app.include_router(visualization_routes.router)
 app.include_router(configuration_routes.router)
 app.include_router(layout_visualization_routes.router)
 app.include_router(chat2plan_routes.router)
+app.include_router(engine.router)  # <-- Make engine endpoints available
 
 
 # Pydantic models for validation
@@ -521,8 +524,12 @@ async def generate_layout(input_data: DesignGenerationInput = Body(...)):
                 int(k): tuple(v) for k, v in input_data.fixed_positions.items()
             }
 
-        # Rest of the function remains mostly unchanged...
-        # Get building envelope parameters
+        # --- Ensure correct hotel requirements config is used ---
+        program_config = input_data.program_config
+        if program_config == "default":
+            program_config = "hotel_requirements_3"
+
+        # --- Load building and program configs ---
         building_config = get_building_envelope(input_data.building_config)
         width = building_config["width"]
         length = building_config["length"]
@@ -556,13 +563,11 @@ async def generate_layout(input_data: DesignGenerationInput = Body(...)):
         # Replace spatial grid to ensure basement support
         rule_engine.spatial_grid = spatial_grid
 
-        # Get room dictionaries from program config
-        room_dicts = create_room_objects_from_program(input_data.program_config)
-
-        # Convert to Room objects
+        # --- Always use the correct program config for room creation ---
+        room_dicts = create_room_objects_from_program(program_config)
         rooms = convert_room_dicts_to_room_objects(room_dicts)
 
-        # Apply fixed positions if provided
+        # --- Apply fixed positions (including enhanced format) ---
         if fixed_positions:
             # If fixed_positions is a list, it's in the enhanced format with identifiers
             if isinstance(fixed_positions, list):
@@ -577,7 +582,7 @@ async def generate_layout(input_data: DesignGenerationInput = Body(...)):
                 modified_rooms.append(room_copy)
             rooms = modified_rooms
 
-        # Generate layout
+        # --- Generate layout ---
         layout = rule_engine.generate_layout(rooms)
 
         # Add standard floors if requested
