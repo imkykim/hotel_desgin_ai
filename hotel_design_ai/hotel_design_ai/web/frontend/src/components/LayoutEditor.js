@@ -96,6 +96,9 @@ const LayoutEditor = ({
   layoutId,
   onLayoutChange = () => {},
   onTrainRL = () => {},
+  width,
+  length,
+  gridSize,
 }) => {
   const [layout, setLayout] = useState(initialLayout || { rooms: {} });
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -110,11 +113,14 @@ const LayoutEditor = ({
   const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
   // Extract building dimensions from config
-  const { width, length, floor_height } = buildingConfig || {
-    width: 80,
-    length: 120,
+  const { floor_height } = buildingConfig || {
     floor_height: 4.0,
   };
+
+  // Use width, length, gridSize for canvas/frame sizing
+  const canvasWidth = width || (buildingConfig && buildingConfig.width) || 800;
+  const canvasLength =
+    length || (buildingConfig && buildingConfig.length) || 600;
 
   // Function to draw the layout on the canvas
   const drawLayout = () => {
@@ -122,7 +128,10 @@ const LayoutEditor = ({
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    const scale = Math.min(canvas.width / width, canvas.height / length);
+    const scale = Math.min(
+      canvas.width / canvasWidth,
+      canvas.height / canvasLength
+    );
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -130,7 +139,7 @@ const LayoutEditor = ({
     // Draw building outline
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, width * scale, length * scale);
+    ctx.strokeRect(0, 0, canvasWidth * scale, canvasLength * scale);
 
     // Draw rooms for the current floor
     Object.entries(layout.rooms || {}).forEach(([roomId, roomData]) => {
@@ -142,7 +151,7 @@ const LayoutEditor = ({
       // Skip rooms not on the current floor
       if (roomFloor !== currentFloor) return;
 
-      drawRoom(ctx, parseInt(roomId), roomData, scale);
+      drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25);
     });
   };
 
@@ -185,7 +194,14 @@ const LayoutEditor = ({
       drawLayout();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, selectedRoom, currentFloor, width, length, floor_height]);
+  }, [
+    layout,
+    selectedRoom,
+    currentFloor,
+    canvasWidth,
+    canvasLength,
+    floor_height,
+  ]);
 
   // Handle floor change
   const handleFloorChange = (floor) => {
@@ -200,7 +216,10 @@ const LayoutEditor = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(canvas.width / width, canvas.height / length);
+    const scale = Math.min(
+      canvas.width / canvasWidth,
+      canvas.height / canvasLength
+    );
 
     const mouseX = (e.clientX - rect.left) / scale;
     const mouseY = (e.clientY - rect.top) / scale;
@@ -237,7 +256,10 @@ const LayoutEditor = ({
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(canvas.width / width, canvas.height / length);
+    const scale = Math.min(
+      canvas.width / canvasWidth,
+      canvas.height / canvasLength
+    );
 
     const mouseX = (e.clientX - rect.left) / scale;
     const mouseY = (e.clientY - rect.top) / scale;
@@ -248,11 +270,11 @@ const LayoutEditor = ({
 
     const newX = Math.max(
       0,
-      Math.min(width - roomWidth, mouseX - dragOffset.x)
+      Math.min(canvasWidth - roomWidth, mouseX - dragOffset.x)
     );
     const newY = Math.max(
       0,
-      Math.min(length - roomLength, mouseY - dragOffset.y)
+      Math.min(canvasLength - roomLength, mouseY - dragOffset.y)
     );
 
     // Update room position

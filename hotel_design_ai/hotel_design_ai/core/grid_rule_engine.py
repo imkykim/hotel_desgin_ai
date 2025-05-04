@@ -331,7 +331,7 @@ class RuleEngine(BaseEngine):
         Place a room according to architectural constraints.
         Enhanced to use grid-aligned dimensions.
         """
-        # First adjust dimensions to align with grid
+        # Always try to use fixed position if set
         if hasattr(room, "position") and room.position is not None:
             x, y, z = room.position
             print(
@@ -349,7 +349,6 @@ class RuleEngine(BaseEngine):
                 metadata=room.metadata,
             )
             if success:
-                # Add to placed rooms tracking
                 if room.room_type not in placed_rooms_by_type:
                     placed_rooms_by_type[room.room_type] = []
                 placed_rooms_by_type[room.room_type].append(room.id)

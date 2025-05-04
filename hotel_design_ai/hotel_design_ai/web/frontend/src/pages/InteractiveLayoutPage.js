@@ -48,6 +48,10 @@ const InteractiveLayoutPage = () => {
     room_depth: 8,
   });
 
+  // Add state for fixedRoomsFile and programConfig
+  const [fixedRoomsFile, setFixedRoomsFile] = useState(null);
+  const [programConfig, setProgramConfig] = useState("hotel_requirements_3");
+
   // Get layoutId from query params if it exists
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -501,9 +505,13 @@ const InteractiveLayoutPage = () => {
         return { ok: true, json: () => Promise.resolve({ success: true }) };
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to save fixed elements");
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to save fixed elements");
       }
+
+      // Save the fixed rooms file path for later use
+      setFixedRoomsFile(data.filepath);
 
       setSuccess("Fixed elements saved successfully");
       setGridSelectionMode("standard"); // Go back to standard mode
@@ -563,7 +571,11 @@ const InteractiveLayoutPage = () => {
       }
 
       // 2. Now call generate-with-zones
-      const result = await generateLayoutWithZones(buildingId, programId);
+      const result = await generateLayoutWithZones(
+        buildingId,
+        programConfig || "hotel_requirements_3",
+        fixedRoomsFile
+      );
 
       if (result.success) {
         setLayoutId(result.layout_id);
@@ -984,6 +996,10 @@ const InteractiveLayoutPage = () => {
                 layoutId={layoutId}
                 onLayoutChange={handleLayoutChange}
                 onTrainRL={handleTrainRL}
+                // Add these props to ensure the editor fits the generated layout
+                width={buildingConfig.width}
+                length={buildingConfig.length}
+                gridSize={buildingConfig.grid_size}
               />
             )}
 

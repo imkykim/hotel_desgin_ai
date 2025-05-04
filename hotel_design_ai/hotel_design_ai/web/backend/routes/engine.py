@@ -120,10 +120,13 @@ async def set_standard_floor_zones(config: StandardFloorConfig):
 
 @router.post("/generate-with-zones")
 async def generate_with_zones(
-    building_id: str = Body(...), program_id: str = Body(...)
+    building_id: str = Body(...),
+    program_id: Optional[str] = Body(None),
+    fixed_rooms_file: Optional[str] = Body(None),
 ):
     """
-    Generate a hotel layout using previously defined standard floor zones.
+    Generate a hotel layout using previously defined standard floor zones,
+    a specific program config, and a fixed rooms file.
     """
     try:
         # Check if standard floor config exists
@@ -161,19 +164,44 @@ async def generate_with_zones(
                     status_code=404, detail="Standard floor configuration not found"
                 )
 
-        # Run the main.py script with appropriate arguments
+        # Determine program config to use (ALWAYS use hotel_requirements_3.json if not provided)
+        if not program_id or program_id == "default":
+            program_config = "hotel_requirements_3"
+        else:
+            # If the user passed "hotel_requirements_3" without .json, add it
+            if not program_id.endswith(".json"):
+                program_config = f"{program_id}.json"
+            else:
+                program_config = program_id
+
+        # Determine fixed rooms file to use
+        fixed_rooms_arg = []
+        if fixed_rooms_file:
+            # Always resolve to absolute path
+            fixed_rooms_path = Path(fixed_rooms_file)
+            if not fixed_rooms_path.is_absolute():
+                # Try to resolve relative to the project root
+                fixed_rooms_path = (PROJECT_ROOT / fixed_rooms_file).resolve()
+            if fixed_rooms_path.exists():
+                fixed_rooms_arg = ["--fixed-rooms", str(fixed_rooms_path)]
+            else:
+                logger.warning(f"Fixed rooms file not found: {fixed_rooms_path}")
+
+        # Build command
         command = [
             "python",
-            "../../../main.py",  # <-- updated relative path
+            "../../../main.py",
+            "--mode",
+            "hybrid",
             "--building-config",
             building_id,
             "--program-config",
-            program_id,
-            "--standard-floor-zones",
-            str(std_floor_config),
+            program_config,
+            # "--standard-floor-zones",
+            # str(std_floor_config),
             "--output",
             "layouts",
-        ]
+        ] + fixed_rooms_arg
 
         result = run_command(command, "Generation failed")
         layout_path = extract_layout_path(result.stdout)

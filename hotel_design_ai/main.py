@@ -969,12 +969,16 @@ def main():
 
     # --- Standard floor zones loading ---
     standard_floor_zones = None
-    fixed_positions = None  # <-- Add this line to define fixed_positions
-    if args.standard_floor_zones and os.path.exists(args.standard_floor_zones):
-        print(f"Loading standard floor zones from: {args.standard_floor_zones}")
-        with open(args.standard_floor_zones, "r") as f:
-            standard_floor_zones = json.load(f)
-    # ...existing code for fixed_positions...
+    fixed_positions = None
+    # --- Fixed rooms loading ---
+    if args.fixed_rooms:
+        print(f"Loading fixed rooms from: {args.fixed_rooms}")
+        fixed_data = load_fixed_rooms(args.fixed_rooms)
+        # fixed_data can be a dict (id: pos) or a list (enhanced format)
+        # Always match to actual Room objects (after rooms are created)
+        # So defer matching until after rooms are created
+    else:
+        fixed_data = None
 
     # Create rooms from program requirements with the specified config
     from hotel_design_ai.config.config_loader import create_room_objects_from_program
@@ -985,7 +989,18 @@ def main():
     # Convert to Room objects
     rooms = convert_room_dicts_to_room_objects(room_dicts)
 
-    # ...existing code for fixed_positions...
+    # --- Match fixed rooms to actual Room objects after rooms are created ---
+    if args.fixed_rooms and fixed_data is not None:
+        if isinstance(fixed_data, list):
+            print("Matching enhanced fixed_rooms identifiers to actual rooms...")
+            fixed_positions = match_fixed_rooms_to_actual(fixed_data, rooms)
+        else:
+            fixed_positions = fixed_data
+
+        # Apply fixed positions to Room objects (set .position)
+        for room in rooms:
+            if fixed_positions and room.id in fixed_positions:
+                room.position = fixed_positions[room.id]
 
     # --- Main layout generation ---
     building_config = get_building_envelope(args.building_config)

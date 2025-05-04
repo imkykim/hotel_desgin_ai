@@ -554,7 +554,11 @@ export const generateLayoutWithReference = async (
 };
 
 // Optionally, if you want to support generateWithZones (for standard floor zones)
-export const generateLayoutWithZones = async (buildingId, programId) => {
+export const generateLayoutWithZones = async (
+  buildingId,
+  programConfig,
+  fixedRoomsFile
+) => {
   try {
     const response = await fetch(`${API_BASE_URL}/engine/generate-with-zones`, {
       method: "POST",
@@ -563,7 +567,8 @@ export const generateLayoutWithZones = async (buildingId, programId) => {
       },
       body: JSON.stringify({
         building_id: buildingId,
-        program_id: programId,
+        program_id: programConfig,
+        fixed_rooms_file: fixedRoomsFile,
       }),
     });
 
