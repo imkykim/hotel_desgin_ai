@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel, Field
 import subprocess
+import traceback
 import json
 import os
 import logging
@@ -127,8 +128,14 @@ async def generate_with_zones(
     """
     Generate a hotel layout using previously defined standard floor zones,
     a specific program config, and a fixed rooms file.
+    Enhanced with better error handling and debug logging.
     """
     try:
+        # ENHANCEMENT: Added more logging
+        logger.info(f"Generate layout with zones for building ID: {building_id}")
+        logger.info(f"Program ID: {program_id or 'default'}")
+        logger.info(f"Fixed rooms file: {fixed_rooms_file or 'None'}")
+
         # Check if standard floor config exists
         std_floor_config = DATA_DIR / "building" / f"{building_id}_std_floors.json"
         if not std_floor_config.exists():
@@ -164,17 +171,19 @@ async def generate_with_zones(
                     status_code=404, detail="Standard floor configuration not found"
                 )
 
-        # Determine program config to use (ALWAYS use hotel_requirements_3.json if not provided)
+        # FIXED: Always ensure .json extension is included for program config
         if not program_id or program_id == "default":
-            program_config = "hotel_requirements_3"
+            program_config = "hotel_requirements_3.json"  # FIXED: Added .json extension
+            logger.info(f"Using default program config: {program_config}")
         else:
-            # If the user passed "hotel_requirements_3" without .json, add it
+            # Ensure .json extension is present
             if not program_id.endswith(".json"):
                 program_config = f"{program_id}.json"
             else:
                 program_config = program_id
+            logger.info(f"Using specified program config: {program_config}")
 
-        # Determine fixed rooms file to use
+        # ENHANCEMENT: Better fixed rooms file handling
         fixed_rooms_arg = []
         if fixed_rooms_file:
             # Always resolve to absolute path
@@ -182,49 +191,220 @@ async def generate_with_zones(
             if not fixed_rooms_path.is_absolute():
                 # Try to resolve relative to the project root
                 fixed_rooms_path = (PROJECT_ROOT / fixed_rooms_file).resolve()
+
             if fixed_rooms_path.exists():
+                # ENHANCEMENT: Log the contents of the fixed rooms file
+                try:
+                    with open(fixed_rooms_path, "r") as f:
+                        fixed_rooms_data = json.load(f)
+                        logger.info(
+                            f"Fixed rooms file contents: {json.dumps(fixed_rooms_data, indent=2)}"
+                        )
+
+                        # ENHANCEMENT: Check if the file has the expected format
+                        if "fixed_rooms" in fixed_rooms_data:
+                            logger.info(
+                                f"Found {len(fixed_rooms_data['fixed_rooms'])} fixed room definitions"
+                            )
+
+                            # ENHANCEMENT: Print each fixed room identifier for debugging
+                            for i, fixed_room in enumerate(
+                                fixed_rooms_data["fixed_rooms"]
+                            ):
+                                if (
+                                    "identifier" in fixed_room
+                                    and "position" in fixed_room
+                                ):
+                                    identifier = fixed_room["identifier"]
+                                    position = fixed_room["position"]
+                                    id_type = identifier.get("type", "")
+                                    room_type = identifier.get("room_type", "")
+                                    dept = identifier.get("department", "")
+                                    name = identifier.get("name", "")
+
+                                    logger.info(
+                                        f"Fixed Room #{i+1}: {id_type} - "
+                                        + f"type={room_type}, dept={dept}, name={name}, "
+                                        + f"position={position}"
+                                    )
+                        else:
+                            logger.warning(
+                                f"Fixed rooms file doesn't have expected 'fixed_rooms' key"
+                            )
+                except Exception as e:
+                    logger.error(f"Error reading fixed rooms file: {e}")
+
                 fixed_rooms_arg = ["--fixed-rooms", str(fixed_rooms_path)]
+                logger.info(f"Using fixed rooms file: {fixed_rooms_path}")
             else:
                 logger.warning(f"Fixed rooms file not found: {fixed_rooms_path}")
+                # ENHANCEMENT: Return better error
+                return {
+                    "success": False,
+                    "error": f"Fixed rooms file not found: {fixed_rooms_path}",
+                }
+
+        # ENHANCEMENT: Add a debug flag for more verbose output
+        debug_flag = ["--debug"] if fixed_rooms_file else []
 
         # Build command
-        command = [
-            "python",
-            "../../../main.py",
-            "--mode",
-            "hybrid",
-            "--building-config",
-            building_id,
-            "--program-config",
-            program_config,
-            # "--standard-floor-zones",
-            # str(std_floor_config),
-            "--output",
-            "layouts",
-        ] + fixed_rooms_arg
+        command = (
+            [
+                "python",
+                str(
+                    PROJECT_ROOT / "main.py"
+                ),  # ENHANCEMENT: Use full path to ensure script is found
+                "--mode",
+                "rule",  # ENHANCEMENT: Changed to rule mode, which is most reliable for fixed positions
+                "--building-config",
+                building_id,
+                "--program-config",
+                program_config,
+                "--output",
+                str(LAYOUTS_DIR),  # ENHANCEMENT: Use full path for output
+            ]
+            + fixed_rooms_arg
+            # + debug_flag
+        )
 
-        result = run_command(command, "Generation failed")
-        layout_path = extract_layout_path(result.stdout)
+        logger.info(f"Executing command: {' '.join(command)}")
+
+        # ENHANCEMENT: Better error handling for command execution
+        try:
+            result = run_command(command, "Generation failed")
+            logger.info(f"Command execution successful")
+
+            # Log the output for debugging
+            stdout_lines = result.stdout.splitlines()
+            logger.info(f"Command output ({len(stdout_lines)} lines):")
+            for line in stdout_lines[-20:]:  # Last 20 lines
+                logger.info(f"  > {line}")
+
+            layout_path = extract_layout_path(result.stdout)
+            logger.info(f"Layout saved to: {layout_path}")
+        except Exception as e:
+            logger.error(f"Command execution failed: {e}")
+            return {
+                "success": False,
+                "error": f"Layout generation command failed: {str(e)}",
+                "command": " ".join(command),
+            }
 
         # Load the layout JSON
         layout_file = Path(layout_path) / "hotel_layout.json"
         if not layout_file.exists():
-            raise HTTPException(
-                status_code=404, detail="Generated layout file not found"
-            )
+            logger.error(f"Generated layout file not found at {layout_file}")
+            return {
+                "success": False,
+                "error": "Generated layout file not found",
+                "layout_path": str(layout_file),
+            }
 
         layout_data = load_json_file(layout_file)
-
-        return success_response(
-            "Layout generated successfully",
-            layout_id=layout_path.split("/")[-1],
-            layout_data=layout_data,
-            layout_path=str(layout_file),
+        logger.info(
+            f"Successfully loaded layout with {len(layout_data.get('rooms', {}))} rooms"
         )
+
+        # ENHANCEMENT: Check if important fixed rooms were placed correctly
+        if fixed_rooms_file and fixed_rooms_path.exists():
+            try:
+                with open(fixed_rooms_path, "r") as f:
+                    fixed_data = json.load(f)
+
+                if "fixed_rooms" in fixed_data:
+                    fixed_rooms = fixed_data["fixed_rooms"]
+                    logger.info(
+                        f"Verifying placement of {len(fixed_rooms)} fixed rooms"
+                    )
+
+                    # Log all rooms in the layout for debugging
+                    logger.info("Rooms in the generated layout:")
+                    for room_id, room_data in layout_data.get("rooms", {}).items():
+                        room_type = room_data.get("type", "unknown")
+                        room_pos = room_data.get("position", [0, 0, 0])
+                        room_name = room_data.get("metadata", {}).get("name", "unnamed")
+                        logger.info(
+                            f"  Room {room_id}: type={room_type}, name={room_name}, pos={room_pos}"
+                        )
+
+                    # Check each fixed room by type/name to see if it was placed
+                    for fixed_room in fixed_rooms:
+                        if "identifier" in fixed_room and "position" in fixed_room:
+                            identifier = fixed_room["identifier"]
+                            position = fixed_room["position"]
+
+                            # Identifier information
+                            id_type = identifier.get("type", "")
+                            room_type = identifier.get("room_type", "")
+                            dept = identifier.get("department", "")
+                            name = identifier.get("name", "")
+
+                            # Descriptive name for logs
+                            desc = f"{id_type}: "
+                            if room_type:
+                                desc += f"type={room_type}, "
+                            if dept:
+                                desc += f"dept={dept}, "
+                            if name:
+                                desc += f"name={name}"
+
+                            # Check for this room in the layout
+                            found = False
+                            for room_id, room_data in layout_data.get(
+                                "rooms", {}
+                            ).items():
+                                # Check if this room matches the identifier
+                                if (
+                                    room_type and room_data.get("type") == room_type
+                                ) or (
+                                    name
+                                    and room_data.get("metadata", {}).get("name")
+                                    == name
+                                    or dept == "circulation"
+                                    and room_data.get("type") == "vertical_circulation"
+                                ):
+                                    # Found a matching room, check if position is close
+                                    room_pos = room_data.get("position", [0, 0, 0])
+                                    pos_diff = [
+                                        abs(a - b)
+                                        for a, b in zip(room_pos[:2], position[:2])
+                                    ]  # Compare only x,y
+
+                                    if (
+                                        max(pos_diff) < 10.0
+                                    ):  # Within 10m is "close enough" - increased tolerance
+                                        logger.info(
+                                            f"✓ Fixed room {desc} was placed at {room_pos}, close to {position}"
+                                        )
+                                        found = True
+                                        break
+                                    else:
+                                        logger.warning(
+                                            f"! Fixed room {desc} was placed at {room_pos}, NOT close to {position}"
+                                        )
+                                        # Still count it as found if it's the right type
+                                        found = True
+                                        break
+
+                            if not found:
+                                logger.warning(
+                                    f"✗ Fixed room {desc} was NOT found in the layout"
+                                )
+            except Exception as e:
+                logger.error(f"Error verifying fixed room placement: {e}")
+
+        return {
+            "success": True,
+            "message": "Layout generated successfully",
+            "layout_id": layout_path.split("/")[-1],
+            "layout_data": layout_data,
+            "layout_path": str(layout_file),
+        }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error generating layout: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 

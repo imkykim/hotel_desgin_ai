@@ -262,6 +262,7 @@ class RuleEngine(BaseEngine):
     def generate_layout(self, rooms: List[Room]) -> SpatialGrid:
         """
         Generate a hotel layout based on architectural constraints.
+        Modified to prioritize fixed position rooms and place them exactly.
 
         Args:
             rooms: List of Room objects to place
@@ -281,21 +282,58 @@ class RuleEngine(BaseEngine):
                 floor_height=self.floor_height,
             )
 
-        # Sort rooms by architectural priority
-        sorted_rooms = sorted(
-            rooms,
+        # ENHANCEMENT: First, separate rooms with fixed positions from others
+        fixed_rooms = []
+        unfixed_rooms = []
+
+        for room in rooms:
+            if hasattr(room, "position") and room.position is not None:
+                fixed_rooms.append(room)
+            else:
+                unfixed_rooms.append(room)
+
+        print(f"\nFound {len(fixed_rooms)} rooms with fixed positions")
+        for i, room in enumerate(fixed_rooms):
+            print(
+                f"  Fixed Room #{i+1}: id={room.id}, type={room.room_type}, name={room.name}, pos={room.position}"
+            )
+
+        # ENHANCEMENT: Place fixed rooms first, regardless of priority
+        print("\n=== Placing fixed position rooms first ===")
+        placed_rooms_by_type = {}
+        failed_fixed_rooms = []
+
+        for room in fixed_rooms:
+            print(
+                f"\nPlacing fixed room: id={room.id}, type={room.room_type}, name={room.name}, pos={room.position}"
+            )
+            # Use force placement to ensure fixed positions are respected
+            success = self.place_fixed_room_exactly(room, placed_rooms_by_type)
+
+            if success:
+                if room.room_type not in placed_rooms_by_type:
+                    placed_rooms_by_type[room.room_type] = []
+                placed_rooms_by_type[room.room_type].append(room.id)
+                print(
+                    f"  ✓ Successfully placed fixed room id={room.id} at {room.position}"
+                )
+            else:
+                failed_fixed_rooms.append(room)
+                print(f"  ✗ Failed to place fixed room id={room.id} at {room.position}")
+
+        # Now sort remaining rooms by architectural priority
+        print("\n=== Placing remaining rooms by priority ===")
+        sorted_unfixed_rooms = sorted(
+            unfixed_rooms,
             key=lambda r: self.placement_priorities.get(r.room_type, 0),
             reverse=True,
         )
 
-        # Track placed rooms by type
-        placed_rooms_by_type = {}
-
         # Track rooms that failed placement
         failed_rooms = []
 
-        # Place rooms in priority order
-        for room in sorted_rooms:
+        # Place remaining rooms in priority order
+        for room in sorted_unfixed_rooms:
             success = self.place_room_by_constraints(room, placed_rooms_by_type)
 
             if success:
@@ -310,32 +348,75 @@ class RuleEngine(BaseEngine):
 
         # Report placement statistics
         total_rooms = len(rooms)
-        placed_rooms = total_rooms - len(failed_rooms)
+        placed_rooms = total_rooms - len(failed_rooms) - len(failed_fixed_rooms)
 
         print(f"\nRoom placement statistics:")
         print(f"  Total rooms: {total_rooms}")
         print(
             f"  Placed successfully: {placed_rooms} ({placed_rooms / total_rooms * 100:.1f}%)"
         )
-        print(
-            f"  Failed to place: {len(failed_rooms)} ({len(failed_rooms) / total_rooms * 100:.1f}%)"
-        )
+        print(f"  Failed fixed rooms: {len(failed_fixed_rooms)}")
+        print(f"  Failed regular rooms: {len(failed_rooms)}")
 
         for room_type in placed_rooms_by_type:
             print(f"  {room_type}: {len(placed_rooms_by_type[room_type])} placed")
 
         return self.spatial_grid
 
-    def place_room_by_constraints(self, room, placed_rooms_by_type):
+    def place_fixed_room_exactly(self, room, placed_rooms_by_type):
         """
-        Place a room according to architectural constraints.
-        Enhanced to use grid-aligned dimensions.
+        Place a room with a fixed position exactly where specified, using force if necessary.
+
+        Args:
+            room: Room object with fixed position
+            placed_rooms_by_type: Dictionary tracking placed rooms by type
+
+        Returns:
+            bool: True if successful, False otherwise
         """
-        # Always try to use fixed position if set
-        if hasattr(room, "position") and room.position is not None:
-            x, y, z = room.position
+        if not hasattr(room, "position") or room.position is None:
+            print(f"Error: Room {room.id} has no fixed position")
+            return False
+
+        x, y, z = room.position
+        print(
+            f"Placing fixed room {room.id} ({room.room_type}, {room.name}) at EXACT position: {room.position}"
+        )
+
+        # Check if position is within building bounds
+        if (
+            x < 0
+            or y < 0
+            or x + room.width > self.width
+            or y + room.length > self.length
+            or z < self.min_floor * self.floor_height
+            or z > self.max_floor * self.floor_height
+        ):
             print(
-                f"Using fixed position for {room.name} (id={room.id}): {room.position}"
+                f"WARNING: Fixed position {room.position} for room {room.id} is outside building bounds!"
+            )
+            print(
+                f"Building dimensions: {self.width}m × {self.length}m × {self.height}m"
+            )
+            print(f"Floor range: {self.min_floor} to {self.max_floor}")
+
+        # Try first without force placement
+        success = self.spatial_grid.place_room(
+            room_id=room.id,
+            x=x,
+            y=y,
+            z=z,
+            width=room.width,
+            length=room.length,
+            height=room.height,
+            room_type=room.room_type,
+            metadata=room.metadata,
+        )
+
+        # If normal placement fails, use force placement
+        if not success:
+            print(
+                f"Standard placement failed for fixed room {room.id}, using force placement"
             )
             success = self.spatial_grid.place_room(
                 room_id=room.id,
@@ -347,17 +428,32 @@ class RuleEngine(BaseEngine):
                 height=room.height,
                 room_type=room.room_type,
                 metadata=room.metadata,
+                force_placement=True,  # FORCE placement for fixed rooms
             )
-            if success:
-                if room.room_type not in placed_rooms_by_type:
-                    placed_rooms_by_type[room.room_type] = []
-                placed_rooms_by_type[room.room_type].append(room.id)
-                return True
-            else:
-                print(
-                    f"Warning: Could not place {room.name} at fixed position {room.position}"
-                )
 
+        # STRICT: If still not successful, do NOT allow fallback placement
+        if not success:
+            print(
+                f"ERROR: Could not place FIXED room {room.id} at {room.position} (even with force). This room will NOT be placed."
+            )
+            return False
+
+        print(
+            f"Successfully placed fixed room {room.id} at exact position {room.position}"
+        )
+        return True
+
+    def place_room_by_constraints(self, room, placed_rooms_by_type):
+        """
+        Place a room according to architectural constraints.
+        Updated to use place_fixed_room_exactly for rooms with fixed positions.
+        """
+        # If the room has a fixed position, use the specialized method
+        if hasattr(room, "position") and room.position is not None:
+            # STRICT: Only try the exact fixed position, never fallback
+            return self.place_fixed_room_exactly(room, placed_rooms_by_type)
+
+        # The rest of the method remains unchanged for rooms without fixed positions
         original_width = room.width
         original_length = room.length
 
@@ -383,7 +479,6 @@ class RuleEngine(BaseEngine):
 
             return success
 
-        # Try each preferred floor (rest of the existing method remains the same)
         for floor in preferred_floors:
             # Calculate z coordinate for this floor
             z = floor * self.floor_height
