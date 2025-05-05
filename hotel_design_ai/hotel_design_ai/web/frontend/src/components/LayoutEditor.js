@@ -160,7 +160,7 @@ const LayoutEditor = ({
       if (roomFloor !== currentFloor) return;
 
       // Draw the room
-      drawRoom(ctx, parseInt(roomId), roomData, scale);
+      drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25);
       renderedRoomCount++;
       renderedTypes.add(roomData.type);
     });
@@ -178,7 +178,7 @@ const LayoutEditor = ({
         currentFloor >= buildingConfig?.min_floor &&
         currentFloor <= buildingConfig?.max_floor
       ) {
-        drawRoom(ctx, parseInt(roomId), roomData, scale, true);
+        drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25, true);
         renderedRoomCount++;
         renderedTypes.add(roomData.type);
       }
