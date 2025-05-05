@@ -142,17 +142,49 @@ const LayoutEditor = ({
     ctx.strokeRect(0, 0, canvasWidth * scale, canvasLength * scale);
 
     // Draw rooms for the current floor
+    let renderedRoomCount = 0;
+    const renderedTypes = new Set();
+
+    // First pass: Draw regular rooms for the current floor
     Object.entries(layout.rooms || {}).forEach(([roomId, roomData]) => {
       // Skip if we're in 3D view mode
       if (currentFloor === "3d") return;
 
       const roomFloor = Math.floor(roomData.position[2] / floor_height);
+      const roomType = roomData.type;
+
+      // If this is vertical circulation, we'll handle it in the second pass
+      if (roomType === "vertical_circulation") return;
 
       // Skip rooms not on the current floor
       if (roomFloor !== currentFloor) return;
 
-      drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25);
+      // Draw the room
+      drawRoom(ctx, parseInt(roomId), roomData, scale);
+      renderedRoomCount++;
+      renderedTypes.add(roomData.type);
     });
+
+    // Second pass: Draw vertical circulation cores that should appear on all floors
+    Object.entries(layout.rooms || {}).forEach(([roomId, roomData]) => {
+      // Skip if we're in 3D view mode
+      if (currentFloor === "3d") return;
+
+      // Only process vertical circulation rooms on any floor
+      if (roomData.type !== "vertical_circulation") return;
+
+      // Always draw vertical circulation on all floors
+      if (
+        currentFloor >= buildingConfig?.min_floor &&
+        currentFloor <= buildingConfig?.max_floor
+      ) {
+        drawRoom(ctx, parseInt(roomId), roomData, scale, true);
+        renderedRoomCount++;
+        renderedTypes.add(roomData.type);
+      }
+    });
+
+    console.log(`Rendered ${renderedRoomCount} rooms on floor ${currentFloor}`);
   };
 
   // Draw an individual room

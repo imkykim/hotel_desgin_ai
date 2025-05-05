@@ -183,69 +183,90 @@ async def generate_with_zones(
                 program_config = program_id
             logger.info(f"Using specified program config: {program_config}")
 
-        # ENHANCEMENT: Better fixed rooms file handling
-        fixed_rooms_arg = []
-        if fixed_rooms_file:
-            # Always resolve to absolute path
-            fixed_rooms_path = Path(fixed_rooms_file)
-            if not fixed_rooms_path.is_absolute():
-                # Try to resolve relative to the project root
-                fixed_rooms_path = (PROJECT_ROOT / fixed_rooms_file).resolve()
+            # Enhanced fixed rooms handling in engine.py generate_with_zones function
 
-            if fixed_rooms_path.exists():
-                # ENHANCEMENT: Log the contents of the fixed rooms file
-                try:
-                    with open(fixed_rooms_path, "r") as f:
-                        fixed_rooms_data = json.load(f)
-                        logger.info(
-                            f"Fixed rooms file contents: {json.dumps(fixed_rooms_data, indent=2)}"
-                        )
+            # ENHANCEMENT: Better fixed rooms file handling
+            fixed_rooms_arg = []
+            if fixed_rooms_file:
+                # Always resolve to absolute path
+                fixed_rooms_path = Path(fixed_rooms_file)
+                if not fixed_rooms_path.is_absolute():
+                    # Try to resolve relative to the project root
+                    fixed_rooms_path = (PROJECT_ROOT / fixed_rooms_file).resolve()
 
-                        # ENHANCEMENT: Check if the file has the expected format
-                        if "fixed_rooms" in fixed_rooms_data:
+                if fixed_rooms_path.exists():
+                    # ENHANCEMENT: Log the contents of the fixed rooms file
+                    try:
+                        with open(fixed_rooms_path, "r") as f:
+                            fixed_rooms_data = json.load(f)
                             logger.info(
-                                f"Found {len(fixed_rooms_data['fixed_rooms'])} fixed room definitions"
+                                f"Fixed rooms file contents: {json.dumps(fixed_rooms_data, indent=2)}"
                             )
 
-                            # ENHANCEMENT: Print each fixed room identifier for debugging
-                            for i, fixed_room in enumerate(
-                                fixed_rooms_data["fixed_rooms"]
-                            ):
-                                if (
-                                    "identifier" in fixed_room
-                                    and "position" in fixed_room
+                            # ENHANCEMENT: Check if the file has the expected format
+                            if "fixed_rooms" in fixed_rooms_data:
+                                logger.info(
+                                    f"Found {len(fixed_rooms_data['fixed_rooms'])} fixed room definitions"
+                                )
+
+                                # ENHANCEMENT: Print each fixed room identifier for debugging
+                                for i, fixed_room in enumerate(
+                                    fixed_rooms_data["fixed_rooms"]
                                 ):
-                                    identifier = fixed_room["identifier"]
-                                    position = fixed_room["position"]
-                                    id_type = identifier.get("type", "")
-                                    room_type = identifier.get("room_type", "")
-                                    dept = identifier.get("department", "")
-                                    name = identifier.get("name", "")
+                                    if (
+                                        "identifier" in fixed_room
+                                        and "position" in fixed_room
+                                    ):
+                                        identifier = fixed_room["identifier"]
+                                        position = fixed_room["position"]
+                                        id_type = identifier.get("type", "")
+                                        room_type = identifier.get("room_type", "")
+                                        dept = identifier.get("department", "")
+                                        name = identifier.get("name", "")
 
+                                        # Enhanced logging with more details
+                                        logger.info(
+                                            f"Fixed Room #{i+1}: {id_type} - "
+                                            + f"type={room_type}, dept={dept}, name={name}, "
+                                            + f"position={position}"
+                                        )
+
+                                        # ENHANCEMENT: Add specific logging for core types
+                                        if (
+                                            room_type == "lobby"
+                                            or dept == "circulation"
+                                            or name
+                                            in ["main_core", "vertical_circulation"]
+                                        ):
+                                            logger.info(
+                                                f"!!! IMPORTANT FIXED ROOM: {id_type} - {room_type}/{dept}/{name} at {position}"
+                                            )
+                            else:
+                                # If no fixed_rooms key, check if it's the simple format (direct mapping)
+                                if isinstance(fixed_rooms_data, dict):
                                     logger.info(
-                                        f"Fixed Room #{i+1}: {id_type} - "
-                                        + f"type={room_type}, dept={dept}, name={name}, "
-                                        + f"position={position}"
+                                        f"Using simple mapping format with {len(fixed_rooms_data)} fixed positions"
                                     )
-                        else:
-                            logger.warning(
-                                f"Fixed rooms file doesn't have expected 'fixed_rooms' key"
-                            )
-                except Exception as e:
-                    logger.error(f"Error reading fixed rooms file: {e}")
+                                    for room_id, position in fixed_rooms_data.items():
+                                        logger.info(
+                                            f"Fixed position for room {room_id}: {position}"
+                                        )
+                                else:
+                                    logger.warning(
+                                        f"Fixed rooms file doesn't have expected structure"
+                                    )
+                    except Exception as e:
+                        logger.error(f"Error reading fixed rooms file: {e}")
 
-                fixed_rooms_arg = ["--fixed-rooms", str(fixed_rooms_path)]
-                logger.info(f"Using fixed rooms file: {fixed_rooms_path}")
-            else:
-                logger.warning(f"Fixed rooms file not found: {fixed_rooms_path}")
-                # ENHANCEMENT: Return better error
-                return {
-                    "success": False,
-                    "error": f"Fixed rooms file not found: {fixed_rooms_path}",
-                }
-
-        # ENHANCEMENT: Add a debug flag for more verbose output
-        debug_flag = ["--debug"] if fixed_rooms_file else []
+                    fixed_rooms_arg = ["--fixed-rooms", str(fixed_rooms_path)]
+                    logger.info(f"Using fixed rooms file: {fixed_rooms_path}")
+                else:
+                    logger.warning(f"Fixed rooms file not found: {fixed_rooms_path}")
+                    # ENHANCEMENT: Return better error
+                    return {
+                        "success": False,
+                        "error": f"Fixed rooms file not found: {fixed_rooms_path}",
+                    }
 
         # Build command
         command = (

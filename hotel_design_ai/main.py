@@ -174,18 +174,9 @@ def parse_arguments():
 
 def load_fixed_rooms(filepath: str) -> Dict[int, Any]:
     """
-    Load fixed room positions from a JSON file.
-    Supports both formats:
-    1. Simple format: {room_id: position}
-    2. Enhanced format: {"fixed_rooms": [{identifier, position}]}
-
-    Args:
-        filepath: Path to the JSON file
-
-    Returns:
-        Dictionary mapping room IDs to positions
+    Enhanced fixed room loader with strict position enforcement.
     """
-    print(f"\nLoading fixed room positions from: {filepath}")
+    print(f"\nLOADING FIXED ROOMS WITH STRICT ENFORCEMENT from: {filepath}")
 
     try:
         with open(filepath, "r") as f:
@@ -193,28 +184,12 @@ def load_fixed_rooms(filepath: str) -> Dict[int, Any]:
 
         # Check if this is the enhanced format with identifiers
         if isinstance(data, dict) and "fixed_rooms" in data:
-            print(f"Detected enhanced fixed_rooms format with identifiers")
             print(f"Found {len(data['fixed_rooms'])} fixed room definitions")
 
-            # Print each fixed room for debugging
-            for i, fixed_room in enumerate(data["fixed_rooms"]):
-                identifier = fixed_room.get("identifier", {})
-                position = fixed_room.get("position", [])
-                id_type = identifier.get("type", "unknown")
-                room_type = identifier.get("room_type", "N/A")
-                dept = identifier.get("department", "N/A")
-                name = identifier.get("name", "N/A")
-
-                print(
-                    f"Fixed Room #{i+1}: {id_type} - "
-                    + f"type={room_type}, dept={dept}, name={name}, "
-                    + f"position={position}"
-                )
-
-            return data["fixed_rooms"]
+            # Return the raw data for later exact matching
+            return data
 
         # Original format with room IDs
-        print(f"Detected original fixed_rooms format with direct room IDs")
         fixed_positions = {}
         for room_id, position in data.items():
             fixed_positions[int(room_id)] = tuple(position)
@@ -222,9 +197,6 @@ def load_fixed_rooms(filepath: str) -> Dict[int, Any]:
 
         return fixed_positions
 
-    except json.JSONDecodeError as e:
-        print(f"Error: Invalid JSON in fixed rooms file: {e}")
-        return {}
     except Exception as e:
         print(f"Error loading fixed rooms file: {e}")
         return {}
@@ -232,327 +204,90 @@ def load_fixed_rooms(filepath: str) -> Dict[int, Any]:
 
 def match_fixed_rooms_to_actual(fixed_data, rooms, debug=True):
     """
-    Enhanced matching function that handles both formats of fixed room data
-    and has improved debugging.
-
-    Args:
-        fixed_data: Either a dictionary mapping room IDs to positions,
-                   or a list of fixed room configurations with identifiers
-        rooms: List of Room objects
-        debug: Whether to print debug information
-
-    Returns:
-        Dictionary mapping room IDs to positions
+    Completely rewritten matching function with strict position enforcement.
     """
     if debug:
-        print(f"\nDEBUG: Enhanced fixed position matcher")
-        print(f"DEBUG: Input fixed_data type: {type(fixed_data)}")
-        if isinstance(fixed_data, list):
-            print(f"DEBUG: Fixed data contains {len(fixed_data)} room specifications")
-        elif isinstance(fixed_data, dict):
-            print(f"DEBUG: Fixed data contains {len(fixed_data)} room positions")
+        print(f"\nDEBUG: STRICT fixed position matcher")
 
     # If already in simple format (direct ID to position mapping), convert IDs to int
-    if isinstance(fixed_data, dict):
-        if debug:
-            print(f"DEBUG: Using direct room ID mapping format")
-
+    if isinstance(fixed_data, dict) and not "fixed_rooms" in fixed_data:
         result = {}
         for room_id_str, position in fixed_data.items():
-            try:
-                # Convert string IDs to integers if needed
-                room_id = (
-                    int(room_id_str) if isinstance(room_id_str, str) else room_id_str
-                )
-                result[room_id] = tuple(position)
-                if debug:
-                    print(
-                        f"DEBUG: Mapped fixed position for room ID {room_id}: {position}"
-                    )
-            except (ValueError, TypeError) as e:
-                if debug:
-                    print(f"DEBUG: Error parsing room ID {room_id_str}: {e}")
-
+            room_id = int(room_id_str) if isinstance(room_id_str, str) else room_id_str
+            result[room_id] = tuple(position)
+            if debug:
+                print(f"DEBUG: Direct mapping for room ID {room_id}: {position}")
         return result
 
-    # Handle the enhanced format with identifiers
+    # Enhanced format with identifiers
+    if not isinstance(fixed_data, dict) or not "fixed_rooms" in fixed_data:
+        if debug:
+            print(f"DEBUG: Unrecognized fixed data format: {type(fixed_data)}")
+        return {}
+
+    fixed_rooms = fixed_data["fixed_rooms"]
     result = {}
-    matched_room_ids = set()
     matched_count = 0
 
-    # First, print all rooms for debugging
-    if debug:
-        print("\nDEBUG: Available rooms for matching:")
-        for i, room in enumerate(rooms):
-            room_type = getattr(room, "room_type", "unknown")
-            name = getattr(room, "name", "unnamed")
-            metadata = getattr(room, "metadata", {}) or {}
-            dept = metadata.get("department", "unknown")
-            print(
-                f"DEBUG: Room {i+1}: id={room.id}, type={room_type}, name={name}, dept={dept}"
-            )
-
-    # Build lookup dictionaries for efficient room finding
-    room_id_map = {room.id: room for room in rooms}
-    room_type_map = {}
-    room_name_map = {}
-    dept_map = {}
-
-    # Build maps for faster lookups
+    # Create direct lookup maps
+    id_map = {room.id: room for room in rooms}
+    type_map = {}
     for room in rooms:
-        # Map by room_type
-        room_type = getattr(room, "room_type", None)
-        if room_type:
-            if room_type not in room_type_map:
-                room_type_map[room_type] = []
-            room_type_map[room_type].append(room)
+        room_type = getattr(room, "room_type", "unknown")
+        if room_type not in type_map:
+            type_map[room_type] = []
+        type_map[room_type].append(room)
 
-        # Map by name
-        name = getattr(room, "name", None)
-        if name:
-            room_name_map[name] = room
+    # First pass: exact identifier matches only
+    for fixed_def in fixed_rooms:
+        if "identifier" not in fixed_def or "position" not in fixed_def:
+            continue
 
-        # Map by department (from metadata)
-        metadata = getattr(room, "metadata", {}) or {}
-        dept = metadata.get("department", "unknown")
-        if dept:
-            if dept not in dept_map:
-                dept_map[dept] = []
-            dept_map[dept].append(room)
+        identifier = fixed_def["identifier"]
+        position = tuple(fixed_def["position"])
+        id_type = identifier.get("type", "")
 
-    if debug:
-        print(f"DEBUG: Built lookup maps:")
-        print(f"DEBUG: - {len(room_id_map)} room IDs")
-        print(f"DEBUG: - {len(room_type_map)} room types: {list(room_type_map.keys())}")
-        print(f"DEBUG: - {len(room_name_map)} unique room names")
-        print(f"DEBUG: - {len(dept_map)} departments: {list(dept_map.keys())}")
+        # Most specific match: department + name
+        if id_type == "department_with_name":
+            dept = identifier.get("department", "")
+            name = identifier.get("name", "")
 
-    # ENHANCEMENT: Pre-process to find lobby and core rooms explicitly
-    lobby_room = None
-    core_room = None
+            # Special case for circulation cores
+            if dept == "circulation" and "core" in name:
+                for room in rooms:
+                    meta = getattr(room, "metadata", {}) or {}
+                    r_type = getattr(room, "room_type", "")
 
-    # Find lobby room (we need exactly one)
-    if "lobby" in room_type_map:
-        lobby_room = room_type_map["lobby"][0]
-        if debug:
-            print(
-                f"DEBUG: Found lobby room: id={lobby_room.id}, name={lobby_room.name}"
-            )
-    elif "reception" in room_type_map:
-        lobby_room = room_type_map["reception"][0]
-        if debug:
-            print(
-                f"DEBUG: Found reception room as lobby: id={lobby_room.id}, name={lobby_room.name}"
-            )
-    else:
-        if debug:
-            print(f"DEBUG: WARNING - No lobby or reception room found!")
+                    # Match vertical circulation with core in name
+                    if r_type == "vertical_circulation" and room.id not in result:
+                        result[room.id] = position
+                        if debug:
+                            print(
+                                f"DEBUG: STRICT CORE MATCH - room id {room.id} -> {position}"
+                            )
+                        matched_count += 1
+                        break
 
-    # Find vertical circulation/core room
-    if "vertical_circulation" in room_type_map:
-        # Find the largest vertical circulation room
-        circ_rooms = room_type_map["vertical_circulation"]
-        if circ_rooms:
-            # Sort by size (largest first)
-            circ_rooms.sort(key=lambda r: r.width * r.length, reverse=True)
-            core_room = circ_rooms[0]
-            if debug:
-                print(
-                    f"DEBUG: Found core room: id={core_room.id}, name={core_room.name}"
-                )
-    else:
-        if debug:
-            print(f"DEBUG: WARNING - No vertical circulation room found!")
+        # Room type + name match
+        elif id_type == "room_type_with_name":
+            room_type = identifier.get("room_type", "")
+            name = identifier.get("name", "")
 
-    for fixed_room in fixed_data:
-        try:
-            # Extract identifier and position
-            if "identifier" not in fixed_room or "position" not in fixed_room:
-                if debug:
-                    print(
-                        f"DEBUG: Missing identifier or position in fixed room: {fixed_room}"
-                    )
-                continue
-
-            identifier = fixed_room["identifier"]
-            position = tuple(fixed_room["position"])
-
-            if debug:
-                print(
-                    f"\nDEBUG: Processing fixed room with identifier type: {identifier.get('type')}"
-                )
-                print(f"DEBUG: Position: {position}")
-
-            # Find matching room based on identifier type
-            matching_room = None
-
-            # ENHANCEMENT: Special case handling for lobby and core
-            if (
-                identifier.get("type") == "room_type_with_name"
-                and identifier.get("room_type") == "lobby"
-                and identifier.get("name") == "reception"
-            ):
-
-                if lobby_room and lobby_room.id not in matched_room_ids:
-                    matching_room = lobby_room
-                    if debug:
-                        print(
-                            f"DEBUG: Matched lobby room directly: id={matching_room.id}, name={matching_room.name}"
-                        )
-
-            # Special case for circulation/core
-            elif (
-                identifier.get("type") == "department_with_name"
-                and identifier.get("department") == "circulation"
-                and identifier.get("name") == "main_core"
-            ):
-
-                if core_room and core_room.id not in matched_room_ids:
-                    matching_room = core_room
-                    if debug:
-                        print(
-                            f"DEBUG: Matched core room directly: id={matching_room.id}, name={matching_room.name}"
-                        )
-
-            # If no special case match, try standard matching logic
-            if not matching_room:
-                # Match by department + name
-                if identifier.get("type") == "department_with_name":
-                    department = identifier.get("department")
-                    name = identifier.get("name")
-
-                    if debug:
-                        print(f"DEBUG: Looking for dept={department}, name={name}")
-
-                    # First try exact match on department and name
-                    if department in dept_map:
-                        for room in dept_map[department]:
-                            if room.id in matched_room_ids:
-                                continue
-
-                            room_name = getattr(room, "name", "")
-                            metadata = getattr(room, "metadata", {}) or {}
-                            subspace_name = metadata.get("subspace_name", "")
-                            original_name = metadata.get("original_name", "")
-
-                            # Try all name variations
-                            if (
-                                name == room_name
-                                or name == subspace_name
-                                or name == original_name
-                                or name in room_name
-                            ):
-                                matching_room = room
-                                break
-
-                    # If not found, try just matching on department and looking for cores
-                    if not matching_room and department in dept_map:
-                        for room in dept_map[department]:
-                            if room.id in matched_room_ids:
-                                continue
-
-                            # If looking for main_core, prioritize vertical_circulation
-                            if (
-                                name in ("main_core", "core")
-                                and room.room_type == "vertical_circulation"
-                            ):
-                                matching_room = room
-                                break
-
-                    # Special case for circulation department
-                    if not matching_room and department == "circulation":
-                        # Look for vertical_circulation room type
-                        if "vertical_circulation" in room_type_map:
-                            for room in room_type_map["vertical_circulation"]:
-                                if room.id in matched_room_ids:
-                                    continue
-                                matching_room = room
-                                break
-
-                # Match by room type + name
-                elif identifier.get("type") == "room_type_with_name":
-                    room_type = identifier.get("room_type")
-                    name = identifier.get("name")
-
-                    if debug:
-                        print(f"DEBUG: Looking for type={room_type}, name={name}")
-
-                    # First, try to find by exact name match within room type
-                    if room_type in room_type_map:
-                        for room in room_type_map[room_type]:
-                            if room.id in matched_room_ids:
-                                continue
-
-                            room_name = getattr(room, "name", "")
-                            if room_name == name:
-                                matching_room = room
-                                break
-
-                    # Special case for lobby with reception name
-                    if (
-                        not matching_room
-                        and room_type == "lobby"
-                        and name == "reception"
-                    ):
-                        if "lobby" in room_type_map:
-                            for room in room_type_map["lobby"]:
-                                if room.id in matched_room_ids:
-                                    continue
-                                matching_room = room
-                                break
-
-                        # If still not found, try reception
-                        if not matching_room and "reception" in room_type_map:
-                            for room in room_type_map["reception"]:
-                                if room.id in matched_room_ids:
-                                    continue
-                                matching_room = room
-                                break
-
-                # Match by room type only
-                elif identifier.get("type") == "room_type" and "value" in identifier:
-                    room_type = identifier["value"]
-
-                    if debug:
-                        print(f"DEBUG: Looking for room type={room_type}")
-
-                    if room_type in room_type_map:
-                        for room in room_type_map[room_type]:
-                            if room.id in matched_room_ids:
-                                continue
-                            matching_room = room
-                            break
-
-            # If found a match, add to results
-            if matching_room:
-                result[matching_room.id] = position
-                matched_room_ids.add(matching_room.id)
-                matched_count += 1
-                if debug:
-                    print(
-                        f"DEBUG: ✓ Matched room: id={matching_room.id}, name={matching_room.name}, type={matching_room.room_type}"
-                    )
-            else:
-                if debug:
-                    print(
-                        f"DEBUG: ✗ No match found for {identifier.get('type')} identifier: {identifier}"
-                    )
-
-        except (KeyError, TypeError) as e:
-            if debug:
-                print(f"DEBUG: ✗ Error with fixed room definition: {e}")
+            # Special case for lobby/reception
+            if room_type == "lobby" and name == "reception":
+                for room in rooms:
+                    r_type = getattr(room, "room_type", "")
+                    if r_type == "lobby" and room.id not in result:
+                        result[room.id] = position
+                        if debug:
+                            print(
+                                f"DEBUG: STRICT LOBBY MATCH - room id {room.id} -> {position}"
+                            )
+                        matched_count += 1
+                        break
 
     if debug:
-        print(
-            f"\nDEBUG: Successfully matched {matched_count} out of {len(fixed_data)} fixed rooms"
-        )
-        print(f"DEBUG: Result contains {len(result)} room ID to position mappings")
-        for room_id, pos in result.items():
-            room = room_id_map.get(room_id)
-            if room:
-                print(
-                    f"DEBUG: - Room {room_id} ({room.room_type}, {getattr(room, 'name', 'unnamed')}): {pos}"
-                )
+        print(f"DEBUG: Matched {matched_count} fixed positions with strict rules")
 
     return result
 

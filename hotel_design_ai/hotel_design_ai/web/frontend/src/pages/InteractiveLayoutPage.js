@@ -237,54 +237,81 @@ const InteractiveLayoutPage = () => {
   };
 
   // New function for handling fixed element selection
+  // Enhanced version of handleFixedElementSelect in InteractiveLayoutPage.js
+
   const handleFixedElementSelect = (type, coords) => {
     if (coords === null) {
       // Clear the selected fixed elements of this type
       if (type === "entrance") {
         setFixedElements((prev) => ({ ...prev, entrances: [] }));
+        console.log("Cleared all entrance/lobby positions");
       } else if (type === "core") {
         setFixedElements((prev) => ({ ...prev, cores: [] }));
+        console.log("Cleared all core/vertical circulation positions");
       }
       return;
     }
 
     // For entrance, we replace the existing one (only one entrance allowed)
     if (type === "entrance") {
+      const entranceElement = {
+        x: coords.x,
+        y: coords.y,
+        z: 0, // Ground floor
+        type: "lobby", // IMPORTANT: Changed from 'lobby' to ensure correct room type lookup
+        name: "reception",
+        // Add additional metadata to improve matching
+        metadata: {
+          department: "public",
+          is_fixed: true,
+          original_name: "Main Lobby",
+        },
+      };
+
       setFixedElements((prev) => ({
         ...prev,
-        entrances: [
-          {
-            x: coords.x,
-            y: coords.y,
-            z: 0, // Ground floor
-            type: "lobby",
-            name: "reception",
-          },
-        ],
+        entrances: [entranceElement],
       }));
+
+      console.log(
+        `Set entrance/lobby position at x=${coords.x}, y=${coords.y}`
+      );
     }
-    // For cores, we allow multiple
+    // For cores, we allow multiple, but enhance the metadata
     else if (type === "core") {
       setFixedElements((prev) => {
-        // Create a new core with an index
+        // Create a new core with enhanced metadata
         const newCore = {
           x: coords.x,
           y: coords.y,
-          z: -10, // Below ground for vertical circulation
-          type: prev.cores.length === 0 ? "main_core" : "secondary_core",
+          z: -10, // Spans multiple floors
+          type: "vertical_circulation", // IMPORTANT: Use exact room type
           department: "circulation",
           name:
             prev.cores.length === 0
               ? "main_core"
               : `secondary_core_${prev.cores.length}`,
+          // Add additional metadata for better matching
+          metadata: {
+            is_core: true,
+            spans_floors: true,
+            original_name:
+              prev.cores.length === 0
+                ? "Main Circulation Core"
+                : `Secondary Core ${prev.cores.length}`,
+          },
         };
 
         // Only allow two cores max
         let updatedCores;
         if (prev.cores.length >= 2) {
           updatedCores = [...prev.cores.slice(0, 1), newCore];
+          console.log("Replaced second core (maximum 2 cores allowed)");
         } else {
           updatedCores = [...prev.cores, newCore];
+          console.log(
+            `Added new core #${updatedCores.length} at x=${coords.x}, y=${coords.y}`
+          );
         }
 
         return {
@@ -454,7 +481,7 @@ const InteractiveLayoutPage = () => {
     }
   };
 
-  // New function to save fixed elements
+  // Enhanced saveFixedElements function
   const saveFixedElements = async () => {
     try {
       setLoading(true);
@@ -463,31 +490,67 @@ const InteractiveLayoutPage = () => {
 
       // Prepare fixed elements in the correct format
       const fixedRooms = [
-        // Add entrance/lobby
+        // Add entrance/lobby with enhanced identifiers
         ...fixedElements.entrances.map((entrance) => ({
           identifier: {
-            type: "room_type_with_name",
-            room_type: "lobby",
+            type: "room_type_with_name", // This format works better for lookup
+            room_type: "lobby", // IMPORTANT: Set the exact expected room type
             name: "reception",
           },
           position: [entrance.x, entrance.y, entrance.z || 0],
+          // Include enhanced metadata for better mapping
+          metadata: {
+            department: "public",
+            original_name: "Main Lobby",
+            is_fixed: true,
+          },
         })),
 
-        // Add cores
-        ...fixedElements.cores.map((core) => ({
+        // Add cores with enhanced identifiers
+        ...fixedElements.cores.map((core, index) => ({
           identifier: {
-            type: "department_with_name",
+            type: "room_type", // This works better for vertical circulation
+            value: "vertical_circulation", // IMPORTANT: Use exact room type
+            // Include fallback identifiers too
+            room_type: "vertical_circulation",
             department: "circulation",
             name: core.name,
           },
-          position: [core.x, core.y, core.z || -10],
+          position: [core.x, core.y, core.z || 0],
+          // Include enhanced metadata
+          metadata: {
+            is_core: true,
+            spans_floors: true,
+            original_name:
+              index === 0 ? "Main Circulation Core" : `Secondary Core ${index}`,
+          },
         })),
       ];
 
-      // Create the fixed_rooms.json content
+      // Create the fixed_rooms.json content with enhanced debugging data
       const fixedRoomsJson = {
         fixed_rooms: fixedRooms,
+        // Add metadata to help debugging
+        metadata: {
+          building_id: buildingId,
+          timestamp: new Date().toISOString(),
+          num_entrances: fixedElements.entrances.length,
+          num_cores: fixedElements.cores.length,
+          version: "1.1", // Track format version
+        },
       };
+
+      // Log the data being sent for debugging purposes
+      console.log("Saving fixed elements:", fixedRoomsJson);
+
+      // Validate that we have required elements
+      if (fixedRooms.length === 0) {
+        setError(
+          "No fixed elements defined. Please add at least one entrance and core."
+        );
+        setLoading(false);
+        return;
+      }
 
       // Call the backend to save fixed elements
       const response = await fetch(`${API_BASE_URL}/save-fixed-elements`, {
@@ -499,23 +562,30 @@ const InteractiveLayoutPage = () => {
           building_id: buildingId,
           fixed_elements: fixedRoomsJson,
         }),
-      }).catch((err) => {
-        // For demonstration - handle gracefully if endpoint doesn't exist yet
-        console.warn("Backend endpoint not implemented yet:", err);
-        return { ok: true, json: () => Promise.resolve({ success: true }) };
       });
 
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
+        throw new Error(
+          errorData.error || `Server responded with status ${response.status}`
+        );
+      }
+
       const data = await response.json();
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to save fixed elements");
       }
 
       // Save the fixed rooms file path for later use
       setFixedRoomsFile(data.filepath);
+      console.log("Fixed rooms saved to:", data.filepath);
 
       setSuccess("Fixed elements saved successfully");
       setGridSelectionMode("standard"); // Go back to standard mode
     } catch (err) {
+      console.error("Error saving fixed elements:", err);
       setError(err.message || "Error saving fixed elements");
     } finally {
       setLoading(false);
@@ -523,6 +593,7 @@ const InteractiveLayoutPage = () => {
   };
 
   // Generate layout with defined zones
+  // Updated generateWithZones function in InteractiveLayoutPage.js
   const generateWithZones = async () => {
     try {
       setLoading(true);
@@ -571,26 +642,66 @@ const InteractiveLayoutPage = () => {
       }
 
       // 2. Now call generate-with-zones
+      console.log("Calling generateLayoutWithZones API...");
+      console.log("Building ID:", buildingId);
+      console.log("Program config:", programConfig || "hotel_requirements_3");
+      console.log("Fixed rooms file:", fixedRoomsFile);
+
       const result = await generateLayoutWithZones(
         buildingId,
         programConfig || "hotel_requirements_3",
         fixedRoomsFile
       );
 
+      console.log("Layout generation result:", result);
+
       if (result.success) {
         setLayoutId(result.layout_id);
-        setInitialLayout({
-          rooms: result.layout_data?.rooms || result.rooms,
+
+        // Ensure we're using layout_data from the response if available
+        let roomsData = result.layout_data?.rooms || result.rooms;
+
+        // Log the rooms data for debugging
+        console.log(
+          `Received ${Object.keys(roomsData || {}).length} rooms from backend`
+        );
+
+        // Create a structured layout object
+        const newLayout = {
+          rooms: roomsData || {},
+          width: result.layout_data?.width || buildingConfig.width,
+          length: result.layout_data?.length || buildingConfig.length,
+          height: result.layout_data?.height || buildingConfig.height,
+          grid_size: result.layout_data?.grid_size || buildingConfig.grid_size,
+        };
+
+        // Check for specific room types
+        const roomTypes = {};
+        let hasVerticalCirculation = false;
+        let hasLobby = false;
+
+        Object.values(newLayout.rooms).forEach((room) => {
+          roomTypes[room.type] = (roomTypes[room.type] || 0) + 1;
+          if (room.type === "vertical_circulation")
+            hasVerticalCirculation = true;
+          if (room.type === "lobby") hasLobby = true;
         });
-        setModifiedLayout({
-          rooms: result.layout_data?.rooms || result.rooms,
-        });
+
+        console.log("Room types in layout:", roomTypes);
+        console.log("Has vertical circulation:", hasVerticalCirculation);
+        console.log("Has lobby:", hasLobby);
+
+        // Set both initialLayout and modifiedLayout with the complete data
+        setInitialLayout(newLayout);
+        setModifiedLayout(newLayout);
+
         setSuccess("Layout generated successfully");
         setActiveTab("layout");
       } else {
         throw new Error(result.error || "Failed to generate layout");
       }
     } catch (err) {
+      console.error("Error in generateWithZones:", err);
       setError(err.message);
     } finally {
       setLoading(false);
