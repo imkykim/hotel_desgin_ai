@@ -14,7 +14,7 @@ import {
 import "../styles/InteractiveLayout.css";
 
 const InteractiveLayoutPage = () => {
-  const [activeTab, setActiveTab] = useState("grid");
+  const [activeTab, setActiveTabInternal] = useState("grid");
   const [buildingConfig, setBuildingConfig] = useState(null);
   const [initialLayout, setInitialLayout] = useState(null);
   const [selectedAreas, setSelectedAreas] = useState([]);
@@ -69,6 +69,41 @@ const InteractiveLayoutPage = () => {
       setLayoutId(layoutIdParam);
     }
   }, [location]);
+
+  // Add this function to load the latest config from disk
+  const loadLatestBuildingConfig = async () => {
+    try {
+      setLoading(true);
+      console.log(`Loading latest building config for ID: ${buildingId}`);
+
+      const response = await fetch(
+        `${API_BASE_URL}/configuration/building/${buildingId}`
+      );
+      const data = await response.json();
+
+      if (data.success && data.config_data) {
+        console.log("Loaded fresh config from disk:", data.config_data);
+        setBuildingConfig(data.config_data);
+        return data.config_data;
+      } else {
+        console.error("Failed to load building config:", data.error);
+        return null;
+      }
+    } catch (err) {
+      console.error("Error loading building config:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add effect to reload config when switching tabs
+  useEffect(() => {
+    if (buildingId) {
+      // Always reload fresh config when tab changes
+      loadLatestBuildingConfig();
+    }
+  }, [activeTab, buildingId]);
 
   // Load initial values from building config
   useEffect(() => {
@@ -308,6 +343,26 @@ const InteractiveLayoutPage = () => {
     } catch (err) {
       console.error("Error fetching building config by ID:", err);
       return null;
+    }
+  };
+
+  // Create wrapper function around setActiveTab
+  const setActiveTab = (newTab) => {
+    console.log(`Setting active tab to: ${newTab}`);
+
+    // Always update the tab first
+    setActiveTabInternal(newTab);
+
+    // If switching to layout tab, reload configuration
+    if (newTab === "layout" && buildingId) {
+      console.log("Tab changed to layout - reloading building config");
+      (async () => {
+        const config = await fetchBuildingConfigById(buildingId);
+        if (config) {
+          console.log("Successfully reloaded config after tab change:", config);
+          setBuildingConfig(config);
+        }
+      })();
     }
   };
 
@@ -803,27 +858,16 @@ const InteractiveLayoutPage = () => {
         setLayoutId(result.layout_id);
 
         // Extract dimensions directly from the generated layout
-        const layoutWidth =
-          result.layout_data?.width || gridDimensionsRef.current.width;
+        const layoutWidth = result.layout_data?.width || buildingConfig?.width;
         const layoutLength =
-          result.layout_data?.length || gridDimensionsRef.current.length;
+          result.layout_data?.length || buildingConfig?.length;
         const layoutHeight =
-          result.layout_data?.height || gridDimensionsRef.current.height;
+          result.layout_data?.height || buildingConfig?.height;
         const layoutGridSize =
-          result.layout_data?.grid_size || gridDimensionsRef.current.grid_size;
-
-        console.log("Dimensions from generated layout:", {
-          width: layoutWidth,
-          length: layoutLength,
-          height: layoutHeight,
-          grid_size: layoutGridSize,
-        });
+          result.layout_data?.grid_size || buildingConfig?.grid_size;
 
         // Extract rooms data
         let roomsData = result.layout_data?.rooms || result.rooms;
-        console.log(
-          `Received ${Object.keys(roomsData || {}).length} rooms from backend`
-        );
 
         // Create a structured layout object
         const newLayout = {
@@ -834,19 +878,21 @@ const InteractiveLayoutPage = () => {
           grid_size: layoutGridSize,
         };
 
-        // Critically important: update the dimensions in the ref before switching tabs
-        gridDimensionsRef.current = {
-          width: layoutWidth,
-          length: layoutLength,
-          height: layoutHeight,
-          structural_grid_x: buildingConfig.structural_grid_x,
-          structural_grid_y: buildingConfig.structural_grid_y,
-          grid_size: layoutGridSize,
-        };
-
-        // Set both initialLayout and modifiedLayout with the complete data
         setInitialLayout(newLayout);
         setModifiedLayout(newLayout);
+
+        // --- Force reload config and wait for it before switching tab ---
+        const config = await loadLatestBuildingConfig();
+        // If config loaded, update buildingConfig with layout dimensions (for immediate tab switch)
+        if (config) {
+          setBuildingConfig({
+            ...config,
+            width: layoutWidth,
+            length: layoutLength,
+            height: layoutHeight,
+            grid_size: layoutGridSize,
+          });
+        }
 
         setSuccess("Layout generated successfully");
         setActiveTab("layout");
@@ -1256,20 +1302,13 @@ const InteractiveLayoutPage = () => {
             {initialLayout && buildingConfig && (
               <LayoutEditor
                 initialLayout={initialLayout}
-                // Always use the config loaded from disk
-                buildingConfig={{
-                  ...buildingConfig,
-                  width: gridDimensionsRef.current.width,
-                  length: gridDimensionsRef.current.length,
-                  height: gridDimensionsRef.current.height,
-                  grid_size: gridDimensionsRef.current.grid_size,
-                }}
+                buildingConfig={buildingConfig}
                 layoutId={layoutId}
                 onLayoutChange={handleLayoutChange}
                 onTrainRL={handleTrainRL}
-                width={gridDimensionsRef.current.width}
-                length={gridDimensionsRef.current.length}
-                gridSize={gridDimensionsRef.current.grid_size}
+                width={buildingConfig.width}
+                length={buildingConfig.length}
+                gridSize={buildingConfig.grid_size}
               />
             )}
 

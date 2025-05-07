@@ -113,7 +113,6 @@ const LayoutEditor = ({
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
-  width = 64;
   // Use calculated dimensions based on props, not internal state
   // This ensures we always use the latest values from props
   const buildingWidth = width || (buildingConfig && buildingConfig.width) || 80;
