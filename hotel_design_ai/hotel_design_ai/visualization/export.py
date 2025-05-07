@@ -429,17 +429,17 @@ def create_room(name, room_type, x, y, z, width, length, height):
 
             # Get name from metadata if available
             name = f"Room_{room_id_str}"
-            if "metadata" in room_data and room_data["metadata"]:
-                if "name" in room_data["metadata"]:
-                    name = room_data["metadata"]["name"]
-                elif "original_name" in room_data["metadata"]:
-                    name = room_data["metadata"]["original_name"]
+            # if "metadata" in room_data and room_data["metadata"]:
+            #     if "name" in room_data["metadata"]:
+            #         name = room_data["metadata"]["name"]
+            #     elif "original_name" in room_data["metadata"]:
+            #         name = room_data["metadata"]["original_name"]
         else:
             # Object with attributes
             position = getattr(room_data, "position", [0, 0, 0])
             dimensions = getattr(room_data, "dimensions", [0, 0, 0])
             room_type = getattr(room_data, "room_type", "default")
-            name = getattr(room_data, "name", f"Room_{room_id_str}")
+            name = f"Room_{room_id_str}"
 
         # Make sure position and dimensions are lists/tuples
         if not isinstance(position, (list, tuple)):

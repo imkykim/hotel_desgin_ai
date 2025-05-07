@@ -144,6 +144,9 @@ class SpatialGrid:
         Returns:
             bool: True if placement was successful, False otherwise
         """
+        if height > 50:
+            force_placement = True
+
         # Default allowed overlap types
         if allow_overlap is None:
             # Allow bidirectional overlap between parking and vertical circulation

@@ -433,6 +433,10 @@ async def export_rhino_script(layout_id: str):
         with open(layout_file, "r") as f:
             layout_data = json.load(f)
 
+        logger.info(
+            f"Rooms in layout_data: {list(layout_data.get('rooms', {}).keys())}"
+        )
+
         # Create output file
         script_file = layout_dir / f"hotel_layout_{layout_id}_rhino.py"
 
@@ -444,7 +448,7 @@ async def export_rhino_script(layout_id: str):
             spatial_grid = SpatialGrid(
                 width=layout_data.get("width", 80),
                 length=layout_data.get("length", 120),
-                height=layout_data.get("height", 100),
+                height=layout_data.get("height", 200),
                 grid_size=layout_data.get("grid_size", 1.0),
             )
 
@@ -484,7 +488,7 @@ async def export_rhino_script(layout_id: str):
 
             # Export to Rhino script
             export_to_rhino(spatial_grid, str(script_file))
-
+            logger.info(f"Rooms in spatial_grid: {list(spatial_grid.rooms.keys())}")
             # Return the file as a download response
             return FileResponse(
                 path=script_file,

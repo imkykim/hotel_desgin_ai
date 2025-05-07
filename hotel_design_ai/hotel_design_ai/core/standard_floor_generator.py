@@ -460,19 +460,35 @@ def generate_standard_floor(
         spatial_grid, building_config
     )
     core_metadata = core.get(
-        "metadata", {"name": "Unnamed Core", "is_core": False}
+        "metadata", {"name": "Main Circulation Core", "is_core": True}
     )  # Fallback metadata
-    spatial_grid.place_room(
-        room_id=room_id_offset + 1,
-        x=core["position"][0],
-        y=core["position"][1],
-        z=floor_number * building_config.get("floor_height", 4.0),
-        width=core["dimensions"][0],
-        length=core["dimensions"][1],
-        height=core["dimensions"][2],
-        room_type="vertical_circulation",
-        metadata=core_metadata,
-    )
+
+    min_floor = building_config.get("standard_floor", {}).get("start_floor", 5)
+    max_floor = building_config.get("standard_floor", {}).get("end_floor", 20)
+    core_metadata["spans_floors"] = list(range(min_floor, max_floor + 1))
+
+    # Check if this is the first standard floor - only place the core once
+    if floor_number == std_floor_config.get("start_floor", 5):
+        # Calculate the core's full height to span all floors
+        total_floors = max_floor - min_floor + 1
+        total_height = total_floors * building_config.get("floor_height", 4.0)
+
+        # Calculate the starting z-coordinate (bottom of the building)
+        start_z = min_floor * building_config.get("floor_height", 4.0)
+
+        # Place a single circulation core that spans from bottom to top
+        spatial_grid.place_room(
+            room_id=room_id_offset + 1,
+            x=core["position"][0],
+            y=core["position"][1],
+            z=start_z,  # Start from the bottom floor
+            width=core["dimensions"][0],
+            length=core["dimensions"][1],
+            height=total_height,  # Make it span the full height
+            room_type="vertical_circulation",
+            metadata=core_metadata,
+            allow_overlap=["parking"],  # Allow overlap with parking
+        )
 
     # Place suite rooms
     suite_rooms = _generate_suite_rooms(
