@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import os
@@ -21,6 +21,7 @@ BUILDING_DIR = DATA_DIR / "building"
 PROGRAM_DIR = DATA_DIR / "program"
 USER_DATA_DIR = PROJECT_ROOT / "user_data"
 LAYOUTS_DIR = USER_DATA_DIR / "layouts"
+FIX_DIR = DATA_DIR / "fix"
 
 # Ensure directories exist
 for dir_path in [BUILDING_DIR, PROGRAM_DIR, USER_DATA_DIR, LAYOUTS_DIR]:
@@ -274,4 +275,92 @@ async def get_configuration(config_type: str, config_id: str):
         logger.error(f"Error getting configuration: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error getting configuration: {str(e)}"
+        )
+
+
+@router.post("/save-fixed-elements")
+async def save_fixed_elements(data: Dict[str, Any] = Body(...)):
+    """
+    Save fixed elements to a JSON file, ensuring no secondary cores are included.
+    """
+    try:
+        building_id = data.get("building_id")
+        fixed_elements = data.get("fixed_elements")
+
+        if not building_id or not fixed_elements:
+            raise HTTPException(
+                status_code=400,
+                detail="Building ID and fixed elements data are required",
+            )
+
+        # Create timestamp for unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{building_id}_{timestamp}_fixed_rooms.json"
+        filepath = FIX_DIR / filename
+
+        # IMPORTANT: Filter out any secondary cores
+        if "fixed_rooms" in fixed_elements:
+            # Create a new list with only non-secondary core elements
+            filtered_rooms = []
+            for room in fixed_elements["fixed_rooms"]:
+                # Check if this is a secondary core by name
+                is_secondary = False
+                if "identifier" in room and "name" in room["identifier"]:
+                    if "secondary_core" in room["identifier"]["name"]:
+                        logger.warning(
+                            f"Filtering out secondary core: {room['identifier']['name']}"
+                        )
+                        is_secondary = True
+
+                # Only keep non-secondary cores
+                if not is_secondary:
+                    filtered_rooms.append(room)
+
+            # Replace the fixed_rooms list with our filtered version
+            fixed_elements["fixed_rooms"] = filtered_rooms
+
+            # Log what we're keeping
+            logger.info(
+                f"Keeping {len(filtered_rooms)} fixed elements after filtering out secondary cores"
+            )
+
+            # Verify all cores are main_core
+            core_count = 0
+            for room in filtered_rooms:
+                if "identifier" in room and "value" in room["identifier"]:
+                    if room["identifier"]["value"] == "vertical_circulation":
+                        core_count += 1
+                        # Make absolutely sure it's named main_core
+                        if "name" in room["identifier"]:
+                            room["identifier"]["name"] = "main_core"
+                        if "metadata" in room and "original_name" in room["metadata"]:
+                            room["metadata"]["original_name"] = "Main Circulation Core"
+
+            logger.info(f"Final count of vertical circulation cores: {core_count}")
+
+        # Add metadata to track this change
+        if "metadata" not in fixed_elements:
+            fixed_elements["metadata"] = {}
+
+        fixed_elements["metadata"]["contains_secondary_cores"] = False
+        fixed_elements["metadata"]["filtered_with_version"] = "1.3"
+        fixed_elements["metadata"]["timestamp"] = datetime.now().isoformat()
+
+        # Save to file
+        with open(filepath, "w") as f:
+            json.dump(fixed_elements, f, indent=2)
+
+        logger.info(f"Fixed elements saved to: {filepath}")
+
+        # Return the filepath so frontend can use it for layout generation
+        return {
+            "success": True,
+            "message": "Fixed elements saved successfully (secondary cores removed)",
+            "filepath": str(filepath),
+            "filename": filename,
+        }
+    except Exception as e:
+        logger.error(f"Error saving fixed elements: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Error saving fixed elements: {str(e)}"
         )

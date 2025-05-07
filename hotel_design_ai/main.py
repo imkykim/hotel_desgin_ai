@@ -22,9 +22,9 @@ from hotel_design_ai.core.grid_rule_engine import RuleEngine
 
 # from hotel_design_ai.core.rule_engine import RuleEngine
 
-from hotel_design_ai.core.grid_rl_engine import RLEngine
+# from hotel_design_ai.core.grid_rl_engine import RLEngine
 
-# from hotel_design_ai.core.rl_engine import RLEngine
+from hotel_design_ai.core.rl_engine import RLEngine
 from hotel_design_ai.core.constraints import (
     Constraint,
     ConstraintSystem,

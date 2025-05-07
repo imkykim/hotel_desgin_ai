@@ -119,8 +119,7 @@ const LayoutEditor = ({
 
   // Use width, length, gridSize for canvas/frame sizing
   const canvasWidth = width || (buildingConfig && buildingConfig.width) || 800;
-  const canvasLength =
-    length || (buildingConfig && buildingConfig.length) || 600;
+  const canvasLength = (buildingConfig && buildingConfig.length) || 600;
 
   // Function to draw the layout on the canvas
   const drawLayout = () => {

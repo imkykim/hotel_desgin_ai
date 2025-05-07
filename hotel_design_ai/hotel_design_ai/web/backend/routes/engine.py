@@ -339,14 +339,14 @@ async def generate_with_zones(
                     )
 
                     # Log all rooms in the layout for debugging
-                    logger.info("Rooms in the generated layout:")
-                    for room_id, room_data in layout_data.get("rooms", {}).items():
-                        room_type = room_data.get("type", "unknown")
-                        room_pos = room_data.get("position", [0, 0, 0])
-                        room_name = room_data.get("metadata", {}).get("name", "unnamed")
-                        logger.info(
-                            f"  Room {room_id}: type={room_type}, name={room_name}, pos={room_pos}"
-                        )
+                    # logger.info("Rooms in the generated layout:")
+                    # for room_id, room_data in layout_data.get("rooms", {}).items():
+                    #     room_type = room_data.get("type", "unknown")
+                    #     room_pos = room_data.get("position", [0, 0, 0])
+                    #     room_name = room_data.get("metadata", {}).get("name", "unnamed")
+                    #     logger.info(
+                    #         f"  Room {room_id}: type={room_type}, name={room_name}, pos={room_pos}"
+                    #     )
 
                     # Check each fixed room by type/name to see if it was placed
                     for fixed_room in fixed_rooms:

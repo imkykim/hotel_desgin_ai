@@ -241,6 +241,12 @@ const InteractiveLayoutPage = () => {
 
   const handleFixedElementSelect = (type, coords) => {
     if (coords === null) {
+      // Clear any previous fixed rooms file reference when user starts selecting new elements
+      if (fixedRoomsFile) {
+        setFixedRoomsFile(null);
+        console.log("Cleared reference to previous fixed rooms file");
+      }
+
       // Clear the selected fixed elements of this type
       if (type === "entrance") {
         setFixedElements((prev) => ({ ...prev, entrances: [] }));
@@ -277,48 +283,28 @@ const InteractiveLayoutPage = () => {
         `Set entrance/lobby position at x=${coords.x}, y=${coords.y}`
       );
     }
-    // For cores, we allow multiple, but enhance the metadata
+    // For core, allow only one core (replace existing)
     else if (type === "core") {
-      setFixedElements((prev) => {
-        // Create a new core with enhanced metadata
-        const newCore = {
-          x: coords.x,
-          y: coords.y,
-          z: -10, // Spans multiple floors
-          type: "vertical_circulation", // IMPORTANT: Use exact room type
-          department: "circulation",
-          name:
-            prev.cores.length === 0
-              ? "main_core"
-              : `secondary_core_${prev.cores.length}`,
-          // Add additional metadata for better matching
-          metadata: {
-            is_core: true,
-            spans_floors: true,
-            original_name:
-              prev.cores.length === 0
-                ? "Main Circulation Core"
-                : `Secondary Core ${prev.cores.length}`,
-          },
-        };
-
-        // Only allow two cores max
-        let updatedCores;
-        if (prev.cores.length >= 2) {
-          updatedCores = [...prev.cores.slice(0, 1), newCore];
-          console.log("Replaced second core (maximum 2 cores allowed)");
-        } else {
-          updatedCores = [...prev.cores, newCore];
-          console.log(
-            `Added new core #${updatedCores.length} at x=${coords.x}, y=${coords.y}`
-          );
-        }
-
-        return {
-          ...prev,
-          cores: updatedCores,
-        };
-      });
+      const newCore = {
+        x: coords.x,
+        y: coords.y,
+        z: -10, // Spans multiple floors
+        type: "vertical_circulation",
+        department: "circulation",
+        name: "main_core",
+        metadata: {
+          is_core: true,
+          spans_floors: true,
+          original_name: "Main Circulation Core",
+        },
+      };
+      setFixedElements((prev) => ({
+        ...prev,
+        cores: [newCore], // Always replace with a single core
+      }));
+      console.log(
+        `Set core/vertical circulation position at x=${coords.x}, y=${coords.y}`
+      );
     }
   };
 
@@ -493,12 +479,11 @@ const InteractiveLayoutPage = () => {
         // Add entrance/lobby with enhanced identifiers
         ...fixedElements.entrances.map((entrance) => ({
           identifier: {
-            type: "room_type_with_name", // This format works better for lookup
-            room_type: "lobby", // IMPORTANT: Set the exact expected room type
+            type: "room_type_with_name",
+            room_type: "lobby",
             name: "reception",
           },
           position: [entrance.x, entrance.y, entrance.z || 0],
-          // Include enhanced metadata for better mapping
           metadata: {
             department: "public",
             original_name: "Main Lobby",
@@ -506,53 +491,66 @@ const InteractiveLayoutPage = () => {
           },
         })),
 
-        // Add cores with enhanced identifiers
-        ...fixedElements.cores.map((core, index) => ({
+        // Add ONLY a main core, never any secondary cores
+        ...fixedElements.cores.map(() => ({
+          // Removed 'core' parameter since we don't use it
           identifier: {
-            type: "room_type", // This works better for vertical circulation
-            value: "vertical_circulation", // IMPORTANT: Use exact room type
-            // Include fallback identifiers too
+            type: "room_type",
+            value: "vertical_circulation",
             room_type: "vertical_circulation",
             department: "circulation",
-            name: core.name,
+            name: "main_core", // Always main_core
           },
-          position: [core.x, core.y, core.z || 0],
-          // Include enhanced metadata
+          position: [
+            fixedElements.cores[0].x,
+            fixedElements.cores[0].y,
+            fixedElements.cores[0].z || 0,
+          ],
           metadata: {
             is_core: true,
             spans_floors: true,
-            original_name:
-              index === 0 ? "Main Circulation Core" : `Secondary Core ${index}`,
+            original_name: "Main Circulation Core", // Always main core
           },
         })),
       ];
 
-      // Create the fixed_rooms.json content with enhanced debugging data
+      // Filter out any potential secondary cores by name (extra safety check)
+      const filteredFixedRooms = fixedRooms.filter(
+        (room) =>
+          !(
+            room.identifier.name &&
+            room.identifier.name.includes("secondary_core")
+          )
+      );
+
+      // Create a completely fresh fixed elements file with no secondary cores
       const fixedRoomsJson = {
-        fixed_rooms: fixedRooms,
-        // Add metadata to help debugging
+        fixed_rooms: filteredFixedRooms,
         metadata: {
           building_id: buildingId,
           timestamp: new Date().toISOString(),
           num_entrances: fixedElements.entrances.length,
-          num_cores: fixedElements.cores.length,
-          version: "1.1", // Track format version
+          num_cores: Math.min(1, fixedElements.cores.length), // Never more than 1 core
+          version: "1.3", // Increment version to track this change
+          contains_secondary_cores: false, // Explicitly mark as not having secondary cores
         },
       };
 
-      // Log the data being sent for debugging purposes
-      console.log("Saving fixed elements:", fixedRoomsJson);
+      // Log the final structure for debugging
+      console.log(
+        "Writing fixed elements to file:",
+        JSON.stringify(fixedRoomsJson, null, 2)
+      );
 
-      // Validate that we have required elements
-      if (fixedRooms.length === 0) {
-        setError(
-          "No fixed elements defined. Please add at least one entrance and core."
-        );
-        setLoading(false);
-        return;
-      }
+      // Verify there are no secondary cores
+      const secondaryCoreCheck = fixedRoomsJson.fixed_rooms.some(
+        (room) =>
+          room.identifier.name &&
+          room.identifier.name.includes("secondary_core")
+      );
+      console.log("Contains secondary cores:", secondaryCoreCheck); // Should be false
 
-      // Call the backend to save fixed elements
+      // Call the backend to save fixed elements (completely fresh file)
       const response = await fetch(`${API_BASE_URL}/save-fixed-elements`, {
         method: "POST",
         headers: {
@@ -561,6 +559,8 @@ const InteractiveLayoutPage = () => {
         body: JSON.stringify({
           building_id: buildingId,
           fixed_elements: fixedRoomsJson,
+          create_new_file: true, // Add a flag to tell backend to create a new file
+          clear_existing: true, // Add a flag to tell backend to clear any existing content
         }),
       });
 
