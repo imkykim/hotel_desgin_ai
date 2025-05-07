@@ -396,73 +396,73 @@ class LayoutRenderer:
             )
 
         ax.add_patch(rect)
-        if room_data["type"] == "lobby":
-            # Determine which side of the building this entrance is on
-            is_front = abs(y) < 0.1
-            is_back = abs(y + l - self.layout.length) < 0.1
-            is_left = abs(x) < 0.1
-            is_right = abs(x + w - self.layout.width) < 0.1
+        # if room_data["type"] == "lobby":
+        #     # Determine which side of the building this entrance is on
+        #     is_front = abs(y) < 0.1
+        #     is_back = abs(y + l - self.layout.length) < 0.1
+        #     is_left = abs(x) < 0.1
+        #     is_right = abs(x + w - self.layout.width) < 0.1
 
-            # Calculate arrow parameters
-            center_x = x + w / 2
-            center_y = y + l / 2
-            arrow_length = max(w, l) * 0.3  # Arrow length depends on lobby size
+        #     # Calculate arrow parameters
+        #     center_x = x + w / 2
+        #     center_y = y + l / 2
+        #     arrow_length = max(w, l) * 0.3  # Arrow length depends on lobby size
 
-            if is_front:
-                # Front entrance (bottom of building)
-                ax.annotate(
-                    "MAIN ENTRANCE",
-                    xy=(center_x, y),
-                    xytext=(center_x, y - arrow_length),
-                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
-                    ha="center",
-                    va="top",
-                    fontsize=10,
-                    fontweight="bold",
-                    color="red",
-                )
+        #     if is_front:
+        #         # Front entrance (bottom of building)
+        #         ax.annotate(
+        #             "MAIN ENTRANCE",
+        #             xy=(center_x, y),
+        #             xytext=(center_x, y - arrow_length),
+        #             arrowprops=dict(arrowstyle="->", color="red", lw=2),
+        #             ha="center",
+        #             va="top",
+        #             fontsize=10,
+        #             fontweight="bold",
+        #             color="red",
+        #         )
 
-            elif is_back:
-                # Back entrance (top of building)
-                ax.annotate(
-                    "MAIN ENTRANCE",
-                    xy=(center_x, y + l),
-                    xytext=(center_x, y + l + arrow_length),
-                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
-                    ha="center",
-                    va="bottom",
-                    fontsize=10,
-                    fontweight="bold",
-                    color="red",
-                )
+        #     elif is_back:
+        #         # Back entrance (top of building)
+        #         ax.annotate(
+        #             "MAIN ENTRANCE",
+        #             xy=(center_x, y + l),
+        #             xytext=(center_x, y + l + arrow_length),
+        #             arrowprops=dict(arrowstyle="->", color="red", lw=2),
+        #             ha="center",
+        #             va="bottom",
+        #             fontsize=10,
+        #             fontweight="bold",
+        #             color="red",
+        #         )
 
-            elif is_left:
-                # Left entrance
-                ax.annotate(
-                    "MAIN ENTRANCE",
-                    xy=(x, center_y),
-                    xytext=(x - arrow_length, center_y),
-                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
-                    ha="right",
-                    va="center",
-                    fontsize=10,
-                    fontweight="bold",
-                    color="red",
-                )
+        #     elif is_left:
+        #         # Left entrance
+        #         ax.annotate(
+        #             "MAIN ENTRANCE",
+        #             xy=(x, center_y),
+        #             xytext=(x - arrow_length, center_y),
+        #             arrowprops=dict(arrowstyle="->", color="red", lw=2),
+        #             ha="right",
+        #             va="center",
+        #             fontsize=10,
+        #             fontweight="bold",
+        #             color="red",
+        #         )
 
-            elif is_right:
-                # Right entrance
-                ax.annotate(
-                    "MAIN ENTRANCE",
-                    xy=(x + w, center_y),
-                    xytext=(x + w + arrow_length, center_y),
-                    arrowprops=dict(arrowstyle="->", color="red", lw=2),
-                    ha="left",
-                    va="center",
-                    fontsize=10,
-                    fontweight="bold",
-                    color="red",
-                )
+        #     elif is_right:
+        #         # Right entrance
+        #         ax.annotate(
+        #             "MAIN ENTRANCE",
+        #             xy=(x + w, center_y),
+        #             xytext=(x + w + arrow_length, center_y),
+        #             arrowprops=dict(arrowstyle="->", color="red", lw=2),
+        #             ha="left",
+        #             va="center",
+        #             fontsize=10,
+        #             fontweight="bold",
+        #             color="red",
+        #         )
 
     def _get_room_geometry(self, room_data: Dict[str, Any]):
         """
@@ -781,9 +781,14 @@ class LayoutRenderer:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
-        # Save 3D render
+        # Save 3D render (two angles)
         if include_3d:
-            self._save_3d_render(output_dir, prefix)
+            # Default view (elev=30, azim=-45)
+            self._save_3d_render(output_dir, prefix, suffix="_3d", view=(30, 135))
+            # Opposite view (elev=30, azim=135)
+            self._save_3d_render(
+                output_dir, prefix, suffix="_3d_opposite", view=(30, -45)
+            )
 
         # Save floor plans
         if include_floor_plans:
@@ -791,16 +796,22 @@ class LayoutRenderer:
                 output_dir, prefix, num_floors, min_floor, sample_standard
             )
 
-    def _save_3d_render(self, output_dir: str, prefix: str):
+    def _save_3d_render(
+        self, output_dir: str, prefix: str, suffix: str = "_3d", view: tuple = (30, -45)
+    ):
         """
         Save 3D render to disk.
 
         Args:
             output_dir: Directory to save renders in
             prefix: Filename prefix
+            suffix: Suffix for the filename (e.g., "_3d" or "_3d_opposite")
+            view: Tuple of (elev, azim) for the 3D view angle
         """
         fig, ax = self.render_3d()
-        filename = os.path.join(output_dir, f"{prefix}_3d.png")
+        # Set the requested view
+        ax.view_init(elev=view[0], azim=view[1])
+        filename = os.path.join(output_dir, f"{prefix}{suffix}.png")
         fig.savefig(filename, dpi=300, bbox_inches="tight")
         plt.close(fig)
 

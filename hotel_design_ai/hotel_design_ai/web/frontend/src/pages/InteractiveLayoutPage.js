@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import GridSelector from "../components/GridSelector";
 import LayoutEditor from "../components/LayoutEditor";
@@ -9,7 +9,7 @@ import {
   getConfiguration,
   generateImprovedLayout,
   generateLayoutWithReference,
-  generateLayoutWithZones, // <-- import the new helper
+  generateLayoutWithZones,
 } from "../services/api";
 import "../styles/InteractiveLayout.css";
 
@@ -23,6 +23,16 @@ const InteractiveLayoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  // Store grid dimensions in a ref so we can recover them when needed
+  const gridDimensionsRef = useRef({
+    width: 60,
+    length: 80,
+    height: 100,
+    structural_grid_x: 8,
+    structural_grid_y: 8,
+    grid_size: 1.0,
+  });
 
   // New state for fixed elements
   const [fixedElements, setFixedElements] = useState({
@@ -48,7 +58,6 @@ const InteractiveLayoutPage = () => {
     room_depth: 8,
   });
 
-  // Add state for fixedRoomsFile and programConfig
   const [fixedRoomsFile, setFixedRoomsFile] = useState(null);
   const [programConfig, setProgramConfig] = useState("hotel_requirements_3");
 
@@ -61,21 +70,53 @@ const InteractiveLayoutPage = () => {
     }
   }, [location]);
 
-  // Add useEffect to load initial values from building config
+  // Load initial values from building config
   useEffect(() => {
-    if (buildingConfig && buildingConfig.standard_floor) {
-      setStandardFloorParams({
-        start_floor: buildingConfig.standard_floor.start_floor || 2,
-        end_floor: buildingConfig.standard_floor.end_floor || 20,
-        width: buildingConfig.standard_floor.width || 56,
-        length: buildingConfig.standard_floor.length || 20,
-        position_x: buildingConfig.standard_floor.position_x || 0,
-        position_y: buildingConfig.standard_floor.position_y || 32,
-        corridor_width: buildingConfig.standard_floor.corridor_width || 4,
-        room_depth: buildingConfig.standard_floor.room_depth || 8,
-      });
+    if (buildingConfig) {
+      // Store dimensions in the ref whenever buildingConfig changes
+      gridDimensionsRef.current = {
+        width: buildingConfig.width || 60,
+        length: buildingConfig.length || 80,
+        height: buildingConfig.height || 100,
+        structural_grid_x: buildingConfig.structural_grid_x || 8,
+        structural_grid_y: buildingConfig.structural_grid_y || 8,
+        grid_size: buildingConfig.grid_size || 1.0,
+      };
+
+      console.log("Updated gridDimensionsRef with:", gridDimensionsRef.current);
+
+      if (buildingConfig.standard_floor) {
+        setStandardFloorParams({
+          start_floor: buildingConfig.standard_floor.start_floor || 2,
+          end_floor: buildingConfig.standard_floor.end_floor || 20,
+          width: buildingConfig.standard_floor.width || 56,
+          length: buildingConfig.standard_floor.length || 20,
+          position_x: buildingConfig.standard_floor.position_x || 0,
+          position_y: buildingConfig.standard_floor.position_y || 32,
+          corridor_width: buildingConfig.standard_floor.corridor_width || 4,
+          room_depth: buildingConfig.standard_floor.room_depth || 8,
+        });
+      }
     }
   }, [buildingConfig]);
+
+  // Specifically handle tab changes to ensure dimensions are preserved
+  useEffect(() => {
+    // When switching to the layout tab, ensure building config has the dimensions used in grid selector
+    if (activeTab === "layout" && initialLayout) {
+      console.log("Switching to Layout Editor tab");
+      console.log("Stored dimensions from grid:", gridDimensionsRef.current);
+
+      // Ensure building config has the dimensions that were used in grid selector
+      const updatedConfig = {
+        ...buildingConfig,
+        ...gridDimensionsRef.current,
+      };
+
+      console.log("Updating buildingConfig for Layout Editor:", updatedConfig);
+      setBuildingConfig(updatedConfig);
+    }
+  }, [activeTab, initialLayout]);
 
   // Fetch building configuration
   useEffect(() => {
@@ -87,7 +128,7 @@ const InteractiveLayoutPage = () => {
         // If using sample data, load default config
         if (buildingId === "sample" && programId === "sample") {
           console.log("Using sample configuration");
-          setBuildingConfig({
+          const sampleConfig = {
             width: 60,
             length: 80,
             height: 100,
@@ -97,7 +138,17 @@ const InteractiveLayoutPage = () => {
             structural_grid_x: 8.0,
             structural_grid_y: 8.0,
             grid_size: 1.0,
-          });
+          };
+
+          setBuildingConfig(sampleConfig);
+          gridDimensionsRef.current = {
+            width: sampleConfig.width,
+            length: sampleConfig.length,
+            height: sampleConfig.height,
+            structural_grid_x: sampleConfig.structural_grid_x,
+            structural_grid_y: sampleConfig.structural_grid_y,
+            grid_size: sampleConfig.grid_size,
+          };
 
           setInitialLayout({
             rooms: {
@@ -141,7 +192,7 @@ const InteractiveLayoutPage = () => {
           const layoutData = await getLayout(layoutId);
 
           if (layoutData.success) {
-            setBuildingConfig({
+            const layoutConfig = {
               width: layoutData.layout_data.width || 60,
               length: layoutData.layout_data.length || 80,
               height: layoutData.layout_data.height || 30,
@@ -151,7 +202,18 @@ const InteractiveLayoutPage = () => {
               structural_grid_x: 8.0,
               structural_grid_y: 8.0,
               grid_size: 1.0,
-            });
+            };
+
+            setBuildingConfig(layoutConfig);
+            gridDimensionsRef.current = {
+              width: layoutConfig.width,
+              length: layoutConfig.length,
+              height: layoutConfig.height,
+              structural_grid_x: layoutConfig.structural_grid_x,
+              structural_grid_y: layoutConfig.structural_grid_y,
+              grid_size: layoutConfig.grid_size,
+            };
+
             setInitialLayout(layoutData.layout_data);
 
             // Switch to layout editor tab since we're loading an existing layout
@@ -166,7 +228,7 @@ const InteractiveLayoutPage = () => {
             console.log("Building config loaded:", configResponse.config_data);
 
             // Use the data from the fetched configuration
-            setBuildingConfig({
+            const configData = {
               width: configResponse.config_data.width || 60.0,
               length: configResponse.config_data.length || 80.0,
               height: configResponse.config_data.height || 100.0,
@@ -180,11 +242,21 @@ const InteractiveLayoutPage = () => {
               grid_size: configResponse.config_data.grid_size || 1.0,
               description:
                 configResponse.config_data.description || "Hotel building",
-            });
+            };
+
+            setBuildingConfig(configData);
+            gridDimensionsRef.current = {
+              width: configData.width,
+              length: configData.length,
+              height: configData.height,
+              structural_grid_x: configData.structural_grid_x,
+              structural_grid_y: configData.structural_grid_y,
+              grid_size: configData.grid_size,
+            };
           } else {
             // Fallback to default if config not found
             console.log("Using default building configuration");
-            setBuildingConfig({
+            const defaultConfig = {
               width: 60.0,
               length: 80.0,
               height: 100.0,
@@ -195,7 +267,17 @@ const InteractiveLayoutPage = () => {
               structural_grid_y: 8.0,
               grid_size: 1.0,
               description: "Default hotel building configuration",
-            });
+            };
+
+            setBuildingConfig(defaultConfig);
+            gridDimensionsRef.current = {
+              width: defaultConfig.width,
+              length: defaultConfig.length,
+              height: defaultConfig.height,
+              structural_grid_x: defaultConfig.structural_grid_x,
+              structural_grid_y: defaultConfig.structural_grid_y,
+              grid_size: defaultConfig.grid_size,
+            };
           }
         }
 
@@ -211,6 +293,45 @@ const InteractiveLayoutPage = () => {
       fetchBuildingConfig();
     }
   }, [buildingId, programId, layoutId]);
+
+  // Add this helper function to fetch config by buildingId
+  const fetchBuildingConfigById = async (id) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/configuration/building/${id}`
+      );
+      const data = await response.json();
+      if (data.success && data.config_data) {
+        return data.config_data;
+      }
+      throw new Error(data.error || "Failed to fetch building config");
+    } catch (err) {
+      console.error("Error fetching building config by ID:", err);
+      return null;
+    }
+  };
+
+  // When switching to layout tab, reload building config from disk
+  useEffect(() => {
+    if (activeTab === "layout" && buildingId) {
+      (async () => {
+        const config = await fetchBuildingConfigById(buildingId);
+        if (config) {
+          setBuildingConfig(config);
+          gridDimensionsRef.current = {
+            width: config.width || 60,
+            length: config.length || 80,
+            height: config.height || 100,
+            structural_grid_x: config.structural_grid_x || 8,
+            structural_grid_y: config.structural_grid_y || 8,
+            grid_size: config.grid_size || 1.0,
+          };
+        }
+      })();
+    }
+    // Only run when switching to layout tab or buildingId changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, buildingId]);
 
   // Handle grid selection changes
   const handleSelectionChange = (areas) => {
@@ -237,8 +358,6 @@ const InteractiveLayoutPage = () => {
   };
 
   // New function for handling fixed element selection
-  // Enhanced version of handleFixedElementSelect in InteractiveLayoutPage.js
-
   const handleFixedElementSelect = (type, coords) => {
     if (coords === null) {
       // Clear any previous fixed rooms file reference when user starts selecting new elements
@@ -341,6 +460,16 @@ const InteractiveLayoutPage = () => {
 
       // Update state with new config
       setBuildingConfig(updatedConfig);
+      // Also update dimensions ref
+      gridDimensionsRef.current = {
+        width: updatedConfig.width,
+        length: updatedConfig.length,
+        height: updatedConfig.height,
+        structural_grid_x: updatedConfig.structural_grid_x,
+        structural_grid_y: updatedConfig.structural_grid_y,
+        grid_size: updatedConfig.grid_size,
+      };
+
       setSuccess("Building configuration updated successfully");
     } catch (err) {
       setError(err.message || "Error updating building configuration");
@@ -449,6 +578,16 @@ const InteractiveLayoutPage = () => {
 
         // Update state with new config
         setBuildingConfig(updatedConfig);
+        // Also update dimensions ref
+        gridDimensionsRef.current = {
+          width: updatedConfig.width,
+          length: updatedConfig.length,
+          height: updatedConfig.height,
+          structural_grid_x: updatedConfig.structural_grid_x,
+          structural_grid_y: updatedConfig.structural_grid_y,
+          grid_size: updatedConfig.grid_size,
+        };
+
         setSuccess(
           "Standard floor zones saved successfully to building configuration"
         );
@@ -593,7 +732,6 @@ const InteractiveLayoutPage = () => {
   };
 
   // Generate layout with defined zones
-  // Updated generateWithZones function in InteractiveLayoutPage.js
   const generateWithZones = async () => {
     try {
       setLoading(true);
@@ -647,6 +785,12 @@ const InteractiveLayoutPage = () => {
       console.log("Program config:", programConfig || "hotel_requirements_3");
       console.log("Fixed rooms file:", fixedRoomsFile);
 
+      // IMPORTANT: Log our current dimensions from the grid selector before generation
+      console.log(
+        "CURRENT DIMENSIONS FROM GRID SELECTOR:",
+        gridDimensionsRef.current
+      );
+
       const result = await generateLayoutWithZones(
         buildingId,
         programConfig || "hotel_requirements_3",
@@ -658,10 +802,25 @@ const InteractiveLayoutPage = () => {
       if (result.success) {
         setLayoutId(result.layout_id);
 
-        // Ensure we're using layout_data from the response if available
-        let roomsData = result.layout_data?.rooms || result.rooms;
+        // Extract dimensions directly from the generated layout
+        const layoutWidth =
+          result.layout_data?.width || gridDimensionsRef.current.width;
+        const layoutLength =
+          result.layout_data?.length || gridDimensionsRef.current.length;
+        const layoutHeight =
+          result.layout_data?.height || gridDimensionsRef.current.height;
+        const layoutGridSize =
+          result.layout_data?.grid_size || gridDimensionsRef.current.grid_size;
 
-        // Log the rooms data for debugging
+        console.log("Dimensions from generated layout:", {
+          width: layoutWidth,
+          length: layoutLength,
+          height: layoutHeight,
+          grid_size: layoutGridSize,
+        });
+
+        // Extract rooms data
+        let roomsData = result.layout_data?.rooms || result.rooms;
         console.log(
           `Received ${Object.keys(roomsData || {}).length} rooms from backend`
         );
@@ -669,27 +828,21 @@ const InteractiveLayoutPage = () => {
         // Create a structured layout object
         const newLayout = {
           rooms: roomsData || {},
-          width: result.layout_data?.width || buildingConfig.width,
-          length: result.layout_data?.length || buildingConfig.length,
-          height: result.layout_data?.height || buildingConfig.height,
-          grid_size: result.layout_data?.grid_size || buildingConfig.grid_size,
+          width: layoutWidth,
+          length: layoutLength,
+          height: layoutHeight,
+          grid_size: layoutGridSize,
         };
 
-        // Check for specific room types
-        const roomTypes = {};
-        let hasVerticalCirculation = false;
-        let hasLobby = false;
-
-        Object.values(newLayout.rooms).forEach((room) => {
-          roomTypes[room.type] = (roomTypes[room.type] || 0) + 1;
-          if (room.type === "vertical_circulation")
-            hasVerticalCirculation = true;
-          if (room.type === "lobby") hasLobby = true;
-        });
-
-        console.log("Room types in layout:", roomTypes);
-        console.log("Has vertical circulation:", hasVerticalCirculation);
-        console.log("Has lobby:", hasLobby);
+        // Critically important: update the dimensions in the ref before switching tabs
+        gridDimensionsRef.current = {
+          width: layoutWidth,
+          length: layoutLength,
+          height: layoutHeight,
+          structural_grid_x: buildingConfig.structural_grid_x,
+          structural_grid_y: buildingConfig.structural_grid_y,
+          grid_size: layoutGridSize,
+        };
 
         // Set both initialLayout and modifiedLayout with the complete data
         setInitialLayout(newLayout);
@@ -756,9 +909,9 @@ const InteractiveLayoutPage = () => {
       setSuccess(
         `Layout modifications saved successfully (${movedRooms.length} rooms updated)`
       );
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -1103,14 +1256,20 @@ const InteractiveLayoutPage = () => {
             {initialLayout && buildingConfig && (
               <LayoutEditor
                 initialLayout={initialLayout}
-                buildingConfig={buildingConfig}
+                // Always use the config loaded from disk
+                buildingConfig={{
+                  ...buildingConfig,
+                  width: gridDimensionsRef.current.width,
+                  length: gridDimensionsRef.current.length,
+                  height: gridDimensionsRef.current.height,
+                  grid_size: gridDimensionsRef.current.grid_size,
+                }}
                 layoutId={layoutId}
                 onLayoutChange={handleLayoutChange}
                 onTrainRL={handleTrainRL}
-                // Add these props to ensure the editor fits the generated layout
-                width={buildingConfig.width}
-                length={buildingConfig.length}
-                gridSize={buildingConfig.grid_size}
+                width={gridDimensionsRef.current.width}
+                length={gridDimensionsRef.current.length}
+                gridSize={gridDimensionsRef.current.grid_size}
               />
             )}
 

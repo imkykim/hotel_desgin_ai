@@ -642,7 +642,6 @@ class RuleEngine(BaseEngine):
         # Original special handling logic
         if room.room_type == "vertical_circulation":
             return self._place_vertical_circulation(room)
-        # Rest of the method...
         elif room.room_type == "entrance":
             return self._place_entrance(room, preferred_floors)
         elif room.room_type == "parking":
@@ -761,12 +760,22 @@ class RuleEngine(BaseEngine):
         Special placement for vertical circulation elements with no corridors.
         Modified to respect pre-set positions.
         """
+        existing_cores = 0
+        for room_id, room_data in self.spatial_grid.rooms.items():
+            if room_data["type"] == "vertical_circulation":
+                existing_cores += 1
+
+        # ADDED: Skip if we already have a vertical circulation core
+        if existing_cores > 0:
+            print(
+                f"Already have {existing_cores} vertical circulation core(s), skipping additional core placement"
+            )
+            return True  # Return True to indicate "success" and prevent additional placement attempts
+
         # Check if room already has a position
         if hasattr(room, "position") and room.position is not None:
             # Already handled in _handle_special_room_type
             return False  # Should never reach here if correct
-
-        # Rest of the method...
 
         # First adjust dimensions to align with grid
         width, length = self.adjust_room_dimensions_to_grid(room)

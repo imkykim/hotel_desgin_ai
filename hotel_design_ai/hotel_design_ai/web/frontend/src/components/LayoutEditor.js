@@ -109,17 +109,97 @@ const LayoutEditor = ({
   const [showFloorPlan, setShowFloorPlan] = useState(true);
   const [show3DView, setShow3DView] = useState(false);
 
+  // Define refs and state for the canvas
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const apiBaseUrl = process.env.REACT_APP_API_URL || "http://localhost:8000";
+  width = 64;
+  // Use calculated dimensions based on props, not internal state
+  // This ensures we always use the latest values from props
+  const buildingWidth = width || (buildingConfig && buildingConfig.width) || 80;
+  const buildingLength =
+    length || (buildingConfig && buildingConfig.length) || 120;
+  const floorHeight = (buildingConfig && buildingConfig.floor_height) || 4.0;
 
-  // Extract building dimensions from config
-  const { floor_height } = buildingConfig || {
-    floor_height: 4.0,
-  };
+  // Debug dimensions - remove this in production
+  useEffect(() => {
+    console.log("LayoutEditor dimensions:", {
+      buildingWidth,
+      buildingLength,
+      floorHeight,
+      gridSize,
+    });
+    console.log("Original props:", {
+      width,
+      length,
+      "buildingConfig.width": buildingConfig?.width,
+      "buildingConfig.length": buildingConfig?.length,
+    });
+  }, [
+    buildingWidth,
+    buildingLength,
+    floorHeight,
+    gridSize,
+    width,
+    length,
+    buildingConfig,
+  ]);
 
-  // Use width, length, gridSize for canvas/frame sizing
-  const canvasWidth = width || (buildingConfig && buildingConfig.width) || 800;
-  const canvasLength = (buildingConfig && buildingConfig.length) || 600;
+  // Sync layout state with initialLayout prop when it changes
+  useEffect(() => {
+    if (initialLayout) {
+      setLayout(initialLayout);
+      console.log("Layout updated from initialLayout prop");
+    }
+  }, [initialLayout]);
+
+  // Calculate canvas dimensions when container size or building dimensions change
+  const [canvasDimensions, setCanvasDimensions] = useState({
+    width: 800,
+    height: 600,
+  });
+
+  useEffect(() => {
+    const calculateCanvasDimensions = () => {
+      if (!containerRef.current) return { width: 800, height: 600 };
+
+      // Get container width (with some margin)
+      const containerWidth = containerRef.current.clientWidth - 40;
+
+      // Calculate aspect ratio
+      const aspectRatio = buildingWidth / buildingLength;
+
+      // Calculate height based on width and aspect ratio
+      const height = containerWidth / aspectRatio;
+
+      // Limit height to a reasonable value
+      const maxHeight = window.innerHeight * 0.6;
+
+      if (height > maxHeight) {
+        // If too tall, constrain by height instead
+        return {
+          width: maxHeight * aspectRatio,
+          height: maxHeight,
+        };
+      }
+
+      return {
+        width: containerWidth,
+        height: height,
+      };
+    };
+
+    // Set initial dimensions
+    setCanvasDimensions(calculateCanvasDimensions());
+
+    // Add window resize listener
+    const handleResize = () => {
+      setCanvasDimensions(calculateCanvasDimensions());
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [buildingWidth, buildingLength]);
 
   // Function to draw the layout on the canvas
   const drawLayout = () => {
@@ -127,18 +207,57 @@ const LayoutEditor = ({
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    const scale = Math.min(
-      canvas.width / canvasWidth,
-      canvas.height / canvasLength
-    );
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Calculate the scale factor to fit the building in the canvas
+    // Add a padding of 10px on each side
+    const padding = 20;
+    const availableWidth = canvas.width - padding * 2;
+    const availableHeight = canvas.height - padding * 2;
+
+    const scaleX = availableWidth / buildingWidth;
+    const scaleY = availableHeight / buildingLength;
+
+    // Use the smaller scale to ensure the entire building fits
+    const scale = Math.min(scaleX, scaleY);
+
+    // Calculate offsets to center the building
+    const offsetX = padding + (availableWidth - buildingWidth * scale) / 2;
+    const offsetY = padding + (availableHeight - buildingLength * scale) / 2;
+
     // Draw building outline
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
-    ctx.strokeRect(0, 0, canvasWidth * scale, canvasLength * scale);
+    ctx.strokeRect(
+      offsetX,
+      offsetY,
+      buildingWidth * scale,
+      buildingLength * scale
+    );
+
+    // Draw grid lines if gridSize is provided
+    if (gridSize) {
+      ctx.strokeStyle = "#eee";
+      ctx.lineWidth = 0.5;
+
+      // Draw vertical grid lines
+      for (let x = 0; x <= buildingWidth; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX + x * scale, offsetY);
+        ctx.lineTo(offsetX + x * scale, offsetY + buildingLength * scale);
+        ctx.stroke();
+      }
+
+      // Draw horizontal grid lines
+      for (let y = 0; y <= buildingLength; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(offsetX, offsetY + y * scale);
+        ctx.lineTo(offsetX + buildingWidth * scale, offsetY + y * scale);
+        ctx.stroke();
+      }
+    }
 
     // Draw rooms for the current floor
     let renderedRoomCount = 0;
@@ -149,7 +268,7 @@ const LayoutEditor = ({
       // Skip if we're in 3D view mode
       if (currentFloor === "3d") return;
 
-      const roomFloor = Math.floor(roomData.position[2] / floor_height);
+      const roomFloor = Math.floor(roomData.position[2] / floorHeight);
       const roomType = roomData.type;
 
       // If this is vertical circulation, we'll handle it in the second pass
@@ -158,8 +277,8 @@ const LayoutEditor = ({
       // Skip rooms not on the current floor
       if (roomFloor !== currentFloor) return;
 
-      // Draw the room
-      drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25);
+      // Draw the room with proper scaling and offset
+      drawRoom(ctx, parseInt(roomId), roomData, scale, offsetX, offsetY);
       renderedRoomCount++;
       renderedTypes.add(roomData.type);
     });
@@ -177,20 +296,29 @@ const LayoutEditor = ({
         currentFloor >= buildingConfig?.min_floor &&
         currentFloor <= buildingConfig?.max_floor
       ) {
-        drawRoom(ctx, parseInt(roomId), roomData, scale * 1.25, true);
+        drawRoom(ctx, parseInt(roomId), roomData, scale, offsetX, offsetY);
         renderedRoomCount++;
         renderedTypes.add(roomData.type);
       }
     });
 
     console.log(`Rendered ${renderedRoomCount} rooms on floor ${currentFloor}`);
+
+    // Store the current transformation for mouse events
+    canvas.transformData = { scale, offsetX, offsetY };
   };
 
   // Draw an individual room
-  const drawRoom = (ctx, roomId, roomData, scale) => {
+  const drawRoom = (ctx, roomId, roomData, scale, offsetX, offsetY) => {
     const [x, y] = roomData.position;
     const [w, l] = roomData.dimensions;
     const roomType = roomData.type;
+
+    // Calculate screen coordinates
+    const screenX = offsetX + x * scale;
+    const screenY = offsetY + y * scale;
+    const screenW = w * scale;
+    const screenH = l * scale;
 
     // Get room styling
     ctx.fillStyle = ROOM_COLORS[roomType] || ROOM_COLORS.default;
@@ -198,8 +326,8 @@ const LayoutEditor = ({
     ctx.lineWidth = selectedRoom === roomId ? 2 : 1;
 
     // Draw room rectangle
-    ctx.fillRect(x * scale, y * scale, w * scale, l * scale);
-    ctx.strokeRect(x * scale, y * scale, w * scale, l * scale);
+    ctx.fillRect(screenX, screenY, screenW, screenH);
+    ctx.strokeRect(screenX, screenY, screenW, screenH);
 
     // Draw room label
     ctx.fillStyle = "#000";
@@ -209,8 +337,8 @@ const LayoutEditor = ({
     const name = roomData.metadata?.name || roomType;
     ctx.fillText(
       name.length > 15 ? name.substring(0, 12) + "..." : name,
-      (x + w / 2) * scale,
-      (y + l / 2) * scale
+      screenX + screenW / 2,
+      screenY + screenH / 2
     );
   };
 
@@ -224,14 +352,17 @@ const LayoutEditor = ({
       setShow3DView(false);
       drawLayout();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     layout,
     selectedRoom,
     currentFloor,
-    canvasWidth,
-    canvasLength,
-    floor_height,
+    canvasDimensions.width,
+    canvasDimensions.height,
+    // Be explicit about dependencies - include the values directly, not state variables
+    buildingWidth,
+    buildingLength,
+    floorHeight,
+    gridSize,
   ]);
 
   // Handle floor change
@@ -246,30 +377,34 @@ const LayoutEditor = ({
     if (currentFloor === "3d") return;
 
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(
-      canvas.width / canvasWidth,
-      canvas.height / canvasLength
-    );
+    if (!canvas || !canvas.transformData) return;
 
-    const mouseX = (e.clientX - rect.left) / scale;
-    const mouseY = (e.clientY - rect.top) / scale;
+    const rect = canvas.getBoundingClientRect();
+    const { scale, offsetX, offsetY } = canvas.transformData;
+
+    // Convert screen coordinates to world coordinates
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Convert to world coordinates
+    const worldX = (screenX - offsetX) / scale;
+    const worldY = (screenY - offsetY) / scale;
 
     // Find room under mouse
     let foundRoom = null;
 
     Object.entries(layout.rooms || {}).forEach(([roomId, data]) => {
-      const roomFloor = Math.floor(data.position[2] / floor_height);
+      const roomFloor = Math.floor(data.position[2] / floorHeight);
       if (roomFloor !== currentFloor) return;
 
       const [x, y] = data.position;
       const [w, l] = data.dimensions;
 
-      if (mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + l) {
+      if (worldX >= x && worldX <= x + w && worldY >= y && worldY <= y + l) {
         foundRoom = parseInt(roomId);
         setDragOffset({
-          x: mouseX - x,
-          y: mouseY - y,
+          x: worldX - x,
+          y: worldY - y,
         });
       }
     });
@@ -286,14 +421,18 @@ const LayoutEditor = ({
     if (!isDragging || selectedRoom === null || currentFloor === "3d") return;
 
     const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const scale = Math.min(
-      canvas.width / canvasWidth,
-      canvas.height / canvasLength
-    );
+    if (!canvas || !canvas.transformData) return;
 
-    const mouseX = (e.clientX - rect.left) / scale;
-    const mouseY = (e.clientY - rect.top) / scale;
+    const rect = canvas.getBoundingClientRect();
+    const { scale, offsetX, offsetY } = canvas.transformData;
+
+    // Convert screen coordinates to world coordinates
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Convert to world coordinates
+    const worldX = (screenX - offsetX) / scale;
+    const worldY = (screenY - offsetY) / scale;
 
     // Calculate new position
     const roomWidth = layout.rooms[selectedRoom].dimensions[0];
@@ -301,12 +440,22 @@ const LayoutEditor = ({
 
     const newX = Math.max(
       0,
-      Math.min(canvasWidth - roomWidth, mouseX - dragOffset.x)
+      Math.min(buildingWidth - roomWidth, worldX - dragOffset.x)
     );
     const newY = Math.max(
       0,
-      Math.min(canvasLength - roomLength, mouseY - dragOffset.y)
+      Math.min(buildingLength - roomLength, worldY - dragOffset.y)
     );
+
+    // Optionally snap to grid
+    const snapToGrid = true; // Set to false to disable
+    let finalX = newX;
+    let finalY = newY;
+
+    if (snapToGrid && gridSize) {
+      finalX = Math.round(newX / gridSize) * gridSize;
+      finalY = Math.round(newY / gridSize) * gridSize;
+    }
 
     // Update room position
     const updatedLayout = {
@@ -315,7 +464,7 @@ const LayoutEditor = ({
         ...layout.rooms,
         [selectedRoom]: {
           ...layout.rooms[selectedRoom],
-          position: [newX, newY, layout.rooms[selectedRoom].position[2]],
+          position: [finalX, finalY, layout.rooms[selectedRoom].position[2]],
         },
       },
     };
@@ -357,13 +506,18 @@ const LayoutEditor = ({
   };
 
   return (
-    <div className="layout-editor">
+    <div className="layout-editor" ref={containerRef}>
       <h3>Interactive Layout Editor</h3>
       <p>
         {currentFloor === "3d"
           ? "3D visualization of the layout. Switch to floor view to modify rooms."
           : "Drag rooms to modify the layout. When satisfied, rate the layout and submit for RL training."}
       </p>
+      <div className="grid-info">
+        <p>
+          Building: {buildingWidth}m × {buildingLength}m
+        </p>
+      </div>
 
       <FloorSelector
         buildingConfig={buildingConfig}
@@ -375,8 +529,8 @@ const LayoutEditor = ({
         <div className="canvas-container">
           <canvas
             ref={canvasRef}
-            width={800}
-            height={600}
+            width={600}
+            height={800}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

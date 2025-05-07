@@ -106,12 +106,25 @@ async def visualize_layout(layout_id: str):
                 )
 
                 # Add rooms from the layout data
+                highest_z = 0
+                room_counts_by_floor = {}
+
                 for room_id, room_data in layout_data.get("rooms", {}).items():
                     room_id_int = int(room_id)
                     position = room_data.get("position", [0, 0, 0])
                     dimensions = room_data.get("dimensions", [0, 0, 0])
                     room_type = room_data.get("type", "default")
                     metadata = room_data.get("metadata", {})
+
+                    # 최대 z 값 확인
+                    if position[2] > highest_z:
+                        highest_z = position[2]
+
+                    # 층별 객실 수 추적
+                    floor = int(position[2] / 4.5)  # 층 높이에 맞게 조정
+                    if floor not in room_counts_by_floor:
+                        room_counts_by_floor[floor] = 0
+                    room_counts_by_floor[floor] += 1
 
                     # Add the room to the spatial grid
                     spatial_grid.place_room(
@@ -125,6 +138,15 @@ async def visualize_layout(layout_id: str):
                         room_type=room_type,
                         metadata=metadata,
                     )
+
+                logger.info(f"Total rooms: {len(layout_data.get('rooms', {}))}")
+                logger.info(f"Highest Z position: {highest_z}")
+                logger.info(f"Rooms by floor: {room_counts_by_floor}")
+
+                # 원본 SpatialGrid 객체 높이 업데이트
+                spatial_grid.height = max(
+                    spatial_grid.height, highest_z + 5.0
+                )  # 여유 있게 높이 설정
 
                 # Create metrics calculator
                 metrics = LayoutMetrics(spatial_grid)
@@ -422,17 +444,30 @@ async def export_rhino_script(layout_id: str):
             spatial_grid = SpatialGrid(
                 width=layout_data.get("width", 80),
                 length=layout_data.get("length", 120),
-                height=layout_data.get("height", 30),
+                height=layout_data.get("height", 100),
                 grid_size=layout_data.get("grid_size", 1.0),
             )
 
             # Add rooms from the layout data
+            highest_z = 0
+            room_counts_by_floor = {}
+
             for room_id, room_data in layout_data.get("rooms", {}).items():
                 room_id_int = int(room_id)
                 position = room_data.get("position", [0, 0, 0])
                 dimensions = room_data.get("dimensions", [0, 0, 0])
                 room_type = room_data.get("type", "default")
                 metadata = room_data.get("metadata", {})
+
+                # 최대 z 값 확인
+                if position[2] > highest_z:
+                    highest_z = position[2]
+
+                # 층별 객실 수 추적
+                floor = int(position[2] / 4.5)  # 층 높이에 맞게 조정
+                if floor not in room_counts_by_floor:
+                    room_counts_by_floor[floor] = 0
+                room_counts_by_floor[floor] += 1
 
                 # Add the room to the spatial grid
                 spatial_grid.place_room(
