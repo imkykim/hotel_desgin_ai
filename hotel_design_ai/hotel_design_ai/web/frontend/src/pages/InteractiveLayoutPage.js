@@ -992,19 +992,27 @@ const InteractiveLayoutPage = () => {
   };
 
   // Updated function to generate improved layout with RL
+  // Updated handleGenerateImprovedLayout function for InteractiveLayoutPage.js
   const handleGenerateImprovedLayout = async () => {
     try {
       setLoading(true);
       setError(null);
       setSuccess(null);
 
+      // First, ensure modifications are saved
+      // await saveModifiedLayout();
+
       console.log("Attempting to generate improved layout...");
+      console.log("Using building ID:", buildingId);
+      console.log("Using program ID:", programId);
+      console.log("Using reference layout ID:", layoutId);
 
       // Always pass buildingId, programId, and layoutId as reference_layout_id
       let result = await generateImprovedLayout(
         buildingId,
         programId,
-        layoutId
+        layoutId,
+        fixedRoomsFile
       );
 
       // If first approach fails, try the fallback approach
@@ -1015,7 +1023,8 @@ const InteractiveLayoutPage = () => {
         result = await generateLayoutWithReference(
           buildingId,
           programId,
-          layoutId
+          layoutId,
+          fixedRoomsFile
         );
       }
 
@@ -1029,13 +1038,14 @@ const InteractiveLayoutPage = () => {
         setTimeout(() => {
           // Navigate to view the new layout
           navigate(`/view-layout/${newLayoutId}`);
-        }, 1500);
+        }, 500);
       } else {
         throw new Error(result.error || "Failed to generate improved layout");
       }
     } catch (err) {
       console.error("Error generating improved layout:", err);
       setError(err.message || "Error generating improved layout");
+    } finally {
       setLoading(false);
     }
   };

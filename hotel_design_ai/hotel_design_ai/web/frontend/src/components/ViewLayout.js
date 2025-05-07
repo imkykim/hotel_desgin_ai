@@ -182,8 +182,21 @@ const ViewLayout = () => {
   };
 
   const handleEditLayout = () => {
-    // Navigate to interactive editor with this layout
-    navigate(`/interactive/default/default?layoutId=${layoutId}`);
+    // Extract buildingId and programId from layout if not present in layout
+    let buildingId = "default";
+    let programId = "default";
+    if (layout?.building_id && layout?.program_id) {
+      buildingId = layout.building_id;
+      programId = layout.program_id;
+    } else if (layoutId) {
+      // Example: layoutId = "building01_hotelreqs3_20240601_xxxxxx"
+      const parts = layoutId.split("_");
+      if (parts.length >= 2) {
+        buildingId = parts[0];
+        programId = parts[1];
+      }
+    }
+    navigate(`/interactive/${buildingId}/${programId}?layoutId=${layoutId}`);
   };
 
   const formatMetric = (value) => {

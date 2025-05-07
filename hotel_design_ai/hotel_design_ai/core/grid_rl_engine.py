@@ -296,6 +296,24 @@ class RLEngine(BaseEngine):
 
     def _place_vertical_circulation(self, room, placed_rooms_by_type, preferred_floors):
         """Special placement for vertical circulation elements."""
+
+        existing_cores = 0
+        for room_id, room_data in self.spatial_grid.rooms.items():
+            if room_data["type"] == "vertical_circulation":
+                existing_cores += 1
+
+        # ADDED: Skip if we already have a vertical circulation core
+        if existing_cores > 0:
+            print(
+                f"Already have {existing_cores} vertical circulation core(s), skipping additional core placement"
+            )
+            return True  # Return True to indicate "success" and prevent additional placement attempts
+
+        # Check if room already has a position
+        if hasattr(room, "position") and room.position is not None:
+            # Already handled in _handle_special_room_type
+            return False  # Should never reach here if correct
+
         # Get grid-aligned dimensions
         width, length = self.adjust_room_dimensions_to_grid(room)
 
@@ -816,6 +834,96 @@ class RLEngine(BaseEngine):
 
         return False
 
+    def update_fixed_elements(self, fixed_positions: Dict[int, Any]):
+        """
+        Update the engine's fixed elements dictionary.
+
+        Args:
+            fixed_positions: Dict mapping room IDs to positions
+        """
+        self.fixed_elements = fixed_positions
+        print(f"Updated fixed elements: {len(fixed_positions)} positions")
+
+    def place_fixed_room_exactly(self, room, placed_rooms_by_type):
+        """
+        Place a room with a fixed position exactly where specified, using force if necessary.
+
+        Args:
+            room: Room object with fixed position
+            placed_rooms_by_type: Dictionary tracking placed rooms by type
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not hasattr(room, "position") or room.position is None:
+            print(f"Error: Room {room.id} has no fixed position")
+            return False
+
+        x, y, z = room.position
+        print(
+            f"Placing fixed room {room.id} ({room.room_type}, {room.name}) at EXACT position: {room.position}"
+        )
+
+        # Check if position is within building bounds
+        if (
+            x < 0
+            or y < 0
+            or x + room.width > self.width
+            or y + room.length > self.length
+            or z < self.min_floor * self.floor_height
+            or z > self.max_floor * self.floor_height
+        ):
+            print(
+                f"WARNING: Fixed position {room.position} for room {room.id} is outside building bounds!"
+            )
+            print(
+                f"Building dimensions: {self.width}m × {self.length}m × {self.height}m"
+            )
+            print(f"Floor range: {self.min_floor} to {self.max_floor}")
+
+        # Try first without force placement
+        success = self.spatial_grid.place_room(
+            room_id=room.id,
+            x=x,
+            y=y,
+            z=z,
+            width=room.width,
+            length=room.length,
+            height=room.height,
+            room_type=room.room_type,
+            metadata=room.metadata,
+        )
+
+        # If normal placement fails, use force placement
+        if not success:
+            print(
+                f"Standard placement failed for fixed room {room.id}, using force placement"
+            )
+            success = self.spatial_grid.place_room(
+                room_id=room.id,
+                x=x,
+                y=y,
+                z=z,
+                width=room.width,
+                length=room.length,
+                height=room.height,
+                room_type=room.room_type,
+                metadata=room.metadata,
+                force_placement=True,  # FORCE placement for fixed rooms
+            )
+
+        # STRICT: If still not successful, do NOT allow fallback placement
+        if not success:
+            print(
+                f"ERROR: Could not place FIXED room {room.id} at {room.position} (even with force). This room will NOT be placed."
+            )
+            return False
+
+        print(
+            f"Successfully placed fixed room {room.id} at exact position {room.position}"
+        )
+        return True
+
     def _needs_exterior_placement(self, room: Room) -> bool:
         """Determine if a room needs exterior placement based on type"""
         exterior_room_types = [
@@ -829,8 +937,8 @@ class RLEngine(BaseEngine):
 
     def generate_layout(self, rooms: List[Room]) -> SpatialGrid:
         """
-        Generate a hotel layout using reinforcement learning.
-        Implementation of the abstract method from BaseEngine.
+        Generate a hotel layout based on configurations.
+        Enhanced to prioritize fixed position rooms and place them exactly.
 
         Args:
             rooms: List of Room objects to place
@@ -840,6 +948,10 @@ class RLEngine(BaseEngine):
         """
         # Clear non-fixed elements
         self.clear_non_fixed_elements()
+
+        # Initialize placed_rooms_by_type as defaultdict instead of regular dict
+        # This ensures a key will be automatically initialized when accessed
+        placed_rooms_by_type = defaultdict(list)
 
         # Restore fixed elements
         for room_id, position in self.fixed_elements.items():
@@ -857,14 +969,52 @@ class RLEngine(BaseEngine):
                     height=room.height,
                     room_type=room.room_type,
                     metadata=room.metadata,
+                    force_placement=True,  # Force fixed elements
                 )
+                # Add to placed_rooms_by_type (no need to check if key exists with defaultdict)
+                placed_rooms_by_type[room.room_type].append(room.id)
+
+        # ENHANCEMENT: First, separate rooms with fixed positions from others
+        fixed_rooms = []
+        unfixed_rooms = []
+
+        for room in rooms:
+            if hasattr(room, "position") and room.position is not None:
+                fixed_rooms.append(room)
+            else:
+                unfixed_rooms.append(room)
+
+        print(f"\nFound {len(fixed_rooms)} rooms with fixed positions")
+        for i, room in enumerate(fixed_rooms):
+            print(
+                f"  Fixed Room #{i+1}: id={room.id}, type={room.room_type}, name={room.name}, pos={room.position}"
+            )
+
+        # ENHANCEMENT: Place fixed rooms first, regardless of priority
+        print("\n=== Placing fixed position rooms first ===")
+        failed_fixed_rooms = []
+
+        for room in fixed_rooms:
+            print(
+                f"\nPlacing fixed room: id={room.id}, type={room.room_type}, name={room.name}, pos={room.position}"
+            )
+            # Use force placement to ensure fixed positions are respected
+            success = self.place_fixed_room_exactly(room, placed_rooms_by_type)
+
+            if success:
+                # No need to check if key exists with defaultdict
+                placed_rooms_by_type[room.room_type].append(room.id)
+                print(
+                    f"  ✓ Successfully placed fixed room id={room.id} at {room.position}"
+                )
+            else:
+                failed_fixed_rooms.append(room)
+                print(f"  ✗ Failed to place fixed room id={room.id} at {room.position}")
 
         # Sort rooms by priority
         sorted_rooms = sorted(
-            rooms,
+            unfixed_rooms,
             key=lambda r: (
-                # Fixed rooms first
-                r.id not in self.fixed_elements,
                 # Then by priority
                 -self.placement_priorities.get(r.room_type, 0),
                 # Then by size (larger rooms first)
@@ -872,25 +1022,25 @@ class RLEngine(BaseEngine):
             ),
         )
 
-        # Filter out fixed rooms
-        rooms_to_place = [r for r in sorted_rooms if r.id not in self.fixed_elements]
-
         # Statistics tracking
         placement_stats = {
-            "total": len(rooms_to_place),
+            "total": len(
+                unfixed_rooms
+            ),  # FIXED: Changed from rooms_to_place to unfixed_rooms
             "placed": 0,
             "failed": 0,
             "by_type": defaultdict(lambda: {"total": 0, "placed": 0, "failed": 0}),
         }
 
-        # Tracking placed rooms by type
-        placed_rooms_by_type = defaultdict(list)
+        # Add existing rooms from spatial grid to placed_rooms_by_type
         for room_id, room_data in self.spatial_grid.rooms.items():
             room_type = room_data["type"]
-            placed_rooms_by_type[room_type].append(room_id)
+            # With defaultdict, no need to check if key exists
+            if room_id not in placed_rooms_by_type[room_type]:
+                placed_rooms_by_type[room_type].append(room_id)
 
         # Place each room
-        for room in rooms_to_place:
+        for room in sorted_rooms:
             # Track statistics
             placement_stats["by_type"][room.room_type]["total"] += 1
 
@@ -901,6 +1051,7 @@ class RLEngine(BaseEngine):
             if success:
                 placement_stats["placed"] += 1
                 placement_stats["by_type"][room.room_type]["placed"] += 1
+                # With defaultdict, no need to check if key exists
                 placed_rooms_by_type[room.room_type].append(room.id)
             else:
                 placement_stats["failed"] += 1

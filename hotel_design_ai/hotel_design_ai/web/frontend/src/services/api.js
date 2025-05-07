@@ -483,7 +483,8 @@ export const updateBuildingConfig = async (buildingId, configData) => {
 export const generateImprovedLayout = async (
   buildingId,
   programId,
-  referenceLayoutId
+  referenceLayoutId,
+  fixedRoomsFile = null // Add this parameter
 ) => {
   try {
     const response = await fetch(`${API_BASE_URL}/engine/generate-improved`, {
@@ -495,6 +496,7 @@ export const generateImprovedLayout = async (
         building_id: buildingId,
         program_id: programId,
         reference_layout_id: referenceLayoutId || null,
+        fixed_rooms_file: fixedRoomsFile || null, // Add this to the request
       }),
     });
 
@@ -521,7 +523,8 @@ export const generateImprovedLayout = async (
 export const generateLayoutWithReference = async (
   buildingId,
   programId,
-  referenceLayoutId
+  referenceLayoutId,
+  fixedRoomsFile = null // Add this parameter
 ) => {
   try {
     const response = await fetch(`${API_BASE_URL}/engine/generate-improved`, {
@@ -533,6 +536,7 @@ export const generateLayoutWithReference = async (
         building_id: buildingId,
         program_id: programId,
         reference_layout_id: referenceLayoutId || null,
+        fixed_rooms_file: fixedRoomsFile || null, // Add this to the request
       }),
     });
 

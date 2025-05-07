@@ -22,9 +22,9 @@ from hotel_design_ai.core.grid_rule_engine import RuleEngine
 
 # from hotel_design_ai.core.rule_engine import RuleEngine
 
-# from hotel_design_ai.core.grid_rl_engine import RLEngine
+from hotel_design_ai.core.grid_rl_engine import RLEngine
 
-from hotel_design_ai.core.rl_engine import RLEngine
+# from hotel_design_ai.core.rl_engine import RLEngine
 from hotel_design_ai.core.constraints import (
     Constraint,
     ConstraintSystem,
@@ -479,7 +479,7 @@ def generate_rule_based_layout(
 def generate_rl_layout(
     args, rooms: List[Room], fixed_positions: Optional[Dict[int, Any]] = None
 ):
-    """Generate a layout using the RL engine"""
+    """Generate a layout using the RL engine with support for reference layouts"""
     print("\nGenerating layout using RL engine...")
 
     # Get building envelope parameters
@@ -531,6 +531,48 @@ def generate_rl_layout(
     # Update fixed elements
     if fixed_positions:
         rl_engine.update_fixed_elements(fixed_positions)
+
+    # Load reference layout if specified
+    reference_layout = None
+    if args.reference_layout and os.path.exists(args.reference_layout):
+        print(f"Loading reference layout from {args.reference_layout}")
+        try:
+            with open(args.reference_layout, "r") as f:
+                reference_layout = json.load(f)
+
+            # Update the spatial grid with the reference layout rooms
+            if reference_layout and "rooms" in reference_layout:
+                print(
+                    f"Using {len(reference_layout['rooms'])} rooms from reference layout"
+                )
+
+                # Create a new SpatialGrid from the reference layout
+                ref_spatial_grid = SpatialGrid.from_dict(reference_layout)
+
+                # Use the reference grid as starting point
+                rl_engine.spatial_grid = ref_spatial_grid
+
+                # Update room positions from reference layout
+                modified_rooms = []
+                for room in rooms:
+                    room_copy = Room.from_dict(room.to_dict())
+                    # If this room exists in the reference layout, use its position
+                    if str(room.id) in reference_layout["rooms"]:
+                        room_copy.position = reference_layout["rooms"][str(room.id)][
+                            "position"
+                        ]
+                    modified_rooms.append(room_copy)
+
+                # Replace the rooms list with pre-positioned rooms
+                rooms = modified_rooms
+
+                print("Successfully initialized from reference layout")
+        except Exception as e:
+            print(f"Error loading reference layout: {e}")
+            import traceback
+
+            traceback.print_exc()
+            print("Continuing with default initialization")
 
     # Train or simulate feedback if requested
     if args.train_iterations > 0 and args.simulate_feedback:

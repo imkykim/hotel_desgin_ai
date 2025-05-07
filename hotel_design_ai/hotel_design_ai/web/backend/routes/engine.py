@@ -338,17 +338,6 @@ async def generate_with_zones(
                         f"Verifying placement of {len(fixed_rooms)} fixed rooms"
                     )
 
-                    # Log all rooms in the layout for debugging
-                    # logger.info("Rooms in the generated layout:")
-                    # for room_id, room_data in layout_data.get("rooms", {}).items():
-                    #     room_type = room_data.get("type", "unknown")
-                    #     room_pos = room_data.get("position", [0, 0, 0])
-                    #     room_name = room_data.get("metadata", {}).get("name", "unnamed")
-                    #     logger.info(
-                    #         f"  Room {room_id}: type={room_type}, name={room_name}, pos={room_pos}"
-                    #     )
-
-                    # Check each fixed room by type/name to see if it was placed
                     for fixed_room in fixed_rooms:
                         if "identifier" in fixed_room and "position" in fixed_room:
                             identifier = fixed_room["identifier"]
@@ -495,33 +484,79 @@ async def generate_improved_layout(
     building_id: str = Body(...),
     program_id: str = Body(...),
     reference_layout_id: Optional[str] = Body(None),
+    fixed_rooms_file: Optional[str] = Body(None),  # Add this parameter
 ):
     """
     Generate an improved layout using the trained RL model.
     Optionally use a reference layout as a starting point.
     """
     try:
+        # Ensure reference layout exists if specified
+        reference_layout_path = None
+        if reference_layout_id:
+            # Check both standard and modified layout files
+            layouts_base = LAYOUTS_DIR / reference_layout_id
+            standard_layout = layouts_base / "hotel_layout.json"
+            modified_layout = layouts_base / "modified_layout.json"
+
+            # Prefer modified layout if it exists, otherwise use standard
+            if modified_layout.exists():
+                reference_layout_path = str(modified_layout)
+                logger.info(
+                    f"Using modified layout as reference: {reference_layout_path}"
+                )
+            elif standard_layout.exists():
+                reference_layout_path = str(standard_layout)
+                logger.info(
+                    f"Using standard layout as reference: {reference_layout_path}"
+                )
+            else:
+                logger.warning(
+                    f"Reference layout not found for ID: {reference_layout_id}"
+                )
+                # Don't fail, just log the warning
+
+        if not program_id or program_id == "default":
+            program_config = "hotel_requirements_3.json"  # FIXED: Added .json extension
+            logger.info(f"Using default program config: {program_config}")
+        else:
+            # Ensure .json extension is present
+            if not program_id.endswith(".json"):
+                program_config = f"{program_id}.json"
+            else:
+                program_config = program_id
+            logger.info(f"Using specified program config: {program_config}")
+
         # Build command for generating an improved layout
+        main_script_path = PROJECT_ROOT / "main.py"
+        if not main_script_path.exists():
+            logger.error(f"Main script not found at: {main_script_path}")
+            raise FileNotFoundError(f"Main script not found: {main_script_path}")
+
         command = [
             "python",
-            "../../../main.py",  # <-- fix path to main.py (was "../main.py")
+            str(main_script_path),  # Use absolute path to main.py
             "--mode",
             "rl",
             "--building-config",
             building_id,
             "--program-config",
-            program_id,
-            "--rl-model",
-            str(RL_MODELS_DIR / "hotel_design_model.pt"),
+            program_config,
+            # "--rl-model",
+            # str(RL_MODELS_DIR / "hotel_design_model.pt"),
         ]
 
-        # Add reference layout if provided
-        if reference_layout_id:
-            reference_layout = (
-                LAYOUTS_DIR / reference_layout_id / "modified_layout.json"
-            )
-            if reference_layout.exists():
-                command.extend(["--reference-layout", str(reference_layout)])
+        # # Add reference layout if found
+        # if reference_layout_path:
+        #     command.extend(["--reference-layout", reference_layout_path])
+
+        # Add fixed rooms file if provided
+        if fixed_rooms_file:
+            command.extend(["--fixed-rooms", fixed_rooms_file])
+            logger.info(f"Using fixed rooms file: {fixed_rooms_file}")
+
+        # Print the full command for debugging
+        logger.info(f"Executing command: {' '.join(command)}")
 
         # Run the command
         result = run_command(command, "RL generation failed")
@@ -544,4 +579,5 @@ async def generate_improved_layout(
         )
     except Exception as e:
         logger.error(f"Error generating improved layout: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
